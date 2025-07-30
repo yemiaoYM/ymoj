@@ -30,7 +30,6 @@ public class JudgeListener {
         log.info("消费者监听到评测消息：{}",msg);
 
         //业务中尽量不要抛异常，不然会启动重试机制，发送到error队列中
-//        throw new RuntimeException("judge出错了");
     }
 
 }
