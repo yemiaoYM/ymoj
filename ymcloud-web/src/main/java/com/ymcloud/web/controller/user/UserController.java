@@ -28,7 +28,7 @@ public class UserController {
      */
     @GetMapping("/profile")
     public Result<UserVO> profile() {
-        log.info("获取用户基本信息");
+        log.info("获取当前用户基本信息");
         User user = SecurityUtils.getUser();
         UserVO userVO = BeanUtil.copyProperties(user, UserVO.class);
         return Result.ok(userVO);

@@ -1,5 +1,6 @@
 package com.ymcloud.web.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -55,7 +56,11 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
                 .orderByDesc(Judge::getCreatedTime)
                 .page(page);
         //返回vo实体
-        return PageVO.of(judgePage,SubmissionTableVO.class);
+        return PageVO.of(judgePage,judge->{
+            SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
+            vo.setSubmissionId(judge.getId());
+            return vo;
+        });
     }
 
 

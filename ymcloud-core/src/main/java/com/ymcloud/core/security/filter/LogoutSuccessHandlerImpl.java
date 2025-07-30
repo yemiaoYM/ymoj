@@ -50,7 +50,7 @@ public class LogoutSuccessHandlerImpl implements LogoutSuccessHandler, Serializa
             response.getWriter().print(data);
         }else{
             //返回信息
-            String data = JSON.toJSONString(Result.fail().code(HttpStatus.UNAUTHORIZED).msg("用户未登录或token已失效"));
+            String data = JSON.toJSONString(Result.fail().msg("用户未登录或token已失效"));
             response.getWriter().print(data);
         }
     }

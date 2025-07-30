@@ -1,7 +1,6 @@
 package com.ymcloud.pojo.vo;
 
 import com.ymcloud.pojo.enums.JudgeStatus;
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -16,7 +15,7 @@ import java.time.LocalDateTime;
 @Data
 public class SubmissionTableVO {
     /**
-     * 提交ID，来自 submission 表
+     * 提交ID，来自 judge 表
      */
     private Long submissionId;
     /**

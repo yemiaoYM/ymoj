@@ -43,7 +43,9 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
     public PageVO<ContestTableVO> pageQuery(ContestPageQuery query) {
         //创建分页实体
         Page<Contest> page = new Page<>(query.getPageNo(),query.getPageSize());
-        Page<Contest> contestPage = lambdaQuery().like(StrUtil.isNotBlank(query.getKeyword()), Contest::getTitle, query.getKeyword())
+        Page<Contest> contestPage = lambdaQuery()
+                .like(StrUtil.isNotBlank(query.getKeyword()), Contest::getTitle, query.getKeyword())
+                .orderByDesc(Contest::getStartTime)
                 .page(page);
         //拷贝实体
         if(contestPage.getTotal()>0){
