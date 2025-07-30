@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ymcloud.core.web.mapper.ProblemMapper">
+
+    <!-- Result Map 定义 -->
+    <resultMap id="problemTableMap" type="com.ymcloud.pojo.vo.ProblemTableVO">
+        <id column="id" />
+        <result column="problem_id" property="displayId"/>
+        <result column="source" property="source"/>
+        <result column="title" property="title"/>
+        <result column="difficulty" property="difficulty"/>
+        <collection property="tagList" ofType="com.ymcloud.pojo.entity.Tag"
+                    select="getTagsByProblemId" column="id">
+        </collection>
+    </resultMap>
+
+    <!-- 主查询 -->
+    <select id="pageQuery" resultMap="problemTableMap">
+        SELECT DISTINCT
+        p.id,
+        p.problem_id,
+        p.source,
+        p.title,
+        p.difficulty
+        FROM
+        problem p
+        <if test="tagIds != null and !tagIds.isEmpty()">
+            RIGHT JOIN
+            (
+                SELECT problem_id FROM problem_tag
+                <where>
+                    <foreach collection="tagIds" item="tagId" open="" separator=" or" close="">
+                        tag_id = #{tagId}
+                    </foreach>
+                </where>
+            ) pt
+            ON p.id = pt.problem_id
+        </if>
+        <where>
+            p.visibility = 1
+            <!-- 搜索关键字 -->
+            <if test="title != null and title.trim() != ''">
+                AND p.title LIKE CONCAT('%', #{title}, '%')
+            </if>
+            <!-- 难度过滤 -->
+            <if test="difficulty != null">
+                AND p.difficulty = #{difficulty}
+            </if>
+            <!-- 来源过滤 -->
+            <if test="source != null and source.trim() != ''">
+                AND p.source = #{source}
+            </if>
+        </where>
+    </select>
+
+    <!-- 子查询：获取问题的标签列表 -->
+    <select id="getTagsByProblemId" resultType="com.ymcloud.pojo.entity.Tag">
+        SELECT t.*
+        FROM tag t
+                 LEFT JOIN problem_tag pt
+                           ON t.id = pt.tag_id
+        WHERE pt.problem_id = #{id}
+    </select>
+
+</mapper>

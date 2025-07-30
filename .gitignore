@@ -1,0 +1,65 @@
+### 构建工具 ###
+# Maven
+target/
+**/target/
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+**/build/
+out/
+
+# 依赖缓存（如 npm、pip）
+**/dependency-reduced-pom.xml
+
+### 开发工具 ###
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+.springBeans
+.sts4-cache
+.apt_generated
+/nbproject/private/
+/nbbuild/
+/nbdist/
+/.nb-gradle/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+### Spring Boot ###
+# 本地开发配置（避免提交敏感信息）
+application-dev.yml
+application-prod.yml
+
+# 日志文件
+*.log
+logs/
+**/logs/
+
+# 测试生成的临时文件
+**/test-output/
+**/tmp/
+
+### 其他 ###
+# 本地开发环境文件
+.env
+.env.local
+
+# 打包忽略
+dist/
+release/
