@@ -1,14 +1,9 @@
 package com.ymcloud.pojo.vo;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import com.ymcloud.pojo.enums.UserSex;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.time.LocalDateTime;
 
 /**
  * @PackageName: com.ymcloud.pojo.vo
@@ -18,7 +13,7 @@ import java.time.LocalDateTime;
  * @Description: 返回前端用户基本信息
  */
 @Data
-public class UserVO implements Serializable {
+public class UserProfileVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
@@ -32,15 +27,11 @@ public class UserVO implements Serializable {
     /**
      * 性别
      */
-    private Integer sex;
+    private UserSex sex;
     /**
-     * 电子游戏
+     * 电子邮箱
      */
     private String email;
-    /**
-     * 电话号
-     */
-    private String phoneNumber;
     /**
      * 头像
      */

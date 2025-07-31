@@ -4,30 +4,4 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ymcloud.core.web.mapper.UserMapper">
 
-    <resultMap id="BaseResultMap" type="com.ymcloud.pojo.entity.User">
-            <id property="id" column="id" />
-            <result property="username" column="username" />
-            <result property="password" column="password" />
-            <result property="nickname" column="nickname" />
-            <result property="sex" column="sex" />
-            <result property="email" column="email" />
-            <result property="phoneNumber" column="phone_number" />
-            <result property="avatar" column="avatar" />
-            <result property="school" column="school" />
-            <result property="signature" column="signature" />
-            <result property="blog" column="blog" />
-            <result property="loginIp" column="login_ip" />
-            <result property="loginDate" column="login_date" />
-            <result property="status" column="status" />
-            <result property="createdTime" column="created_time" />
-            <result property="updatedTime" column="updated_time" />
-    </resultMap>
-
-    <sql id="Base_Column_List">
-        id,username,password,nickname,sex,email,
-        phone_number,avatar,school,signature,blog,
-        login_ip,login_date,status,created_time,updated_time
-    </sql>
-
-
 </mapper>

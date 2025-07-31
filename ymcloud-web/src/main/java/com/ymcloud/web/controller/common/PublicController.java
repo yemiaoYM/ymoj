@@ -10,12 +10,15 @@ import com.ymcloud.pojo.query.ProblemPageQuery;
 import com.ymcloud.pojo.query.SubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -34,6 +37,9 @@ import java.util.List;
 public class PublicController {
 
     @Autowired
+    private UserService userService;
+
+    @Autowired
     private TagService tagService;
 
     @Autowired
@@ -49,8 +55,20 @@ public class PublicController {
     private SubmissionService submissionService;
 
     /**
+     * 查询用户信息
+     * @param username 用户名
+     * @return 用户信息
+     */
+    @GetMapping("/user-info")
+    public Result<UserInfoVO> userInfo(@RequestParam("username") String username) {
+        log.info("查询用户 {} 信息",username);
+        UserInfoVO userInfo=userService.getUserInfo(username);
+        return Result.ok(userInfo);
+    }
+
+    /**
      * 获取标签列表
-     * @return
+     * @return 标签列表
      */
     @Cacheable(cacheNames = CacheConstants.TAG_LIST_KEY)
     @GetMapping("/tag-list")

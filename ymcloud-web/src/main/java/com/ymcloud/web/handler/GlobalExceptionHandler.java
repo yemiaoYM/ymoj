@@ -31,7 +31,7 @@ public class GlobalExceptionHandler {
     public Result<?> handleAccessDeniedException(AccessDeniedException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.warn("请求地址:{},权限校验失败:{}", requestURI, e.getMessage());
-        return Result.fail().code(HttpStatus.FORBIDDEN).msg("没有访问权限");
+        return Result.fail().code(HttpStatus.FORBIDDEN).msg("访问权限不足");
     }
 
     /**

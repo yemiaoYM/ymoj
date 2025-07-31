@@ -30,7 +30,7 @@ public class AuthenticationEntryPointImpl implements AuthenticationEntryPoint, S
     public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException)
             throws IOException, ServletException {
         log.warn("请求访问：{}，认证失败，无法访问系统资源", request.getRequestURI());
-        String data = JSON.toJSONString(Result.fail().code(HttpStatus.UNAUTHORIZED).msg("未授权禁止访问"));
+        String data = JSON.toJSONString(Result.fail().code(HttpStatus.UNAUTHORIZED).msg("未授权，请先登录"));
         response.setStatus(200);
         response.setContentType("application/json");
         response.setCharacterEncoding("utf-8");

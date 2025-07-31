@@ -1,8 +1,9 @@
 package com.ymcloud.web.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.ymcloud.pojo.dto.LoginDTO;
+import com.ymcloud.pojo.dto.*;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.vo.UserInfoVO;
 
 /**
  * @PackageName: com.ymcloud.web.service
@@ -15,8 +16,39 @@ public interface UserService extends IService<User> {
 
     /**
      * 用户登录
-     * @param loginDTO
-     * @return
+     * @param loginDTO 登录请求体
+     * @return token
      */
     String login(LoginDTO loginDTO);
+
+    /**
+     * 用户注册
+     * @param registerDTO 注册请求体
+     */
+    void register(RegisterDTO registerDTO);
+
+    /**
+     * 查询用户信息
+     * @param username 用户名
+     * @return 用户信息
+     */
+    UserInfoVO getUserInfo(String username);
+
+    /**
+     * 当前用户修改密码
+     * @param userPasswordDTO 修改请求体
+     */
+    void updatePassword(UpdateUserPasswordDTO userPasswordDTO);
+
+    /**
+     * 修改当前用户电子邮箱
+     * @param userEmailDTO 修改请求体
+     */
+    void updateEmail(UpdateUserEmailDTO userEmailDTO);
+
+    /**
+     * 修改当前用户基本信息
+     * @param userProfileDTO 修改请求体
+     */
+    void updateProfile(UpdateUserProfileDTO userProfileDTO);
 }

@@ -39,10 +39,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         if (user == null) {
             throw new UserException("该用户不存在");
         }
-        if(UserStatus.DELETED.getCode().equals(user.getStatus())){
-            throw new UserException("该用户已被删除");
-        }
-        if(UserStatus.DISABLE.getCode().equals(user.getStatus())){
+        if(UserStatus.DISABLE==user.getStatus()){
             throw new UserException("该用户被停用");
         }
         //3.校验密码以及试错次数控制
