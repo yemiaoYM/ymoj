@@ -3,14 +3,20 @@ package com.ymcloud.web.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.CacheConstants;
+import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.UserConstants;
 import com.ymcloud.common.exception.ServiceException;
+import com.ymcloud.common.exception.file.FileEmptyException;
+import com.ymcloud.common.exception.file.FileException;
+import com.ymcloud.common.exception.file.FileTypeNotMatchException;
 import com.ymcloud.common.exception.user.*;
-import com.ymcloud.common.utils.IpUtil;
+import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.context.AuthenticationContextHolder;
 import com.ymcloud.core.security.domain.LoginUser;
@@ -21,12 +27,15 @@ import com.ymcloud.core.web.dao.UserAcproblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
 import com.ymcloud.core.web.mapper.UserMapper;
 import com.ymcloud.pojo.dto.*;
+import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.entity.UserAcproblem;
+import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.pojo.vo.UserCalendarHeatmapVO;
 import com.ymcloud.pojo.vo.UserInfoVO;
+import com.ymcloud.web.service.FileService;
 import com.ymcloud.web.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -34,6 +43,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -61,6 +71,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private RedisCache redisCache;
 
     @Autowired
+    private FileService fileService;
+
+    @Autowired
     private UserEntityService userEntityService;
 
     @Autowired
@@ -68,6 +81,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Autowired
     private UserAcproblemEntityService userAcproblemEntityService;
+
 
     /**
      * 用户登录
@@ -103,7 +117,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user=new User();
         user.setId(userId);
         user.setLoginDate(LocalDateTime.now());
-        user.setLoginIp(IpUtil.getIpAddr());
+        user.setLoginIp(IpUtils.getIpAddr());
         userEntityService.updateById(user);
         //5.根据用户信息生成token
         return tokenService.createToken(loginUser);
@@ -326,6 +340,67 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         heatmapVO.setDataList(dataList);
         //8.返回vo实体
         return heatmapVO;
+    }
+
+    /**
+     * 用户上传头像
+     * @param file 头像文件
+     */
+    @Override
+    public void uploadAvatar(MultipartFile file) {
+        //检查是否为空
+        if(file.isEmpty()){
+            throw new FileEmptyException();
+        }
+        //检查文件大小
+        if(file.getSize() > 2*1024*1024){
+            throw new FileException("用户头像大小不能超过2MB");
+        }
+        //检查文件类型
+        String originalFilename=file.getOriginalFilename();
+        String ext = FileUtil.extName(originalFilename);
+        if (!StrUtil.equalsAny(ext, "png", "jpg", "jpeg")) {
+            throw new FileTypeNotMatchException(ext);
+        }
+        //获取当前用户
+        LoginUser loginUser = SecurityUtils.getLoginUser();
+        User user = loginUser.getUser();
+        String oldAvatar = user.getAvatar();
+        //构造File实体
+        File fileRecord = new File();
+        //文件名=随机UUID+扩展名
+        String filename = IdUtil.simpleUUID() + ext;
+        fileRecord.setFileName(filename);
+        fileRecord.setFileType(file.getContentType());
+        fileRecord.setFileSize(file.getSize());
+        fileRecord.setFileExt(ext);
+        //头像存储到本地
+        fileRecord.setStorageType(FileConstants.STORAGE_LOCAL);
+        //文件存储相对路径和文件可访问URL在fileService中处理
+        fileRecord.setUploaderId(user.getId());
+        fileRecord.setUploaderUsername(user.getUsername());
+        fileRecord.setBizType(FileBizType.IMAGE);
+        fileRecord.setIsPublic(FileConstants.ACCESS_PUBLIC);
+        //保存文件并向文件表中插入数据
+        fileService.saveFile(file,fileRecord);
+        //更新当前用户头像
+        //这里用户头像保存的是后端请求url：/api/文件相对路径
+        String url = fileRecord.getUrl();
+        User updateUser=new User();
+        updateUser.setId(user.getId());
+        updateUser.setAvatar(url);
+        boolean b = userEntityService.updateById(updateUser);
+        if(!b){
+            throw new UserException("用户头像更新失败，请稍后再试");
+        }
+        //先保存更新是为了防止删除文件后业务失败使得原头像不可用
+        //删除当前用户头像和数据库中记录
+        if(StrUtil.isNotBlank(oldAvatar)){
+            fileService.deleteFileByUrl(oldAvatar,FileBizType.IMAGE);
+        }
+        //刷新当前用户缓存
+        user.setAvatar(url);
+        tokenService.setLoginUser(loginUser);
     }
 
     /**

@@ -10,7 +10,7 @@ import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
-import com.ymcloud.common.utils.IpUtil;
+import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
@@ -106,7 +106,7 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         submission.setCodeLength(judgeDTO.getCode().length());
         submission.setJudgeServer(JudgeConstants.LOCAL_JUDGE_SERVER);
         //这里重新再获取提交id，防止用户异地登录多设备提交，后续添加控制提交ip功能
-        submission.setIp(IpUtil.getIpAddr());
+        submission.setIp(IpUtils.getIpAddr());
         //向数据库中保存评测记录
         boolean save = judgeEntityService.save(submission);
         if(!save){

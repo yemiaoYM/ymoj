@@ -10,7 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
  * @CreateTime: 2025-07-19  12:08
  * @Description: 获取客户端IP工具类，支持多级代理
  */
-public class IpUtil {
+public class IpUtils {
 
     /**
      * 获取客户端IP

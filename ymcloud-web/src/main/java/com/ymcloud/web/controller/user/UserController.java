@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * @PackageName: com.ymcloud.web.controller.user
@@ -72,6 +73,18 @@ public class UserController {
         log.info("修改当前用户基本信息");
         userService.updateProfile(userProfileDTO);
         return Result.ok().msg("修改成功,请刷新查看");
+    }
+
+
+    /**
+     * 用户上传头像
+     * @param file 图片文件
+     */
+    @PostMapping("/upload-avatar")
+    public Result<?> uploadAvatar(@RequestParam("file") MultipartFile file){
+        log.info("用户上传头像");
+        userService.uploadAvatar(file);
+        return Result.ok().msg("上传头像成功");
     }
 
 

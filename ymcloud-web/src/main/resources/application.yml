@@ -69,6 +69,10 @@ user:
         # 密码锁定时间（默认10分钟）
         lockTime: 10
 
+file:
+    base-dir: files
+
+# 日志配置
 logging:
     level:
         com.baomidou.mybatis-plus: DEBUG
