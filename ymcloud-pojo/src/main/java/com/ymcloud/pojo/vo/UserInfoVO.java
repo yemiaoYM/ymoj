@@ -4,6 +4,7 @@ import com.ymcloud.pojo.enums.UserSex;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -49,6 +50,10 @@ public class UserInfoVO implements Serializable {
      * 博客
      */
     private String blog;
+    /**
+     * 最后登录时间
+     */
+    private LocalDateTime loginDate;
     /**
      * 已解决题目的题号
      */

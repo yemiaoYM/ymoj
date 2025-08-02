@@ -67,6 +67,18 @@ public class PublicController {
     }
 
     /**
+     * 获取用户最近一年的提交热力图数据
+     * @param username 用户名
+     * @return 提交热力图数据
+     */
+    @GetMapping("/user-calendar-heatmap")
+    public Result<UserCalendarHeatmapVO> getUserCalendarHeatmap(@RequestParam("username") String username){
+        log.info("获取用户最近一年的提交热力图数据:{}",username);
+        UserCalendarHeatmapVO userCalendarHeatmapVO=userService.getUserCalendarHeatmap(username);
+        return Result.ok(userCalendarHeatmapVO);
+    }
+
+    /**
      * 获取标签列表
      * @return 标签列表
      */

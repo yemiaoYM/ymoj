@@ -1,6 +1,8 @@
 package com.ymcloud.web.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollectionUtil;
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.CacheConstants;
@@ -22,8 +24,8 @@ import com.ymcloud.pojo.dto.*;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.entity.UserAcproblem;
-import com.ymcloud.pojo.enums.UserSex;
 import com.ymcloud.pojo.enums.UserStatus;
+import com.ymcloud.pojo.vo.UserCalendarHeatmapVO;
 import com.ymcloud.pojo.vo.UserInfoVO;
 import com.ymcloud.web.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,10 +34,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Service;
-import org.springframework.validation.BindException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @PackageName: com.ymcloud.web.service.impl
@@ -73,7 +77,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public String login(LoginDTO loginDTO) {
         //1.验证码检测
-//        validateCaptcha(loginDTO.getCode(),loginDTO.getUuid());
+        validateCaptcha(loginDTO.getCode(),loginDTO.getUuid());
         //2.信息校验（简化放到DTO的注释检验实现）
         String username=loginDTO.getUsername().trim();
         String password=loginDTO.getPassword();
@@ -116,12 +120,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         //2.查询是否信息已被注册
         String username=registerDTO.getUsername().trim();
         String password=registerDTO.getPassword();
+        String rePassword=registerDTO.getRePassword();
         String email=registerDTO.getEmail();
-        //2.1用户名也是唯一字段，查询是否已存在
+        //1.1用户输入的两次密码不同
+        if(!StrUtil.equals(password,rePassword)){
+            throw new UserException("两次密码不同，请检查输入");
+        }
+        //2.2用户名也是唯一字段，查询是否已存在
         if(userEntityService.lambdaQuery().eq(User::getUsername,username).exists()){
             throw new UserException("该用户名已被注册");
         }
-        //2.2校验email是否被注册过
+        //2.3校验email是否被注册过
         if(userEntityService.lambdaQuery().eq(User::getEmail,email).exists()){
             throw new UserException("该邮箱已被其他用户使用");
         }
@@ -146,33 +155,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     @Override
     public UserInfoVO getUserInfo(String username) {
-        //1.校验信息
-        if(StrUtil.isBlank(username)||username.length()<UserConstants.USERNAME_MIN_LENGTH
-                || username.length()>UserConstants.USERNAME_MAX_LENGTH){
-            throw new UserException("参数错误", HttpStatus.BAD_REQUEST);
-        }
-        //2.查询用户基本信息
-        User profile = userEntityService.lambdaQuery().eq(User::getUsername, username).one();
-        //3.校验用户状态
-        if(profile==null||profile.getStatus()== UserStatus.DISABLE){
-            throw new UserException("用户不存在或者已停用");
-        }
-        //4.拷贝前端实体
+        //1.校验用户信息
+        User profile = validateUsername(username);
+        //2.拷贝前端实体
         UserInfoVO userInfoVO= BeanUtil.copyProperties(profile, UserInfoVO.class);
-        //5.查询用户提交情况
-        //5.1用户已解决题目
+        //3.查询用户提交情况
+        //3.1用户已解决题目
         List<String> list = userAcproblemEntityService.lambdaQuery()
                 .select(UserAcproblem::getDisplayId)
-                .eq(UserAcproblem::getUsername, username)
+                .eq(UserAcproblem::getUserId, profile.getId())
                 //只查询非比赛提交
                 .eq(UserAcproblem::getContestId, 0)
                 .list().stream().map(UserAcproblem::getDisplayId).toList();
         userInfoVO.setProblemId(list);
         userInfoVO.setAc(list.size());
-        //5.2用户总提交
-        Long total = judgeEntityService.lambdaQuery().eq(Judge::getUsername, username).count();
+        //3.2用户总提交
+        Long total = judgeEntityService.lambdaQuery().eq(Judge::getUserId, profile.getId()).count();
         userInfoVO.setTotal(total.intValue());
-        //返回实体
+        //4.返回实体
         return userInfoVO;
     }
 
@@ -279,6 +279,73 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setBlog(userProfileDTO.getBlog());
         user.setSex(userProfileDTO.getSex());
         tokenService.setLoginUser(loginUser);
+    }
+
+    /**
+     * 获取用户最近一年的提交热力图数据
+     * @param username 用户名
+     * @return 提交热力图数据
+     */
+    @Override
+    public UserCalendarHeatmapVO getUserCalendarHeatmap(String username) {
+        //1.校验用户信息
+        User profile = validateUsername(username);
+        //2.设置当前日期
+        LocalDateTime date = LocalDateTime.now();
+        //3.向前滚动一年
+        LocalDateTime lastYearDate = date.minusYears(1);
+        //4.查询这一年的提交记录
+        List<Judge> list = judgeEntityService.lambdaQuery()
+                .select(Judge::getCreatedTime)
+                .eq(Judge::getUserId, profile.getId())
+                .ge(Judge::getCreatedTime, lastYearDate)
+                .le(Judge::getCreatedTime, date)
+                .list();
+        //5.构造vo实体
+        UserCalendarHeatmapVO heatmapVO=new UserCalendarHeatmapVO();
+        heatmapVO.setDate(DateUtil.format(date,"yyyy-MM-dd"));
+        //没有信息则返回空数组
+        if(CollectionUtil.isEmpty(list)){
+            heatmapVO.setDataList(new ArrayList<>());
+            return heatmapVO;
+        }
+        //6.统计指定日期提交数
+        HashMap<String, Integer> tmpRecordMap = new HashMap<>();
+        for (Judge s : list) {
+            String sDate = DateUtil.format(s.getCreatedTime(),"yyyy-MM-dd");
+            tmpRecordMap.put(sDate, tmpRecordMap.getOrDefault(sDate, 0) + 1);
+        }
+        //7.转化格式
+        List<HashMap<String, Object>> dataList = new ArrayList<>();
+        for (Map.Entry<String, Integer> record : tmpRecordMap.entrySet()) {
+            HashMap<String, Object> map = new HashMap<>();
+            map.put("date", record.getKey());
+            map.put("count", record.getValue());
+            dataList.add(map);
+        }
+        heatmapVO.setDataList(dataList);
+        //8.返回vo实体
+        return heatmapVO;
+    }
+
+    /**
+     * 根据用户名校验用户信息
+     * @param username 用户信息
+     * @return 查询的用户信息
+     */
+    public User validateUsername(String username) {
+        //1.校验信息
+        if(StrUtil.isBlank(username)||username.length()<UserConstants.USERNAME_MIN_LENGTH
+                || username.length()>UserConstants.USERNAME_MAX_LENGTH){
+            throw new UserException("用户名参数或格式错误", HttpStatus.BAD_REQUEST);
+        }
+        //2.查询用户基本信息
+        User profile = userEntityService.lambdaQuery().eq(User::getUsername, username).one();
+        //3.校验用户状态
+        if(profile==null||profile.getStatus()== UserStatus.DISABLE){
+            throw new UserException("用户不存在或者已停用");
+        }
+        return profile;
     }
 
     /**

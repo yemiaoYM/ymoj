@@ -29,6 +29,13 @@ public class RegisterDTO {
     private String password;
 
     /**
+     * 确认密码
+     */
+    @NotBlank(message = "确认密码不能为空")
+    @Size(min = 5, max = 20, message = "密码长度在5到20之间")
+    private String rePassword;
+
+    /**
      * 电子邮箱
      */
     @NotBlank(message = "电子邮箱不能为空")
