@@ -33,7 +33,7 @@ public class File {
     private Long uploaderId;
     @Schema(description="上传者用户名")
     private String uploaderUsername;
-    @Schema(description="业务类型：0=通用，1=题目附件，2=题目数据包，3=比赛附件，4=公告附件，5=图像图片")
+    @Schema(description="业务类型：0=通用，1=题目附件，2=比赛附件，3=公告附件，4=图像图片")
     private FileBizType bizType;
     @Schema(description="业务ID，例如题目ID、比赛ID")
     private Long bizId;

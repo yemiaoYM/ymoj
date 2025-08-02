@@ -85,6 +85,7 @@ public class SecurityConfig {
         http.authorizeHttpRequests(request->{
            request.requestMatchers("/login","/register","/captchaImage").permitAll()
                    .requestMatchers("/public/**").permitAll()
+                   .requestMatchers("/files/public/**").permitAll()
                    .anyRequest().authenticated();
         });
         //认证失败处理

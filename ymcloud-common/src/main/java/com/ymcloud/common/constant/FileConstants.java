@@ -62,8 +62,4 @@ public class FileConstants {
      */
     public static final String SUB_DIR_VIDEO = "video";
 
-    public static final String FILE_URL = "url";
-
-    public static final String FILE_NAME = "fileName";
-
 }

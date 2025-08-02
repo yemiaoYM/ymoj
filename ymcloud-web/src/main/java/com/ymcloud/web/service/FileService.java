@@ -22,9 +22,8 @@ public interface FileService extends IService<File> {
     void saveFile(MultipartFile file, File fileRecord);
 
     /**
-     * 根据url和业务类型删除文件
+     * 根据url删除文件并删除数据库中文件
      * @param url url
-     * @param fileBizType 业务类型
      */
-    void deleteFileByUrl(String url, FileBizType fileBizType);
+    void deleteFileByUrl(String url);
 }

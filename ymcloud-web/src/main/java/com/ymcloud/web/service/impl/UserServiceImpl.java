@@ -43,6 +43,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
@@ -346,6 +347,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * 用户上传头像
      * @param file 头像文件
      */
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public void uploadAvatar(MultipartFile file) {
         //检查是否为空
@@ -369,7 +371,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         //构造File实体
         File fileRecord = new File();
         //文件名=随机UUID+扩展名
-        String filename = IdUtil.simpleUUID() + ext;
+        String filename = IdUtil.simpleUUID() + "." + ext;
         fileRecord.setFileName(filename);
         fileRecord.setFileType(file.getContentType());
         fileRecord.setFileSize(file.getSize());
@@ -396,7 +398,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         //先保存更新是为了防止删除文件后业务失败使得原头像不可用
         //删除当前用户头像和数据库中记录
         if(StrUtil.isNotBlank(oldAvatar)){
-            fileService.deleteFileByUrl(oldAvatar,FileBizType.IMAGE);
+            fileService.deleteFileByUrl(oldAvatar);
         }
         //刷新当前用户缓存
         user.setAvatar(url);

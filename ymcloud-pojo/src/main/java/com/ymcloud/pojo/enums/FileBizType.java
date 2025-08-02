@@ -16,10 +16,9 @@ public enum FileBizType {
 
     GENERAL(0, "通用"),
     PROBLEM_ATTACHMENT(1, "题目附件"),
-    PROBLEM_DATA(2, "题目数据包"),
-    CONTEST_ATTACHMENT(3, "比赛附件"),
-    ANNOUNCEMENT_ATTACHMENT(4, "公告附件"),
-    IMAGE(5, "图像图片");
+    CONTEST_ATTACHMENT(2, "比赛附件"),
+    ANNOUNCEMENT_ATTACHMENT(3, "公告附件"),
+    IMAGE(4, "图像图片");
 
     @EnumValue
     private final int code;
