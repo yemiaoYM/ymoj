@@ -28,7 +28,7 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
     /**
      * 系统文件存储路径
      */
-    @Value("${file.base-dir}")
+    @Value("${ymcloud.file.base-dir}")
     private String BASE_DIR;
 
     /**

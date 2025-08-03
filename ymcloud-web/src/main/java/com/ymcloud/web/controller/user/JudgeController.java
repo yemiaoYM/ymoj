@@ -3,6 +3,7 @@ package com.ymcloud.web.controller.user;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.judge.service.JudgeService;
 import com.ymcloud.pojo.dto.JudgeDTO;
+import com.ymcloud.pojo.dto.TestJudgeDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -36,6 +37,13 @@ public class JudgeController {
         log.info("评测请求：{}", judgeDTO);
         Long submissionId=judgeService.submitJudge(judgeDTO);
         return Result.ok(submissionId).msg("评测提交成功");
+    }
+
+    @PostMapping("/test")
+    public Result<String> test(@Validated @RequestBody TestJudgeDTO testJudgeDTO) {
+        log.info("自测请求：{}", testJudgeDTO);
+
+        return Result.ok();
     }
 
 }

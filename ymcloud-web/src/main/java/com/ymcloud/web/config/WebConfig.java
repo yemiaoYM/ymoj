@@ -19,7 +19,7 @@ public class WebConfig implements WebMvcConfigurer {
     /**
      * 文件路径
      */
-    @Value("${file.base-dir}")
+    @Value("${ymcloud.file.base-dir}")
     private String FILE_DIR;
 
     /**

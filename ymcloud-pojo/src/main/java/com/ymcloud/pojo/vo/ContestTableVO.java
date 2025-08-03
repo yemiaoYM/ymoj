@@ -35,7 +35,6 @@ public class ContestTableVO implements Serializable {
      * 比赛标题
      */
     private String title;
-
     /**
      * 比赛状态
      */

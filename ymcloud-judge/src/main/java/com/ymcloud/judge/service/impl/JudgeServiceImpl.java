@@ -2,10 +2,7 @@ package com.ymcloud.judge.service.impl;
 
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.ymcloud.common.constant.CacheConstants;
-import com.ymcloud.common.constant.JudgeConstants;
-import com.ymcloud.common.constant.LanguageConstants;
-import com.ymcloud.common.constant.ProblemConstants;
+import com.ymcloud.common.constant.*;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
@@ -17,6 +14,7 @@ import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.mapper.JudgeMapper;
+import com.ymcloud.judge.domain.JudgeMessage;
 import com.ymcloud.judge.service.JudgeService;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.entity.Judge;
@@ -24,6 +22,7 @@ import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.JudgeStatus;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +37,9 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements JudgeService {
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
     @Autowired
     private RedisCache redisCache;
@@ -112,9 +114,21 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         if(!save){
             throw new JudgeException("提交失败，请稍后再试");
         }
+
         //构造评测实体，将实体交给评测队列，等待评测
-
-
+        JudgeMessage message = new JudgeMessage();
+        message.setSubmissionId(submission.getId());
+        message.setProblemId(problem.getId());
+        message.setUserId(user.getId());
+        message.setLanguage(language);
+        message.setCode(judgeDTO.getCode());
+        message.setTimeLimit(problem.getTimeLimit());
+        message.setMemoryLimit(problem.getMemoryLimit());
+        rabbitTemplate.convertAndSend(RabbitMQConstants.JUDGE_EXCHANGE,
+                RabbitMQConstants.JUDGE_ROUTING_KEY, message,message1 -> {
+                    message1.getMessageProperties().setDelayLong(10000L);
+                    return message1;
+                });
 
         //缓存提交
         redisCache.setCacheObject(key, submission.getId(), 10, TimeUnit.SECONDS);

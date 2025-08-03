@@ -83,7 +83,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Autowired
     private UserAcproblemEntityService userAcproblemEntityService;
 
-
     /**
      * 用户登录
      * @param loginDTO 登录请求体
@@ -261,7 +260,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new UserException("修改邮箱失败，请稍后再试");
         }
         //4.更新用户缓存
-        user.setEmail(email);
+        user.setEmail(newEmail);
         tokenService.setLoginUser(loginUser);
     }
 

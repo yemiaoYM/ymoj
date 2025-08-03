@@ -40,7 +40,7 @@ public class FileConstants {
     /**
      * 临时文件夹
      */
-    public static final String DIR_TEMP = "temp";
+    public static final String DIR_TMP = "tmp";
     /**
      * 题目业务子目录
      */
