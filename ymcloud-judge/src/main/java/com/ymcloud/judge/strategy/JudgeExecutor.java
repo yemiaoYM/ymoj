@@ -53,6 +53,8 @@ public class JudgeExecutor {
     public void execute(JudgeMessage message){
         Judge judge = new Judge();
         judge.setId(message.getSubmissionId());
+        judge.setTime(0L);
+        judge.setMemory(0L);
         try{
             //开始评测,先更新评测状态
             judge.setStatus(JudgeStatus.STATUS_JUDGING);
@@ -162,8 +164,12 @@ public class JudgeExecutor {
                         //否则ac
                         judgeCase.setStatus(JudgeStatus.STATUS_ACCEPTED);
                     }
+                    //单个测试样例的时间和内存
                     judgeCase.setTime(time);
                     judgeCase.setMemory(memory);
+                    //评测所用时间和内存是测试样例中的最大值
+                    judge.setTime(Math.max(time,judge.getTime()));
+                    judge.setMemory(Math.max(memory,judge.getMemory()));
                     judgeCaseList.add(judgeCase);
                 }
                 //保存各个测试样例结果

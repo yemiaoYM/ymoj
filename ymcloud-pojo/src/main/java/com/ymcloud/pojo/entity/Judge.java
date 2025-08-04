@@ -37,13 +37,13 @@ public class Judge {
     @Schema(description="得分，ACM 模式为 NULL，OI 模式使用")
     private Integer score;
     @Schema(description="执行耗时(ms)")
-    private Integer time;
+    private Long time;
     @Schema(description="内存使用(KB)")
-    private Integer memory;
+    private Long memory;
     @Schema(description="编译错误/运行时错误信息")
     private String errorMessage;
     @Schema(description="是否公开代码：0=私有，1=公开")
-    private Integer share;
+    private Boolean share;
     @Schema(description="是否为人工评测记录：0=自动，1=人工")
     private Integer isManual;
     @Schema(description="所属比赛ID，非比赛默认为0")

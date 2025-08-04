@@ -5,6 +5,7 @@ import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.query.SubmissionPageQuery;
 import com.ymcloud.pojo.vo.PageVO;
 import com.ymcloud.pojo.vo.SubmissionTableVO;
+import com.ymcloud.pojo.vo.SubmissionVO;
 
 /**
  * @PackageName: com.ymcloud.web.service
@@ -21,4 +22,11 @@ public interface SubmissionService extends IService<Judge> {
      * @return 评测结果列表
      */
     PageVO<SubmissionTableVO> getPublicSubmissionList(SubmissionPageQuery query);
+
+    /**
+     * 查询提交详情
+     * @param submissionId 提交id
+     * @return 提交详情信息
+     */
+    SubmissionVO getSubmissionDetail(Long submissionId);
 }

@@ -49,11 +49,11 @@ public class SubmissionTableVO {
     /**
      * 执行耗时(ms)
      */
-    private Integer time;
+    private Long time;
     /**
      * 内存使用(KB)
      */
-    private Integer memory;
+    private Long memory;
     /**
      * 执行判题的机器标识
      */
