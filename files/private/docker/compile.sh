@@ -35,9 +35,9 @@ docker run --rm \
     "
 
 if [ $? -eq 0 ]; then
-    echo "✅ 编译成功"
+    echo "SUCCESS"
 else
-    echo "❌ 编译失败"
+    echo "FAILURE"
     exit 1
 fi
 

@@ -9,6 +9,7 @@ import com.ymcloud.core.web.mapper.FileMapper;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.web.service.FileService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,6 +24,7 @@ import java.io.IOException;
  * @Description: FileServiceImpl
  */
 @Service
+@Slf4j
 public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements FileService {
 
     /**
@@ -55,20 +57,14 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
         //文件存储在本地
         if(fileRecord.getStorageType()==FileConstants.STORAGE_LOCAL){
             try {
-                //本地存储完整路径
-                String projectDir = System.getProperty("user.dir");
-                String relativePath = BASE_DIR +FileUtil.FILE_SEPARATOR
-                        + accessDir + FileUtil.FILE_SEPARATOR
-                        + subDir;
-                String storageDir = projectDir + FileUtil.FILE_SEPARATOR + relativePath;
-                //创建当前文件存储文件夹
-                FileUtil.mkdir(storageDir);
-                //保存文件到本地
-                String savePath = storageDir + FileUtil.FILE_SEPARATOR + fileRecord.getFileName();
-                file.transferTo(FileUtil.file(savePath));
+                //本地存储路径
+                String filename = BASE_DIR+"/"+accessDir+"/"+subDir+"/"+fileRecord.getFileName();
+                //创建当前文件
+                java.io.File img = FileUtil.touch(filename);
+                file.transferTo(img.getAbsoluteFile());
                 //设置URL和存储路径
-                fileRecord.setStoragePath(relativePath + FileUtil.FILE_SEPARATOR + fileRecord.getFileName());
-                String url = "/"+BASE_DIR+"/"+accessDir+"/"+subDir+"/"+fileRecord.getFileName();
+                fileRecord.setStoragePath(filename);
+                String url = "/files/"+accessDir+"/"+subDir+"/"+fileRecord.getFileName();
                 fileRecord.setUrl(url);
                 //向数据库中插入数据
                 boolean b = save(fileRecord);
@@ -76,6 +72,7 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
                     throw new FileException("系统保存文件失败，请稍后再试");
                 }
             }catch (IOException e){
+                log.error(e.getMessage());
                 throw new ServiceException("系统IO流异常，请稍后再试");
             }
         }else{
@@ -84,16 +81,15 @@ public class FileServiceImpl extends ServiceImpl<FileMapper, File> implements Fi
     }
 
     /**
-     * 更加url删除文件
+     * 根据url删除文件
      * @param url url
      */
     @Override
     public void deleteFileByUrl(String url) {
-        String api = "/"+BASE_DIR+"/";
+        String api = "/files";
         if(url.startsWith(api)){
             //删除本地文件
-            String projectDir = System.getProperty("user.dir");
-            String fullPath = projectDir + url.replace("/", FileUtil.FILE_SEPARATOR);
+            String fullPath = BASE_DIR+url.substring(api.length());
             FileUtil.del(fullPath);
             //删除数据库记录
             lambdaUpdate().eq(File::getUrl, url).remove();

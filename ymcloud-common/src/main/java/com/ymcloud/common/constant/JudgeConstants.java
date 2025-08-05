@@ -8,20 +8,45 @@ package com.ymcloud.common.constant;
  * @Description: 评测常用变量
  */
 public class JudgeConstants {
-
     /**
      * 个人提交
      */
     public static final Integer PERSONAL_SUBMISSION = 0;
-
     /**
      * 比赛提交
      */
     public static final Integer CONTEST_SUBMISSION = 1;
-
+    /**
+     * 评测策略
+     */
+    public static final Integer DEFAULT_JUDGE = 0;
+    public static final Integer TEST_JUDGE = 1;
+    /**
+     * 评测模式
+     */
+    public static final Integer ACM = 0;
+    public static final Integer OI = 1;
     /**
      * 本地评测机
      */
     public static final String LOCAL_JUDGE_SERVER = "LocalJudgeServer";
+    /**
+     * 编译脚本
+     */
+    public static final String COMPILE_SH="compile.sh";
+    /**
+     * 默认模式判题脚本
+     */
+    public static final String DEFAULT_RUN_SH="run_multi.sh";
+    /**
+     * 成功
+     */
+    public static final String SUCCESS="SUCCESS";
+    /**
+     * 失败
+     */
+    public static final String FAILURE="FAILURE";
+
+
 
 }

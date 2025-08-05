@@ -124,9 +124,11 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         message.setCode(judgeDTO.getCode());
         message.setTimeLimit(problem.getTimeLimit());
         message.setMemoryLimit(problem.getMemoryLimit());
+        message.setMode(problem.getMode());
+        message.setStrategy(JudgeConstants.DEFAULT_JUDGE);
         rabbitTemplate.convertAndSend(RabbitMQConstants.JUDGE_EXCHANGE,
                 RabbitMQConstants.JUDGE_ROUTING_KEY, message,message1 -> {
-                    message1.getMessageProperties().setDelayLong(10000L);
+                    message1.getMessageProperties().setDelayLong(5000L);
                     return message1;
                 });
 

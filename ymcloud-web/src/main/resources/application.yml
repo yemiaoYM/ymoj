@@ -1,8 +1,8 @@
 ymcloud:
     file:
-        base-dir: files
+        base-dir: /Java/ymcloud/files
         judge-sh: /mnt/e/Java/ymcloud/files/private/docker/
-
+        base-path: /mnt/e/Java/ymcloud/files
 
 server:
     port: 9091

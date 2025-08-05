@@ -37,6 +37,12 @@ public class ServiceException extends RuntimeException implements Serializable {
         this.message = message;
     }
 
+    public ServiceException(String message, Throwable cause){
+        super(message,cause);
+        this.code = HttpStatus.ERROR;
+        this.message = message;
+    }
+
     //Throwable cause 在异常类中表示 导致当前异常发生的根本原因（也叫异常链的 原因异常）
     public ServiceException(String message, Integer code, Throwable cause) {
         //将原来的异常给保留,比如：
@@ -46,7 +52,7 @@ public class ServiceException extends RuntimeException implements Serializable {
         //  throw new ServiceException("用户注册失败", 500, e);
         //}
         //可以将原来的SQL异常保留，这样就可以在log中去展示根本异常
-        super(cause);
+        super(message,cause);
         this.code = code;
         this.message = message;
     }

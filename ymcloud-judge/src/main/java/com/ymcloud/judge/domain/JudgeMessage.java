@@ -18,6 +18,10 @@ public class JudgeMessage {
      */
     private Long submissionId;
     /**
+     * 请求id
+     */
+    private String requestId;
+    /**
      * 题目id
      */
     private Long problemId;
@@ -41,6 +45,14 @@ public class JudgeMessage {
      * 内存限制kb
      */
     private Long memoryLimit;
+    /**
+     * 评测模式：0=ACM，1=OI
+     */
+    private Integer mode;
+    /**
+     * 评测策略：0=默认评测，1=自测
+     */
+    private Integer strategy;
 
 
 }

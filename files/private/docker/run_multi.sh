@@ -46,9 +46,9 @@ docker run --rm \
   "
 
 if [ $? -eq 0 ]; then
-    echo "✅ 运行成功"
+    echo "SUCCESS"
 else
-    echo "❌ 运行失败"
+    echo "FAILURE"
     exit 1
 fi
 

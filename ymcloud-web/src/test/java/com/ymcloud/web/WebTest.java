@@ -2,14 +2,12 @@ package com.ymcloud.web;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RuntimeUtil;
-import cn.hutool.core.util.StrUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.io.File;
-import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.web
@@ -72,7 +70,7 @@ public class WebTest {
         // 脚本路径（Linux/WSL 下的路径）
         String scriptPath = "/mnt/e/Java/ymcloud/files/private/docker/judge1.sh";
         String compilePath = "/mnt/e/Java/ymcloud/files/private/docker/compile.sh";
-        String codePath = "/mnt/e/Java/ymcloud/files/tmp";
+        String codePath = "/mnt/e/Java/ymcloud/files";
 
         // 确保 compileCmd / runCmd 不会被拆开
         String cmd = String.format(
@@ -89,5 +87,43 @@ public class WebTest {
         System.out.println(result);
     }
 
+    @Test
+    public void testRun() {
+        // 参数
+        String submissionId = "10009";
+        String problemId = "1";
+        String compileCmd = "g++ main.cpp -o main";
+        String runCmd = "./main";
+        String imageName = "oj-cpp-env";
+
+        // 脚本路径（Linux/WSL 下的路径）
+        String runPath = "/mnt/e/Java/ymcloud/files/private/docker/run_multi.sh";
+        String compilePath = "/mnt/e/Java/ymcloud/files/private/docker/compile.sh";
+        String codePath = "/mnt/e/Java/ymcloud/files";
+
+        // 确保 compileCmd / runCmd 不会被拆开
+        String cmd = String.format(
+                "bash %s %s %s \"%s\" %s %s",
+                runPath,
+                submissionId,
+                problemId,
+                runCmd,
+                imageName,
+                codePath
+        );
+
+        System.out.println("执行命令: " + cmd);
+        String result = RuntimeUtil.execForStr(cmd);
+        System.out.println(result);
+    }
+
+    @Test
+    public void testFile(){
+
+        String path = "/Java/ymcloud/files/tmp";
+        String filename = path + "/main.cpp";
+        File touch = FileUtil.touch(filename);
+        System.out.println(touch.getAbsolutePath());
+    }
 
 }
