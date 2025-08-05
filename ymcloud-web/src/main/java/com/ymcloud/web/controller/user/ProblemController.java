@@ -1,6 +1,7 @@
 package com.ymcloud.web.controller.user;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.ProblemVO;
 import com.ymcloud.web.service.ProblemService;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,7 @@ public class ProblemController {
 
     /**
      * 根据题目id获取题目信息
-     * @param problemId 题目id
+     * @param problemId 题目唯一标识
      * @return 题目
      */
     @GetMapping
@@ -37,4 +38,15 @@ public class ProblemController {
         return Result.ok(problem);
     }
 
+    /**
+     * 用户获取当前题目提交状态
+     * @param problemId 题目唯一标识
+     * @return 状态
+     */
+    @GetMapping("/submission-status")
+    public Result<JudgeStatus> problemSubmissionStatus(@RequestParam("problemId") String problemId) {
+        log.info("用户获取当前题目提交状态:{}", problemId);
+        JudgeStatus status=problemService.problemSubmissionStatus(problemId);
+        return Result.ok(status);
+    }
 }

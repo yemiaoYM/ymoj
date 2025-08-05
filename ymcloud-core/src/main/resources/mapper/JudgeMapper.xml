@@ -1,4 +1,30 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.ymcloud.core.web.mapper.JudgeMapper">
+
+    <select id="getProblemListCount" resultType="com.ymcloud.pojo.vo.ProblemCountVO">
+        SELECT display_id AS problemId,
+            COUNT(IF(STATUS=-3,STATUS,NULL)) AS pe,
+            COUNT(IF(STATUS=-2,STATUS,NULL)) AS ce,
+            COUNT(IF(STATUS=-1,STATUS,NULL)) AS wa,
+            COUNT(IF(STATUS=0,STATUS,NULL)) AS ac,
+            COUNT(IF(STATUS=1,STATUS,NULL)) AS tle,
+            COUNT(IF(STATUS=2,STATUS,NULL)) AS mle,
+            COUNT(IF(STATUS=3,STATUS,NULL)) AS re,
+            COUNT(IF(STATUS=4,STATUS,NULL)) AS se,
+            COUNT(IF(STATUS=8,STATUS,NULL)) AS pa,
+            COUNT(*) AS total
+        FROM judge
+        <where>
+            contest_id=0 AND group_id is null
+            <if test="problemIds!=null and problemIds.size > 0">
+                AND display_id in
+                <foreach collection="problemIds" item="problemId" open="(" separator="," close=")">
+                    #{problemId}
+                </foreach>
+            </if>
+        </where>
+        GROUP BY display_id
+    </select>
+
 </mapper>

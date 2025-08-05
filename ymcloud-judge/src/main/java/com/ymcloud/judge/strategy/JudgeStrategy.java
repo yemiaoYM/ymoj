@@ -101,13 +101,6 @@ public class JudgeStrategy {
                 judgeCaseList.add(judgeCase);
                 continue;
             }
-            //判断答案是否正确
-            boolean b = compareOutput(acceptOutFile, userOutFile);
-            if(!b){
-                //说明wa
-                judgeCase.setStatus(JudgeStatus.STATUS_WRONG_ANSWER);
-                judgeCase.setErrorMessage(FileUtil.readUtf8String(userOutFile));
-            }
             //只有正常运行才获取运行时间和内存
             List<String> timeMsg = FileUtil.readUtf8Lines(timeFile);
             //解析时间和内存
@@ -121,8 +114,13 @@ public class JudgeStrategy {
                     memory = Long.parseLong(line.substring(4).trim());
                 }
             }
-            //判断剩下的状态
-            if(time> request.getTimeLimit()){
+            //判断答案是否正确
+            boolean b = compareOutput(acceptOutFile, userOutFile);
+            if(!b){
+                //答案不正确直接wa
+                judgeCase.setStatus(JudgeStatus.STATUS_WRONG_ANSWER);
+                judgeCase.setErrorMessage(FileUtil.readUtf8String(userOutFile));
+            }else if(time> request.getTimeLimit()){
                 //判断是否超时
                 judgeCase.setStatus(JudgeStatus.STATUS_TIME_LIMIT_EXCEEDED);
             }else if(memory>request.getMemoryLimit()){

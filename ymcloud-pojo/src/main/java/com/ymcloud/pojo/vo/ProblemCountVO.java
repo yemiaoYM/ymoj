@@ -16,9 +16,9 @@ public class ProblemCountVO implements Serializable {
     private final static long serialVersionUID = 1L;
 
     /**
-     * 题目id
+     * 题目唯一标识
      */
-    private Long problemId;
+    private String problemId;
     /**
      * 总提交数
      */

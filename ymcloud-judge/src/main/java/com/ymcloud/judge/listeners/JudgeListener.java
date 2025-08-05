@@ -2,7 +2,6 @@ package com.ymcloud.judge.listeners;
 
 import com.ymcloud.common.constant.RabbitMQConstants;
 import com.ymcloud.judge.domain.JudgeMessage;
-import com.ymcloud.judge.strategy.JudgeExecutor;
 import com.ymcloud.judge.strategy.JudgeRun;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
@@ -25,9 +24,6 @@ import org.springframework.stereotype.Component;
 public class JudgeListener {
 
     @Autowired
-    private JudgeExecutor judgeExecutor;
-
-    @Autowired
     private JudgeRun judgeRun;
 
     /**
@@ -41,7 +37,6 @@ public class JudgeListener {
     ))
     public void listen(JudgeMessage msg) {
         log.info("评测机开始评测：{}",msg.getSubmissionId());
-        //judgeExecutor.execute(msg);
         judgeRun.execute(msg);
         //业务中尽量不要抛异常，不然会启动重试机制，发送到error队列中
     }

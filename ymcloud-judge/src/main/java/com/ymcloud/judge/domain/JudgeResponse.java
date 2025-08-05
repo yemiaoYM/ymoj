@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.judge.domain
- * @ClassName: SandBoxResponse
+ * @ClassName: JudgeResponse
  * @Author: Yemiao
  * @CreateTime: 2025-08-05  17:19
  * @Description: 沙盒相应体

@@ -2,7 +2,7 @@ package com.ymcloud.common.constant;
 
 /**
  * @PackageName: com.ymcloud.common.constant
- * @ClassName: LanguageContants
+ * @ClassName: LanguageConstants
  * @Author: Yemiao
  * @CreateTime: 2025-07-24  20:34
  * @Description: 语言常用变量
