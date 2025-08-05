@@ -32,7 +32,7 @@ public class JudgeListener {
      */
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(name = RabbitMQConstants.JUDGE_QUEUE,durable = "true"),
-            exchange = @Exchange(value = RabbitMQConstants.JUDGE_EXCHANGE,type = ExchangeTypes.TOPIC),
+            exchange = @Exchange(value = RabbitMQConstants.JUDGE_EXCHANGE,delayed = "true",type = ExchangeTypes.TOPIC),
             key = RabbitMQConstants.JUDGE_ROUTING_KEY
     ))
     public void listen(JudgeMessage msg) {

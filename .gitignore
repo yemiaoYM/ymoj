@@ -46,6 +46,10 @@ Thumbs.db
 application-dev.yml
 application-prod.yml
 
+/files/*
+!/files/private
+!/files/private/**
+
 # 日志文件
 *.log
 logs/
@@ -63,4 +67,5 @@ logs/
 # 打包忽略
 dist/
 release/
-/files/
+
+
