@@ -178,8 +178,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         List<String> list = userAcproblemEntityService.lambdaQuery()
                 .select(UserAcproblem::getDisplayId)
                 .eq(UserAcproblem::getUserId, profile.getId())
-                //只查询非比赛提交
-                .eq(UserAcproblem::getContestId, 0)
                 .list().stream().map(UserAcproblem::getDisplayId).toList();
         userInfoVO.setProblemId(list);
         userInfoVO.setAc(list.size());

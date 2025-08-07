@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.ymcloud.core.web.mapper.UserAcproblemMapper">
+    <select id="selectUserAcRank" resultType="com.ymcloud.pojo.vo.UserAcRankVO">
+        SELECT
+            username,
+            COUNT(DISTINCT problem_id) AS count
+        FROM
+            user_acproblem
+        GROUP BY
+            username,user_id
+        ORDER BY
+            count DESC,user_id
+        LIMIT 10;
+    </select>
 </mapper>

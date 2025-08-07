@@ -2,12 +2,18 @@ package com.ymcloud.web;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RuntimeUtil;
+import com.ymcloud.common.constant.CacheConstants;
+import com.ymcloud.common.result.Result;
+import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.core.web.mapper.UserAcproblemMapper;
+import com.ymcloud.pojo.vo.UserAcRankVO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.io.File;
+import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.web
@@ -18,6 +24,11 @@ import java.io.File;
  */
 @SpringBootTest
 public class WebTest {
+    @Autowired
+    private RedisCache redisCache;
+
+    @Autowired
+    private UserAcproblemMapper userAcproblemMapper;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -29,6 +40,20 @@ public class WebTest {
 
         encode = passwordEncoder.encode("12345");
         System.out.println(encode);
+    }
+
+    @Test
+    public void test() {
+        //从用户ac表中取数据
+        List<UserAcRankVO> userAcRankVOS = userAcproblemMapper.selectUserAcRank();
+        //这里注意时构造结果信息，于基于注释方式返回的类型保持一致
+        Result<List<UserAcRankVO>> result=Result.ok(userAcRankVOS);
+        //向redis中写入
+        String key=CacheConstants.CACHE_NAME+"::"+CacheConstants.USER_AC_RANK_KEY;
+        redisCache.setCacheObject(key, result);
+
+        Result<List<UserAcRankVO>> userAcRank = redisCache.getCacheObject(key);
+        System.out.println(userAcRank);
     }
 
     @Test

@@ -9,13 +9,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
-@Schema(description = "用户已解决题目表")
+@Schema(description = "用户ac题目表")
 public class UserAcproblem {
     @TableId(type = IdType.AUTO)
     @Schema(description="主键ID")
     private Long id;
     @Schema(description="judge提交ID")
-    private Long submitId;
+    private Long judgeId;
     @Schema(description="用户ID")
     private Long userId;
     @Schema(description="用户名")

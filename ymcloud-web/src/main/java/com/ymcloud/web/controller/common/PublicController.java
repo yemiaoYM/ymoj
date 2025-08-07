@@ -3,6 +3,7 @@ package com.ymcloud.web.controller.common;
 import cn.hutool.core.bean.BeanUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
+import com.ymcloud.core.web.mapper.UserAcproblemMapper;
 import com.ymcloud.pojo.entity.Announcement;
 import com.ymcloud.pojo.entity.Tag;
 import com.ymcloud.pojo.query.ContestPageQuery;
@@ -33,6 +34,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/public")
 public class PublicController {
+
+    @Autowired
+    private UserAcproblemMapper userAcproblemMapper;
 
     @Autowired
     private UserService userService;
@@ -80,10 +84,11 @@ public class PublicController {
      * 获取标签列表
      * @return 标签列表
      */
-    @Cacheable(cacheNames = CacheConstants.TAG_LIST_KEY)
+    @Cacheable(cacheNames = CacheConstants.CACHE_NAME,key = "'tag_list'")
     @GetMapping("/tag-list")
     public Result<List<Tag>> tagList() {
         log.info("获取标签列表");
+        //基于注解方式拉取redis缓存
         List<Tag> list = tagService.list();
         return Result.ok(list);
     }
@@ -146,6 +151,20 @@ public class PublicController {
         log.info("获取评测列表表单，第{}页，每页{}条",query.getPageNo(),query.getPageSize());
         PageVO<SubmissionTableVO> list=submissionService.getPublicSubmissionList(query);
         return Result.ok(list);
+    }
+
+    /**
+     * 用户ac数量排名（每日凌晨1点更新）
+     * @return 用户ac数量排名列表
+     */
+    @Cacheable(cacheNames = CacheConstants.CACHE_NAME,key = "'user_ac_rank'")
+    @GetMapping("/user-ac-rank")
+    public Result<List<UserAcRankVO>> userAcRank() {
+        log.info("获取用户ac数量排名（每日凌晨1点更新）");
+        //如果没有缓存则从数据库中拉取，备用操作
+        //但这个概率几乎很小，除非redis被穿透或者redis中根本不存在该数据
+        List<UserAcRankVO> userAcRank = userAcproblemMapper.selectUserAcRank();
+        return Result.ok(userAcRank);
     }
 
 }

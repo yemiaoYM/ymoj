@@ -10,10 +10,17 @@ package com.ymcloud.common.constant;
 public class CacheConstants {
 
     /**
+     * 用户缓存资源 redis key
+     */
+    public static final String CACHE_NAME = "cache";
+    /**
      * 标签列表 redis key
      */
-    public static final String TAG_LIST_KEY = "cacheTag";
-
+    public static final String TAG_LIST_KEY = "tag_list";
+    /**
+     * 用户ac排名列表 redis key
+     */
+    public static final String USER_AC_RANK_KEY = "user_ac_rank";
     /**
      * 登录用户 redis key
      */

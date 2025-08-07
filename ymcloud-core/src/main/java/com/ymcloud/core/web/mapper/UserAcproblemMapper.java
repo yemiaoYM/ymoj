@@ -2,7 +2,10 @@ package com.ymcloud.core.web.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ymcloud.pojo.entity.UserAcproblem;
+import com.ymcloud.pojo.vo.UserAcRankVO;
 import org.apache.ibatis.annotations.Mapper;
+
+import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.core.web.mapper
@@ -13,4 +16,11 @@ import org.apache.ibatis.annotations.Mapper;
  */
 @Mapper
 public interface UserAcproblemMapper extends BaseMapper<UserAcproblem> {
+
+    /**
+     * 用户ac数量排名
+     * @return 用户ac数量排名列表
+     */
+    List<UserAcRankVO> selectUserAcRank();
+
 }
