@@ -49,4 +49,17 @@ public class ProblemController {
         JudgeStatus status=problemService.problemSubmissionStatus(problemId);
         return Result.ok(status);
     }
+
+    /**
+     * 随机获取一道题目
+     * @return 题目唯一标识
+     */
+    @GetMapping("/random")
+    public Result<String> randomProblem() {
+        log.info("随机获取一道题目");
+        String problemId=problemService.randomProblem();
+        return Result.ok(problemId);
+    }
+
+
 }

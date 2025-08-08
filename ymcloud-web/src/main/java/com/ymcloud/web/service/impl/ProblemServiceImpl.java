@@ -3,6 +3,7 @@ package com.ymcloud.web.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollectionUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -177,6 +178,24 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
             }
         }
         return status;
+    }
+
+    /**
+     * 随机获取一道题目
+     * @return 题目唯一标识
+     */
+    @Override
+    public String randomProblem() {
+        //只随机公共题目
+        List<String> list = lambdaQuery().select(Problem::getProblemId)
+                .eq(Problem::getVisibility, ProblemConstants.PUBLIC)
+                .list().stream().map(Problem::getProblemId).toList();
+        if(CollectionUtil.isEmpty(list)){
+            throw new ProblemException("暂时没有公共题目");
+        }
+        //随机
+        int randomInt = RandomUtil.randomInt(list.size());
+        return list.get(randomInt);
     }
 
 

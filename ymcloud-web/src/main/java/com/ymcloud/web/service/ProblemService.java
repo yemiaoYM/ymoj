@@ -37,4 +37,10 @@ public interface ProblemService extends IService<Problem> {
      * @return 状态
      */
     JudgeStatus problemSubmissionStatus(String problemId);
+
+    /**
+     * 随机获取一道题目
+     * @return 题目唯一标识
+     */
+    String randomProblem();
 }

@@ -19,6 +19,14 @@ public class UserAcRankVO implements Serializable {
      */
     private String username;
     /**
+     * 用户昵称
+     */
+    private String nickname;
+    /**
+     * 用户头像
+     */
+    private String avatar;
+    /**
      * ac题目数量
      */
     private Long count;

@@ -3,14 +3,19 @@
 <mapper namespace="com.ymcloud.core.web.mapper.UserAcproblemMapper">
     <select id="selectUserAcRank" resultType="com.ymcloud.pojo.vo.UserAcRankVO">
         SELECT
-            username,
-            COUNT(DISTINCT problem_id) AS count
+            u.username,
+            u.nickname,
+            u.avatar,
+            COUNT(DISTINCT a.problem_id) AS count
         FROM
-            user_acproblem
+            user_acproblem a
+                JOIN
+            user u ON a.user_id = u.id
         GROUP BY
-            username,user_id
+            u.username,u.id
         ORDER BY
-            count DESC,user_id
+            count DESC,
+            u.id
         LIMIT 10;
     </select>
 </mapper>
