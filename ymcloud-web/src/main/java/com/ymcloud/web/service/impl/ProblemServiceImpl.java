@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.constant.ProblemConstants;
+import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
@@ -18,11 +19,12 @@ import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.LanguageMapper;
 import com.ymcloud.core.web.mapper.ProblemCaseMapper;
 import com.ymcloud.core.web.mapper.ProblemMapper;
+import com.ymcloud.pojo.dto.ProblemDTO;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ProblemPageQuery;
+import com.ymcloud.pojo.query.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.ProblemService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -90,27 +92,22 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
     }
 
     /**
-     * 根据题目id获取题目信息
-     * @param problemId 题目id
-     * @return 题目
+     * 获取题目信息
+     * @param problemDTO 查询题目实体
+     * @return 题目信息
      */
     @Override
-    public ProblemVO getProblemById(String problemId) {
+    public ProblemVO getProblemInfo(ProblemDTO problemDTO) {
+        //检查是否为比赛题目
+        if(problemDTO.getIsContest()){
+            Long contestId = problemDTO.getContestId();
+            String contestProblemIndex = problemDTO.getContestProblemIndex();
+            throw new ProblemException("暂不支持查询比赛题目信息");
+        }
         //校验参数
-        if(problemId==null|| StrUtil.isBlank(problemId)){
-            throw new ProblemException("题目标识参数为空", HttpStatus.BAD_REQUEST);
-        }
-        //根据题目id查询
-        Problem problem = lambdaQuery().eq(Problem::getProblemId, problemId).one();
-        if(problem==null){
-            //题目不存在或者已删除
-            throw new ProblemNotExistException();
-        }
-        if(problem.getVisibility() == ProblemConstants.CONTEST_PROBLEM){
-            throw new ProblemPermissionException("请从比赛官网查询题目");
-        }
+        Problem problem = validateProblem(problemDTO.getProblemId());
+        //私有题目查询权限
         if(problem.getVisibility() == ProblemConstants.PRIVATE){
-            //私有题目查询权限
             Long userId = SecurityUtils.getUserId();
             if(!Objects.equals(problem.getAuthorId(), userId)){
                 throw new ProblemPermissionException("没有访问此题目的权限，请联系题目创建者");
@@ -133,27 +130,20 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
 
     /**
      * 用户获取当前题目提交状态
-     * @param problemId 题目唯一标识
+     * @param dto 查询实体
      * @return 状态
      */
     @Override
-    public JudgeStatus problemSubmissionStatus(String problemId) {
-        //1.校验参数
-        if(problemId==null|| StrUtil.isBlank(problemId)){
-            throw new ProblemException("题目标识参数为空", HttpStatus.BAD_REQUEST);
+    public JudgeStatus problemSubmissionStatus(ProblemDTO dto) {
+        //判断是否为比赛提交
+        if(dto.getIsContest()){
+            throw new ServiceException("暂不支持比赛模块");
         }
-        //2.根据题目id查询
-        Problem problem = lambdaQuery().eq(Problem::getProblemId, problemId).one();
-        if(problem==null){
-            //题目不存在或者已删除
-            throw new ProblemNotExistException();
-        }
-        if(problem.getVisibility() == ProblemConstants.CONTEST_PROBLEM){
-            throw new ProblemPermissionException("请从比赛官网查询题目");
-        }
+        //校验参数
+        String problemId = dto.getProblemId();
+        Problem problem=validateProblem(problemId);
         //私有题目查询权限
-        User user = SecurityUtils.getUser();
-        Long userId = user.getId();
+        Long userId = SecurityUtils.getUserId();
         if(problem.getVisibility() == ProblemConstants.PRIVATE) {
             if(!Objects.equals(problem.getAuthorId(), userId)){
                 throw new ProblemPermissionException("没有访问此题目的权限，请联系题目创建者");
@@ -198,5 +188,57 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         return list.get(randomInt);
     }
 
+    /**
+     * 查询用户当前题目提交列表
+     * @param query 分页查询实体
+     * @return 提交列表
+     */
+    @Override
+    public PageVO<SubmissionTableVO> problemSubmissionList(ProblemSubmissionPageQuery query) {
+        //检查是否为比赛提交
+        if(query.getIsContest()){
+            throw new ProblemException("暂不支持查询比赛提交");
+        }
+        //检查题目信息
+        Problem problem = validateProblem(query.getProblemId());
+        //获取当前用户信息
+        Long userId = SecurityUtils.getUserId();
+        //构造分页实体
+        Page<Judge> page=new Page<>(query.getPageNo(),query.getPageSize());
+        //根据限定条件进行查询
+        Page<Judge> judgePage = judgeEntityService.lambdaQuery()
+                .eq(Judge::getUserId, userId)
+                .eq(Judge::getProblemId, problem.getId())
+                .orderByDesc(Judge::getCreatedTime)
+                .page(page);
+        //返回提交vo
+        return PageVO.of(judgePage,judge->{
+            SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
+            vo.setSubmissionId(judge.getId());
+            return vo;
+        });
+    }
+
+    /**
+     * 根据题目唯一标识校验题目信息
+     * @param problemId 题目唯一标识
+     * @return 当前查询题目
+     */
+    private Problem validateProblem(String problemId) {
+        //1.校验参数
+        if(problemId==null || StrUtil.isBlank(problemId)){
+            throw new ProblemException("题目标识参数为空", HttpStatus.BAD_REQUEST);
+        }
+        //2.根据题目id查询
+        Problem problem = lambdaQuery().eq(Problem::getProblemId, problemId).one();
+        if(problem==null){
+            //题目不存在或者已删除
+            throw new ProblemNotExistException();
+        }
+        if(problem.getVisibility() == ProblemConstants.CONTEST_PROBLEM){
+            throw new ProblemPermissionException("请从比赛官网查询题目");
+        }
+        return problem;
+    }
 
 }

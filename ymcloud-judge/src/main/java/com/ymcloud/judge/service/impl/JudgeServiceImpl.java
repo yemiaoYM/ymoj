@@ -68,7 +68,7 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
             throw new ServiceException("提交太快，稍等一下再提交");
         }
         //判断是否为比赛提交
-        if(judgeDTO.getContestSubmission()){
+        if(judgeDTO.getIsContest()){
             throw new ServiceException("暂不支持比赛提交");
         }
         //查询题目

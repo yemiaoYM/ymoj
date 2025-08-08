@@ -100,7 +100,7 @@ public class PublicController {
      */
     @GetMapping("/problem-list")
     public Result<PageVO<ProblemTableVO>> problemList(@Validated ProblemPageQuery query) {
-        log.info("获取题目列表表单，第{}页，每页{}条",query.getPageNo(),query.getPageSize());
+        log.info("获取题目列表表单，{}",query);
         PageVO<ProblemTableVO> pageResult=problemService.pageQuery(query);
         return Result.ok(pageResult);
     }
@@ -112,7 +112,7 @@ public class PublicController {
      */
     @GetMapping("/contest-list")
     public Result<PageVO<ContestTableVO>> contestList(@Validated ContestPageQuery query) {
-        log.info("获取比赛列表表单，第{}页，每页{}条",query.getPageNo(),query.getPageSize());
+        log.info("获取比赛列表表单，{}",query);
         PageVO<ContestTableVO> pageResult=contestService.pageQuery(query);
         return Result.ok(pageResult);
     }
@@ -148,7 +148,7 @@ public class PublicController {
      */
     @GetMapping("/submission-list")
     public Result<PageVO<SubmissionTableVO>> submissionList(@Validated SubmissionPageQuery query) {
-        log.info("获取评测列表表单，第{}页，每页{}条",query.getPageNo(),query.getPageSize());
+        log.info("获取评测列表表单:{}",query);
         PageVO<SubmissionTableVO> list=submissionService.getPublicSubmissionList(query);
         return Result.ok(list);
     }

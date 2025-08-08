@@ -1,12 +1,15 @@
 package com.ymcloud.web.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ymcloud.pojo.dto.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ProblemPageQuery;
+import com.ymcloud.pojo.query.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.PageVO;
 import com.ymcloud.pojo.vo.ProblemTableVO;
 import com.ymcloud.pojo.vo.ProblemVO;
+import com.ymcloud.pojo.vo.SubmissionTableVO;
 
 /**
  * @PackageName: com.ymcloud.web.service
@@ -25,22 +28,31 @@ public interface ProblemService extends IService<Problem> {
     PageVO<ProblemTableVO> pageQuery(ProblemPageQuery query);
 
     /**
-     * 根据题目id获取题目信息
-     * @param problemId 题目id
-     * @return 题目
+     * 获取题目信息
+     * @param problemDTO 查询题目实体
+     * @return 题目信息
      */
-    ProblemVO getProblemById(String problemId);
+    ProblemVO getProblemInfo(ProblemDTO problemDTO);
 
     /**
      * 用户获取当前题目提交状态
-     * @param problemId 题目唯一标识
+     * @param dto 查询实体
      * @return 状态
      */
-    JudgeStatus problemSubmissionStatus(String problemId);
+    JudgeStatus problemSubmissionStatus(ProblemDTO dto);
 
     /**
      * 随机获取一道题目
      * @return 题目唯一标识
      */
     String randomProblem();
+
+    /**
+     * 查询用户当前题目提交列表
+     * @param query 分页查询实体
+     * @return 提交列表
+     */
+    PageVO<SubmissionTableVO> problemSubmissionList(ProblemSubmissionPageQuery query);
+
+
 }

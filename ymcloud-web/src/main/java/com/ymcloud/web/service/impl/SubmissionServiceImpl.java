@@ -50,7 +50,7 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
     public PageVO<SubmissionTableVO> getPublicSubmissionList(SubmissionPageQuery query) {
         //先判断是否查看个人提交
         Long userId=null;
-        if(JudgeConstants.PERSONAL_SUBMISSION.equals(query.getScope())){
+        if(query.getIsMine()){
             userId= SecurityUtils.getUserId();
             //查询个人记录不支持模糊匹配用户名
             query.setUsername(null);
@@ -58,12 +58,14 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
         //1.构建分页实体
         Page<Judge> page=new Page<>(query.getPageNo(),query.getPageSize());
         //分页条件查询
-        Page<Judge> judgePage = judgeEntityService.lambdaQuery().eq(userId != null, Judge::getUserId, userId)
+        Page<Judge> judgePage = judgeEntityService.lambdaQuery()
+                //个人提交
+                .eq(userId != null, Judge::getUserId, userId)
                 .eq(query.getStatus() != null, Judge::getStatus, query.getStatus())
                 //一定限制为非比赛提交
                 .ne(Judge::getContestId,JudgeConstants.CONTEST_SUBMISSION)
-                .like(StrUtil.isNotBlank(query.getProblemId()), Judge::getDisplayId, query.getProblemId())
-                .like(StrUtil.isNotBlank(query.getProblemTitle()), Judge::getProblemTitle, query.getProblemTitle())
+                .like(StrUtil.isNotBlank(query.getProblemKey()), Judge::getDisplayId, query.getProblemKey())
+                .like(StrUtil.isNotBlank(query.getProblemKey()), Judge::getProblemTitle, query.getProblemKey())
                 .like(StrUtil.isNotBlank(query.getUsername()), Judge::getUsername, query.getUsername())
                 .orderByDesc(Judge::getCreatedTime)
                 .page(page);

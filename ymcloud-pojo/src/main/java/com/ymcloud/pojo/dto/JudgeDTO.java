@@ -32,7 +32,7 @@ public class JudgeDTO {
      * 是否为比赛提交
      */
     @NotNull(message = "需指定是否为比赛提交")
-    private Boolean contestSubmission = false;
+    private Boolean isContest;
     /**
      * 所属比赛id
      */
