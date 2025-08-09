@@ -23,4 +23,12 @@ public class FileException extends ServiceException {
         super(message, code);
     }
 
+    public FileException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public FileException(String message, Integer code, Throwable cause) {
+        super(message, code, cause);
+    }
+
 }

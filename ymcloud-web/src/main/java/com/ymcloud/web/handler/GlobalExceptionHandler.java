@@ -12,6 +12,8 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * @PackageName: com.ymcloud.web.handler
@@ -32,6 +34,15 @@ public class GlobalExceptionHandler {
         String requestURI = request.getRequestURI();
         log.warn("请求地址:{},权限校验失败:{}", requestURI, e.getMessage());
         return Result.fail().code(HttpStatus.FORBIDDEN).msg("访问权限不足");
+    }
+
+    /**
+     * 找不到资源 404
+     */
+    @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
+    public Result<?> handleNotFound(Exception e, HttpServletRequest request) {
+        log.warn("资源未找到，请求URI: {}, 异常信息: {}", request.getRequestURI(), e.getMessage());
+        return Result.fail().code(HttpStatus.NOT_FOUND).msg("资源未找到");
     }
 
     /**

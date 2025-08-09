@@ -19,4 +19,8 @@ public class JudgeException extends ServiceException {
         super(message);
     }
 
+    public JudgeException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
 }

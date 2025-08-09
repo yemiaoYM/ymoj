@@ -1,12 +1,12 @@
 package com.ymcloud.judge.strategy;
 
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.JudgeConstants;
 import com.ymcloud.common.constant.LanguageConstants;
-import com.ymcloud.common.exception.ServiceException;
+import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.exception.judge.JudgeException;
+import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.core.web.dao.JudgeCaseEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.judge.domain.JudgeMessage;
@@ -55,15 +55,19 @@ public class JudgeRun {
         //判断评测策略
         if (message.getStrategy().equals(JudgeConstants.TEST_JUDGE)){
             //自测
-            throw new ServiceException("暂不支持自测");
+            log.warn("自测逻辑待完善...");
         }else if(message.getStrategy().equals(JudgeConstants.DEFAULT_JUDGE)){
             //默认评测都会更新数据库 查询当前评测信息
-            //不放在try/catch中为了 连评测记录都拿不到，说明评测逻辑存在缺陷
-            //进行回滚 重试失败到error.queue，人工介入
+            //不放在try/catch中为了 连评测记录都拿不到，说明评测记录中途删除或者数据库加载失败
+            //进行回滚 重试3次失败后到发送到error.queue，人工介入
             Judge judge = judgeEntityService.getById(message.getSubmissionId());
             if(judge == null){
                 throw new JudgeException("评测记录不存在，评测失败");
             }
+            //提交文件路径
+            String submissionDir = BASE_DIR + "/" +
+                    FileConstants.DIR_TMP + "/"
+                    + "submission_" + message.getSubmissionId();
             try{
                 //先更新评测状态
                 judge.setStatus(JudgeStatus.STATUS_JUDGING);
@@ -72,11 +76,8 @@ public class JudgeRun {
                 Language language = message.getLanguage();
                 //创建用户代码文件并写入
                 //files/tmp/submission_1/main.cpp
-                String userCodeFile= BASE_DIR+ "/"
-                        + FileConstants.DIR_TMP+ "/"
-                        +"submission_"+message.getSubmissionId()+"/"
-                        +language.getFileName();
-                FileUtil.writeUtf8String(message.getCode(), userCodeFile);
+                String userCodeFile = submissionDir + "/" + language.getFileName();
+                FileUtils.writeFile(userCodeFile,message.getCode());
                 //构造沙箱请求体
                 SandBoxRequest request = new SandBoxRequest();
                 request.setSubmissionId(message.getSubmissionId());
@@ -98,8 +99,16 @@ public class JudgeRun {
                         return;
                     }
                 }
+                //c,c++为默认一倍时间和空间，其他语言两倍
+                if(!language.getFileName().endsWith(".cpp")||!language.getFileName().endsWith(".c")){
+                    request.setTimeLimit(message.getTimeLimit()*2);
+                    request.setMemoryLimit(message.getMemoryLimit()*2);
+                }
                 //进行执行代码
                 JudgeResponse response=judgeStrategy.defaultJudge(request);
+                //设置运行时间和内存
+                judge.setTime(response.getTime());
+                judge.setMemory(response.getMemory());
                 //根据评测模式进行评测结果设置
                 List<JudgeCase> judgeCases = response.getJudgeCases();
                 //目前处除了io其他都按照acm模式评测
@@ -135,20 +144,17 @@ public class JudgeRun {
                 //更新评测结果
                 judgeCaseEntityService.saveBatch(judgeCases);
                 judgeEntityService.updateById(judge);
-            }catch (ServiceException e){
-                log.error("评测业务异常：{}",e.getMessage());
-                judge.setStatus(JudgeStatus.STATUS_SYSTEM_ERROR);
-                judge.setErrorMessage("评测业务异常："+e.getMessage());
-                judgeEntityService.updateById(judge);
+            }catch (JudgeException | FileException e){
+                log.warn("评测业务异常：",e);
+                //逻辑异常就回滚
+                throw e;
             }catch (Exception e){
-                log.error("评测系统异常：{}",e.getMessage());
+                log.error("评测系统异常",e);
                 judge.setStatus(JudgeStatus.STATUS_SYSTEM_ERROR);
-                judge.setErrorMessage("评测系统异常："+e.getMessage());
+                judge.setErrorMessage("评测失败，请联系管理员");
                 judgeEntityService.updateById(judge);
             }
         }
     }
-
-
 
 }

@@ -2,6 +2,7 @@ package com.ymcloud.judge.sandbox.impl;
 
 import cn.hutool.core.util.RuntimeUtil;
 import com.ymcloud.common.constant.JudgeConstants;
+import com.ymcloud.common.exception.judge.SandBoxException;
 import com.ymcloud.judge.domain.SandBoxRequest;
 import com.ymcloud.judge.sandbox.SandBoxService;
 import lombok.extern.slf4j.Slf4j;
@@ -38,22 +39,26 @@ public class SandBoxServiceImpl implements SandBoxService {
     @Override
     public void compile(SandBoxRequest request){
         log.info("沙盒开始执行编译...");
-        //1.提取脚本参数
-        String submissionId = request.getSubmissionId().toString();
-        String compileCmd = request.getCompileCmd();
-        String imageName = request.getEnv();
-        //2.构建命令
-        String cmd = String.format(
-                "bash %s %s \"%s\" %s %s",
-                SH_DIR + JudgeConstants.COMPILE_SH,
-                submissionId,
-                compileCmd,
-                imageName,
-                BASE_DIR
-        );
-        //3.执行脚本
-        String result = RuntimeUtil.execForStr(cmd);
-        log.info("执行结果：{}",result);
+        try {
+            //1.提取脚本参数
+            String submissionId = request.getSubmissionId().toString();
+            String compileCmd = request.getCompileCmd();
+            String imageName = request.getEnv();
+            //2.构建命令
+            String cmd = String.format(
+                    "bash %s %s \"%s\" %s %s",
+                    SH_DIR + JudgeConstants.COMPILE_SH,
+                    submissionId,
+                    compileCmd,
+                    imageName,
+                    BASE_DIR
+            );
+            //3.执行脚本
+            String result = RuntimeUtil.execForStr(cmd);
+            log.info("编译结果：{}", result);
+        }catch (Exception e){
+            throw new SandBoxException("沙箱编译失败",e);
+        }
     }
 
     /**
@@ -63,24 +68,28 @@ public class SandBoxServiceImpl implements SandBoxService {
     @Override
     public void defaultJudge(SandBoxRequest request){
         log.info("沙盒开始执行默认评测运行...");
-        //1.提取脚本参数
-        String submissionId = request.getSubmissionId().toString();
-        String problemId = request.getProblemId().toString();
-        String runCmd = request.getRunCmd();
-        String imageName = request.getEnv();
-        //2.构建命令
-        String cmd = String.format(
-                "bash %s %s %s \"%s\" %s %s",
-                SH_DIR + JudgeConstants.DEFAULT_RUN_SH,
-                submissionId,
-                problemId,
-                runCmd,
-                imageName,
-                BASE_DIR
-        );
-        //3.执行脚本
-        String result = RuntimeUtil.execForStr(cmd);
-        log.info("执行结果：{}",result);
+        try {
+            //1.提取脚本参数
+            String submissionId = request.getSubmissionId().toString();
+            String problemId = request.getProblemId().toString();
+            String runCmd = request.getRunCmd();
+            String imageName = request.getEnv();
+            //2.构建命令
+            String cmd = String.format(
+                    "bash %s %s %s \"%s\" %s %s",
+                    SH_DIR + JudgeConstants.DEFAULT_RUN_SH,
+                    submissionId,
+                    problemId,
+                    runCmd,
+                    imageName,
+                    BASE_DIR
+            );
+            //3.执行脚本
+            String result = RuntimeUtil.execForStr(cmd);
+            log.info("执行结果：{}", result);
+        }catch (Exception e){
+            throw new SandBoxException("沙箱执行默认评测异常",e);
+        }
     }
 
 

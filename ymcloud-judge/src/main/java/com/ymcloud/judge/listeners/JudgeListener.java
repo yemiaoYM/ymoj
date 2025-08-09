@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 public class JudgeListener {
+    //业务中尽量不要抛异常，不然会启动重试机制，发送到error队列中
 
     @Autowired
     private JudgeRun judgeRun;
@@ -31,14 +32,15 @@ public class JudgeListener {
      * @param msg 评测消息
      */
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = RabbitMQConstants.JUDGE_QUEUE,durable = "true"),
-            exchange = @Exchange(value = RabbitMQConstants.JUDGE_EXCHANGE,delayed = "true",type = ExchangeTypes.TOPIC),
+            value = @Queue(name = RabbitMQConstants.JUDGE_QUEUE, durable = "true"),
+            exchange = @Exchange(value = RabbitMQConstants.JUDGE_EXCHANGE,
+                    delayed = "true",
+                    type = ExchangeTypes.TOPIC),
             key = RabbitMQConstants.JUDGE_ROUTING_KEY
     ))
     public void listen(JudgeMessage msg) {
         log.info("评测机开始评测：{}",msg.getSubmissionId());
         judgeRun.execute(msg);
-        //业务中尽量不要抛异常，不然会启动重试机制，发送到error队列中
     }
 
 

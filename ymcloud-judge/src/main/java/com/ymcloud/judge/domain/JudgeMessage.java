@@ -30,6 +30,10 @@ public class JudgeMessage {
      */
     private Long userId;
     /**
+     * 用户输入
+     */
+    private String input;
+    /**
      * 用户代码
      */
     private String code;
@@ -53,6 +57,4 @@ public class JudgeMessage {
      * 评测策略：0=默认评测，1=自测
      */
     private Integer strategy;
-
-
 }
