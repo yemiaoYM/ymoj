@@ -1,8 +1,14 @@
 package com.ymcloud.judge.listeners;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.ymcloud.common.constant.RabbitMQConstants;
+import com.ymcloud.common.utils.FileUtils;
+import com.ymcloud.core.web.dao.UserAcproblemEntityService;
 import com.ymcloud.judge.domain.JudgeMessage;
+import com.ymcloud.judge.domain.JudgeResultMessage;
 import com.ymcloud.judge.strategy.JudgeRun;
+import com.ymcloud.pojo.entity.UserAcproblem;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
@@ -27,6 +33,9 @@ public class JudgeListener {
     @Autowired
     private JudgeRun judgeRun;
 
+    @Autowired
+    private UserAcproblemEntityService userAcproblemEntityService;
+
     /**
      * 评测消息队列
      * @param msg 评测消息
@@ -38,11 +47,71 @@ public class JudgeListener {
                     type = ExchangeTypes.TOPIC),
             key = RabbitMQConstants.JUDGE_ROUTING_KEY
     ))
-    public void listen(JudgeMessage msg) {
+    public void listenJudge(JudgeMessage msg) {
         log.info("评测机开始评测：{}",msg.getSubmissionId());
         judgeRun.execute(msg);
     }
 
+    /**
+     * 评测结束文件清理队列
+     * @param msg 评测消息
+     */
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(name = RabbitMQConstants.JUDGE_FILE_CLEAN_QUEUE, durable = "true"),
+            exchange = @Exchange(value = RabbitMQConstants.JUDGE_RESULT_EXCHANGE,
+                    delayed = "true",
+                    type = ExchangeTypes.TOPIC),
+            key = RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY
+    ))
+    public void listenJudgeFileClean(JudgeResultMessage msg) {
+        log.info("评测结束文件清理:{}",msg.getSubmissionId());
+        FileUtils.deleteFile(msg.getSubmissionDir());
+    }
 
+    /**
+     * 评测结束更新用户ac表队列
+     * @param msg 评测消息
+     */
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(name = RabbitMQConstants.JUDGE_AC_UPDATE_QUEUE, durable = "true"),
+            exchange = @Exchange(value = RabbitMQConstants.JUDGE_RESULT_EXCHANGE,
+                    delayed = "true",
+                    type = ExchangeTypes.TOPIC),
+            key = RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY
+    ))
+    public void listenJudgeAcUpdate(JudgeResultMessage msg) {
+        log.info("评测结束更新用户ac表:{}",msg.getSubmissionId());
+        //只更新状态为ac的记录
+        if(msg.getStatus() != JudgeStatus.STATUS_ACCEPTED){
+           return;
+        }
+        //查询是否已经通过了改题目
+        boolean exists = userAcproblemEntityService.lambdaQuery()
+                .eq(UserAcproblem::getUserId, msg.getUserId())
+                .eq(UserAcproblem::getProblemId, msg.getProblemId())
+                .exists();
+        if(!exists){
+            //首次通过则插入信息
+            UserAcproblem userAcproblem = BeanUtil.copyProperties(msg,UserAcproblem.class);
+            userAcproblemEntityService.save(userAcproblem);
+        }
+    }
+
+    /**
+     * 评测结束通知前端队列
+     * @param msg 评测消息
+     */
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(name = RabbitMQConstants.JUDGE_WS_NOTIFY_QUEUE, durable = "true"),
+            exchange = @Exchange(value = RabbitMQConstants.JUDGE_RESULT_EXCHANGE,
+                    delayed = "true",
+                    type = ExchangeTypes.TOPIC),
+            key = RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY
+    ))
+    public void listenJudgeNotify(JudgeResultMessage msg) {
+        log.info("评测结束通知前端:{}",msg.getSubmissionId());
+        //websocket
+
+    }
 
 }

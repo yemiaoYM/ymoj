@@ -95,6 +95,20 @@ public class FileUtils {
     }
 
     /**
+     * 删除文件
+     * @param fileName 文件名
+     * @return 是否删除成功
+     */
+    public static Boolean deleteFile(String fileName){
+        try{
+            return FileUtil.del(fileName);
+        }catch (Exception e){
+            return false;
+        }
+    }
+
+
+    /**
      * 根据文件后缀返回当前文件夹中的数量
      * @param fileName 文件名
      * @param suffix 后缀名

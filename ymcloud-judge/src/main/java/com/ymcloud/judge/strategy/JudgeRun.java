@@ -1,9 +1,11 @@
 package com.ymcloud.judge.strategy;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.JudgeConstants;
 import com.ymcloud.common.constant.LanguageConstants;
+import com.ymcloud.common.constant.RabbitMQConstants;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.utils.FileUtils;
@@ -11,12 +13,14 @@ import com.ymcloud.core.web.dao.JudgeCaseEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.judge.domain.JudgeMessage;
 import com.ymcloud.judge.domain.JudgeResponse;
+import com.ymcloud.judge.domain.JudgeResultMessage;
 import com.ymcloud.judge.domain.SandBoxRequest;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeCase;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -33,6 +37,9 @@ import java.util.List;
 @Component
 @Slf4j
 public class JudgeRun {
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
     @Autowired
     private JudgeEntityService judgeEntityService;
@@ -144,9 +151,17 @@ public class JudgeRun {
                 //更新评测结果
                 judgeCaseEntityService.saveBatch(judgeCases);
                 judgeEntityService.updateById(judge);
+                //评测结束发送通知
+                JudgeResultMessage resultMessage = BeanUtil.copyProperties(judge, JudgeResultMessage.class);
+                resultMessage.setSubmissionId(judge.getId());
+                resultMessage.setSubmissionDir(submissionDir);
+                rabbitTemplate.convertAndSend(
+                        RabbitMQConstants.JUDGE_RESULT_EXCHANGE,
+                        RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY,
+                        resultMessage);
             }catch (JudgeException | FileException e){
                 log.warn("评测业务异常：",e);
-                //逻辑异常就回滚
+                //逻辑异常就回滚重测
                 throw e;
             }catch (Exception e){
                 log.error("评测系统异常",e);
