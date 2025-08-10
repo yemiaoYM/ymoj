@@ -2,6 +2,7 @@ package com.ymcloud.core.security.filter;
 
 import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.core.security.service.TokenService;
+import com.ymcloud.core.websocket.HeaderMapRequestWrapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,6 +34,15 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        //通过request的url判断是否为websocket请求
+        //如果为websocket请求，先处理Authorization
+        if(request.getRequestURI().contains("/ws/")){
+            HeaderMapRequestWrapper requestWrapper = new HeaderMapRequestWrapper((HttpServletRequest) request);
+            //修改header信息 将websocket请求中的Sec-WebSocket-Protocol值取出处理后放入认证参数key
+            //此处需要根据自己的认证方式进行修改  Authorization 和 Bearer
+            requestWrapper.addHeader("Authorization","Bearer "+request.getHeader("Sec-WebSocket-Protocol"));
+            request = (HttpServletRequest)  requestWrapper;
+        }
         //先获取loginUser
         LoginUser loginUser = tokenService.getLoginUser(request);
         //loginUser不为空，且当前没有认证信息（防止重复）
