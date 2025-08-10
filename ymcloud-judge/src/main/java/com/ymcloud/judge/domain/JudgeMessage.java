@@ -18,10 +18,6 @@ public class JudgeMessage {
      */
     private Long submissionId;
     /**
-     * 请求id
-     */
-    private String requestId;
-    /**
      * 题目id
      */
     private Long problemId;

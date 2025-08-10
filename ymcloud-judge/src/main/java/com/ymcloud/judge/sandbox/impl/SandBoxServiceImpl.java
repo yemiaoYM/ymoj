@@ -86,9 +86,38 @@ public class SandBoxServiceImpl implements SandBoxService {
             );
             //3.执行脚本
             String result = RuntimeUtil.execForStr(cmd);
-            log.info("执行结果：{}", result);
+            log.info("默认评测执行结果：{}", result);
         }catch (Exception e){
             throw new SandBoxException("沙箱执行默认评测异常",e);
+        }
+    }
+
+    /**
+     * 自测评测
+     * @param request 沙盒请求体
+     */
+    @Override
+    public void testJudge(SandBoxRequest request) {
+        log.info("沙盒开始执行自测评测运行...");
+        try {
+            //1.提取脚本参数
+            String submissionId = request.getSubmissionId().toString();
+            String runCmd = request.getRunCmd();
+            String imageName = request.getEnv();
+            //2.构建命令
+            String cmd = String.format(
+                    "bash %s %s \"%s\" %s %s",
+                    SH_DIR + JudgeConstants.TEST_RUN_SH,
+                    submissionId,
+                    runCmd,
+                    imageName,
+                    BASE_DIR
+            );
+            //3.执行脚本
+            String result = RuntimeUtil.execForStr(cmd);
+            log.info("自测评测执行结果：{}", result);
+        }catch (Exception e){
+            throw new SandBoxException("沙箱执行自测评测异常",e);
         }
     }
 

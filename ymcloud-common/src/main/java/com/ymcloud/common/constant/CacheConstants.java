@@ -21,6 +21,12 @@ public class CacheConstants {
      * 用户ac排名列表 redis key
      */
     public static final String USER_AC_RANK_KEY = "user_ac_rank";
+
+    /**
+     * 评测状态 redis key
+     */
+    public static final String JUDGE_KEY = "judge:";
+
     /**
      * 登录用户 redis key
      */

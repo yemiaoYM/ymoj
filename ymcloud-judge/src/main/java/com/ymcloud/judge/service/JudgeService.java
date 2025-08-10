@@ -2,6 +2,7 @@ package com.ymcloud.judge.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.dto.JudgeDTO;
+import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Judge;
 
 /**
@@ -20,4 +21,10 @@ public interface JudgeService extends IService<Judge> {
      */
     Long submitJudge(JudgeDTO judgeDTO);
 
+    /**
+     * 自测提交
+     * @param testJudgeDTO 评测请求
+     * @return 自测临时请求id
+     */
+    Long testJudge(TestJudgeDTO testJudgeDTO);
 }

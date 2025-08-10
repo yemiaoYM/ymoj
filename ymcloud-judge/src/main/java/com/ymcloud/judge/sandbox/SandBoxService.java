@@ -25,4 +25,11 @@ public interface SandBoxService {
      * @return 是否成功
      */
     void defaultJudge(SandBoxRequest request);
+
+    /**
+     * 自测评测
+     * @param request 沙盒请求体
+     * @return 是否成功
+     */
+    void testJudge(SandBoxRequest request);
 }

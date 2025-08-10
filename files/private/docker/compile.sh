@@ -46,3 +46,4 @@ fi
 #ls -l "${HOST_CODE_DIR}"
 
 # ./compile.sh 10009 "g++ main.cpp -o main" "oj-cpp-env" "/mnt/e/Java/ymcloud/files"
+# ./compile.sh b17f24ff026d40949c85a24f4f375d42 "g++ main.cpp -o main" "oj-cpp-env" "/mnt/e/Java/ymcloud/files"

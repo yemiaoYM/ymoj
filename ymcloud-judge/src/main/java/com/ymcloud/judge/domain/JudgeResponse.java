@@ -40,6 +40,10 @@ public class JudgeResponse {
      */
     private Long memory;
     /**
+     * 程序输出
+     */
+    private String output;
+    /**
      * 错误信息
      */
     private String errorMessage;

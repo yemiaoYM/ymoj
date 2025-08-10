@@ -39,11 +39,16 @@ public class JudgeController {
         return Result.ok(submissionId).msg("评测提交成功");
     }
 
+    /**
+     * 自测提交
+     * @param testJudgeDTO 评测请求
+     * @return 提交编号ID
+     */
     @PostMapping("/test")
-    public Result<String> test(@Validated @RequestBody TestJudgeDTO testJudgeDTO) {
+    public Result<Long> test(@Validated @RequestBody TestJudgeDTO testJudgeDTO) {
         log.info("自测请求：{}", testJudgeDTO);
-
-        return Result.ok();
+        Long submissionId=judgeService.testJudge(testJudgeDTO);
+        return Result.ok(submissionId).msg("自测提交成功");
     }
 
 }

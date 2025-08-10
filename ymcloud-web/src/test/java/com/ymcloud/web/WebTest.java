@@ -1,5 +1,6 @@
 package com.ymcloud.web;
 
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RuntimeUtil;
 import com.ymcloud.common.constant.CacheConstants;
@@ -22,7 +23,8 @@ import java.util.List;
  * @CreateTime: 2025-07-18  21:55
  * @Description: 测试类
  */
-@SpringBootTest
+//@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class WebTest {
     @Autowired
     private RedisCache redisCache;
@@ -40,6 +42,14 @@ public class WebTest {
 
         encode = passwordEncoder.encode("12345");
         System.out.println(encode);
+    }
+
+    @Test
+    public void getDateStamp(){
+        long current = DateUtil.current();
+        long l = DateUtil.currentSeconds();
+        System.out.println(current);
+        System.out.println(l);
     }
 
     @Test

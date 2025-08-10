@@ -39,6 +39,10 @@ public class JudgeConstants {
      */
     public static final String DEFAULT_RUN_SH="run_multi.sh";
     /**
+     * 默认模式判题脚本
+     */
+    public static final String TEST_RUN_SH="run_test.sh";
+    /**
      * 成功
      */
     public static final String SUCCESS="SUCCESS";

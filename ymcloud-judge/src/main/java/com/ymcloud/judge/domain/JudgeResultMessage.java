@@ -1,7 +1,6 @@
 package com.ymcloud.judge.domain;
 
 import com.ymcloud.pojo.enums.JudgeStatus;
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 /**
@@ -22,9 +21,9 @@ public class JudgeResultMessage {
      */
     private Long submissionId;
     /**
-     * 自测评测id
+     * 评测策略：0=默认评测，1=自测
      */
-    private String requestId;
+    private Integer strategy;
     /**
      * 题目ID
      */

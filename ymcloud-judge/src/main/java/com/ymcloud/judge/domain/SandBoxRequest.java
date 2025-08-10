@@ -16,10 +16,6 @@ public class SandBoxRequest {
      */
     private Long submissionId;
     /**
-     * 自测评测id
-     */
-    private String requestId;
-    /**
      * 题目id
      */
     private Long problemId;

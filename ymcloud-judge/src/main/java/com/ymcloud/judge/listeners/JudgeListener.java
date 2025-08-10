@@ -1,6 +1,7 @@
 package com.ymcloud.judge.listeners;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.ymcloud.common.constant.JudgeConstants;
 import com.ymcloud.common.constant.RabbitMQConstants;
 import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
@@ -65,6 +66,10 @@ public class JudgeListener {
     ))
     public void listenJudgeFileClean(JudgeResultMessage msg) {
         log.info("评测结束文件清理:{}",msg.getSubmissionId());
+        //如果是系统错误则不删除，等待重测
+        if (msg.getStatus() == JudgeStatus.STATUS_SYSTEM_ERROR) {
+            return;
+        }
         FileUtils.deleteFile(msg.getSubmissionDir());
     }
 
@@ -81,6 +86,10 @@ public class JudgeListener {
     ))
     public void listenJudgeAcUpdate(JudgeResultMessage msg) {
         log.info("评测结束更新用户ac表:{}",msg.getSubmissionId());
+        //忽略自测模式
+        if(JudgeConstants.TEST_JUDGE.equals(msg.getStrategy())){
+            return;
+        }
         //只更新状态为ac的记录
         if(msg.getStatus() != JudgeStatus.STATUS_ACCEPTED){
            return;

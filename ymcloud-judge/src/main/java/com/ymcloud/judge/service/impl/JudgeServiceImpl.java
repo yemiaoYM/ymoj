@@ -1,5 +1,8 @@
 package com.ymcloud.judge.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.date.DateUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.*;
@@ -15,8 +18,10 @@ import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.mapper.JudgeMapper;
 import com.ymcloud.judge.domain.JudgeMessage;
+import com.ymcloud.judge.domain.TestJudge;
 import com.ymcloud.judge.service.JudgeService;
 import com.ymcloud.pojo.dto.JudgeDTO;
+import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Problem;
@@ -114,7 +119,6 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         if(!save){
             throw new JudgeException("提交失败，请稍后再试");
         }
-
         //构造评测实体，将实体交给评测队列，等待评测
         JudgeMessage message = new JudgeMessage();
         message.setSubmissionId(submission.getId());
@@ -131,11 +135,57 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
                     message1.getMessageProperties().setDelayLong(5000L);
                     return message1;
                 });
-
         //缓存提交
         redisCache.setCacheObject(key, submission.getId(), 10, TimeUnit.SECONDS);
         //获取当前的评测id，用于前端请求当前评测状态
         return submission.getId();
+    }
+
+    /**
+     * 自测提交
+     * @param testJudgeDTO 评测请求
+     * @return 自测临时请求id
+     */
+    @Override
+    public Long testJudge(TestJudgeDTO testJudgeDTO) {
+        //获取当前用户
+        User user = SecurityUtils.getUser();
+        //防止重复提交和提交太快
+        String key= CacheConstants.REPEAT_SUBMIT_KEY + user.getUsername();
+        if (redisCache.hasKey(key)) {
+            throw new ServiceException("提交太快，稍等一下再提交");
+        }
+        //再查询可用语言
+        Language language = languageEntityService.lambdaQuery()
+                .eq(Language::getName, testJudgeDTO.getLanguage())
+                .eq(Language::getOj, "myy")
+                .eq(Language::getStatus, LanguageConstants.ABLE)
+                .one();
+        if(language == null){
+            throw new JudgeException("自测只支持本地语言");
+        }
+        //将评测实体存储在redis中,默认存储3分钟
+        Long submissionId = DateUtil.current();
+        TestJudge judge = new TestJudge();
+        judge.setSubmissionId(submissionId);
+        judge.setUserId(user.getId());
+        judge.setLanguage(language);
+        judge.setCode(testJudgeDTO.getCode());
+        judge.setInput(testJudgeDTO.getInput());
+        judge.setStatus(JudgeStatus.STATUS_PENDING);
+        redisCache.setCacheObject(CacheConstants.JUDGE_KEY + submissionId, judge, 3, TimeUnit.MINUTES);
+        //自测构造评测实体
+        JudgeMessage message = BeanUtil.copyProperties(judge, JudgeMessage.class);
+        message.setStrategy(JudgeConstants.TEST_JUDGE);
+        //将评测信息交给评测队列
+        rabbitTemplate.convertAndSend(RabbitMQConstants.JUDGE_EXCHANGE,
+                RabbitMQConstants.JUDGE_ROUTING_KEY, message,message1 -> {
+                    message1.getMessageProperties().setDelayLong(5000L);
+                    return message1;
+                });
+        //缓存提交
+        redisCache.setCacheObject(key, submissionId, 10, TimeUnit.SECONDS);
+        return submissionId;
     }
 
 }

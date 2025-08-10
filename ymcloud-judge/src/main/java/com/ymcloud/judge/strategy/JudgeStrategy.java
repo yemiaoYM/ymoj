@@ -17,7 +17,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @PackageName: com.ymcloud.judge.strategy
@@ -112,19 +114,10 @@ public class JudgeStrategy {
                     judgeCaseList.add(judgeCase);
                     continue;
                 }
-                //只有正常运行才获取运行时间和内存
-                List<String> timeMsg = FileUtils.readFileLines(timeFile);
-                //解析时间和内存
-                long time = 0L;
-                long memory = 0L;
-                for (String line : timeMsg) {
-                    if (line.startsWith("TIME:")) {
-                        double seconds = Double.parseDouble(line.substring(5).trim());
-                        time = Math.round(seconds * 1000);
-                    } else if (line.startsWith("MEM:")) {
-                        memory = Long.parseLong(line.substring(4).trim());
-                    }
-                }
+                //正常运行才获取运行时间和内存
+                Map<String, Long> map = parseTimeAndMemory(timeFile);
+                Long time = map.get("time");
+                Long memory = map.get("memory");
                 //判断答案是否正确
                 boolean b = compareOutput(acceptOutFile, userOutFile);
                 if (!b) {
@@ -158,13 +151,81 @@ public class JudgeStrategy {
         }
     }
 
+    public JudgeResponse testJudge(SandBoxRequest request) {
+        try {
+            //沙箱进行执行
+            sandBoxService.testJudge(request);
+            //提交文件路径
+            String userCodeFileDir = BASE_DIR + "/"
+                    + FileConstants.DIR_TMP + "/"
+                    + "submission_" + request.getSubmissionId();
+            //构造相应实体
+            JudgeResponse response = new JudgeResponse();
+            response.setTime(0L);
+            response.setMemory(0L);
+            //输出文件
+            String userOutFile = userCodeFileDir + "/output.out";
+            String timeFile = userCodeFileDir + "/time.out";
+            String errorOutFile = userCodeFileDir + "/error.out";
+            //先判断是否运行成功
+            if(!FileUtils.empty(errorOutFile)){
+                response.setStatus(JudgeStatus.STATUS_RUNTIME_ERROR);
+                response.setErrorMessage(FileUtils.readFileString(errorOutFile));
+                return response;
+            }
+            //正常运行才获取运行时间和内存
+            Map<String, Long> map = parseTimeAndMemory(timeFile);
+            Long time = map.get("time");
+            Long memory = map.get("memory");
+            //判断状态
+            if(time > request.getTimeLimit()){
+                response.setStatus(JudgeStatus.STATUS_TIME_LIMIT_EXCEEDED);
+            }else if(memory > request.getMemoryLimit()){
+                response.setStatus(JudgeStatus.STATUS_MEMORY_LIMIT_EXCEEDED);
+            }else{
+                response.setStatus(JudgeStatus.STATUS_ACCEPTED);
+            }
+            response.setTime(time);
+            response.setMemory(memory);
+            //程序输出内容
+            response.setOutput(FileUtils.readFileString(userOutFile));
+            return response;
+        } catch (SandBoxException | FileException e) {
+            throw new JudgeException(e.getMessage(),e);
+        } catch (Exception e) {
+            throw new JudgeException("自测模式执行代码逻辑异常",e);
+        }
+    }
+
+    /**
+     * 从文件中解析运行时间和运行内存
+     * @param timeFile 文件名
+     * @return 时间和内存
+     */
+    private Map<String,Long> parseTimeAndMemory(String timeFile){
+        Map<String,Long> mp = new HashMap<>();
+        mp.put("time", 0L);
+        mp.put("memory", 0L);
+        //从文件中获取信息
+        List<String> timeMsg = FileUtils.readFileLines(timeFile);
+        for (String line : timeMsg) {
+            if (line.startsWith("TIME:")) {
+                double seconds = Double.parseDouble(line.substring(5).trim());
+                mp.put("time", Math.round(seconds * 1000));
+            } else if (line.startsWith("MEM:")) {
+                mp.put("memory", Long.parseLong(line.substring(4).trim()));
+            }
+        }
+        return mp;
+    }
+
     /**
      * 比较标准输出和用户输出（宽松模式）
      * @param standardFile 标准输出文件
      * @param userFile 用户输出文件
      * @return true 表示匹配
      */
-    public static boolean compareOutput(String standardFile, String userFile) {
+    private boolean compareOutput(String standardFile, String userFile) {
         List<String> standardLines = FileUtils.readFileLines(standardFile);
         List<String> userLines = FileUtils.readFileLines(userFile);
         // 去掉行尾空格
