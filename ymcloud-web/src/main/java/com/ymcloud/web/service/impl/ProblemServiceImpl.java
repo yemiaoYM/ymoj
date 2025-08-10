@@ -5,6 +5,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.HttpStatus;
@@ -17,7 +18,6 @@ import com.ymcloud.common.exception.problem.ProblemPermissionException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.LanguageMapper;
-import com.ymcloud.core.web.mapper.ProblemCaseMapper;
 import com.ymcloud.core.web.mapper.ProblemMapper;
 import com.ymcloud.pojo.dto.ProblemDTO;
 import com.ymcloud.pojo.entity.Judge;
@@ -47,9 +47,6 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
 
     @Autowired
     private JudgeEntityService judgeEntityService;
-
-    @Autowired
-    private ProblemCaseMapper problemCaseMapper;
 
     @Autowired
     private LanguageMapper languageMapper;
@@ -110,14 +107,13 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         if(problem.getVisibility() == ProblemConstants.PRIVATE){
             Long userId = SecurityUtils.getUserId();
             if(!Objects.equals(problem.getAuthorId(), userId)){
-                throw new ProblemPermissionException("没有访问此题目的权限，请联系题目创建者");
+                throw new ProblemPermissionException("私有题目，请联系题目创建者:"+problem.getAuthorUsername());
             }
         }
         //拷贝前端实体
         ProblemVO problemVO = BeanUtil.copyProperties(problem, ProblemVO.class);
-        //查询题目的题面样例
-        //直接使用sql语言来优化性能
-        List<ProblemCaseVO> problemCaseVOList =problemCaseMapper.getByProblemIdAndIsSample(problem.getId(),ProblemConstants.CASE_SHOW);
+        //查询题目的题面样例,将json转化为对象
+        List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
         problemVO.setProblemCaseList(problemCaseVOList);
         //查询题目的语言配置
         //题目的语言选项可用语言的oj来源决定

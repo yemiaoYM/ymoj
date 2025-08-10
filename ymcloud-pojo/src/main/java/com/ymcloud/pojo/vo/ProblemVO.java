@@ -35,11 +35,11 @@ public class ProblemVO implements Serializable {
     /**
      * 输入描述
      */
-    private String inputDescription;
+    private String input;
     /**
      * 输出描述
      */
-    private String outputDescription;
+    private String output;
     /**
      * 题目来源
      */

@@ -21,11 +21,17 @@ public class Problem {
     @Schema(description="题目描述内容（题干）")
     private String content;
     @Schema(description="是否为vj判题")
-    private Integer isRemote;
+    private Boolean isRemote;
+    @Schema(description="时间限制（ms）")
+    private Long timeLimit;
+    @Schema(description="内存限制（KB）")
+    private Long memoryLimit;
     @Schema(description="输入描述")
-    private String inputDescription;
+    private String input;
     @Schema(description="输出描述")
-    private String outputDescription;
+    private String output;
+    @Schema(description="题面样例")
+    private String examples;
     @Schema(description="题目来源")
     private String source;
     @Schema(description="难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上")
@@ -36,10 +42,6 @@ public class Problem {
     private Integer visibility;
     @Schema(description="是否允许查看测试样例结果（0=否，1=是）")
     private Integer openCaseResult;
-    @Schema(description="时间限制（ms）")
-    private Long timeLimit;
-    @Schema(description="内存限制（KB）")
-    private Long memoryLimit;
     @Schema(description="出题人ID（user.id）")
     private Long authorId;
     @Schema(description="出题人用户名")

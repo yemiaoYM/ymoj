@@ -155,6 +155,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setUsername(username);
         user.setPassword(encodePassword);
         user.setEmail(email);
+        //必须设置默认个性签名
+        user.setSignature("<p>这个家伙很懒，什么也没写…<p>");
         //5.插入新用户
         boolean save = userEntityService.save(user);
         if(!save){
