@@ -62,22 +62,20 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         Page<ProblemTableVO> page=new Page<>(query.getPageNo(),query.getPageSize());
         Page<ProblemTableVO> pageResult=getBaseMapper().pageQuery(
                 page,
-                query.getTitle(),
+                query.getKeyword(),
                 query.getDifficulty(),
-                query.getSource(),
-                query.getTagIds(),
-                query.getTagIds().size());
+                query.getSource());
         //如果不为空则设置提交情况
         if(pageResult.getTotal()>0){
             //查询对应的题目的ac和总提交数量
             List<ProblemTableVO> records = pageResult.getRecords();
-            List<String> problemIds = records.stream().map(ProblemTableVO::getDisplayId).toList();
+            List<String> problemIds = records.stream().map(ProblemTableVO::getProblemId).toList();
             Map<String, ProblemCountVO> problemCountVOMap = judgeEntityService
                     .getProblemListCount(problemIds).stream()
                     .collect(Collectors.toMap(ProblemCountVO::getProblemId, problemCount -> problemCount));
             //使用map对应设置
             for (ProblemTableVO record : records) {
-                ProblemCountVO problemCountVO = problemCountVOMap.get(record.getDisplayId());
+                ProblemCountVO problemCountVO = problemCountVOMap.get(record.getProblemId());
                 if(problemCountVO == null)continue;
                 record.setAcceptCount(problemCountVO.getAc());
                 record.setSubmitCount(problemCountVO.getTotal());

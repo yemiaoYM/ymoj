@@ -16,13 +16,9 @@ import java.util.List;
 @Data
 public class ProblemPageQuery extends PageQuery{
     /**
-     * 题目 支持模糊查询
+     * 题目/题号 支持模糊查询
      */
-    private String title;
-    /**
-     * 根据标签查询
-     */
-    private List<Long> tagIds=List.of();
+    private String keyword;
     /**
      * 难度
      */

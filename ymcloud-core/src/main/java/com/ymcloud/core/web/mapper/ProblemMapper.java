@@ -24,18 +24,14 @@ public interface ProblemMapper extends BaseMapper<Problem> {
     /**
      * 题单列表分页查询
      * @param page   分页
-     * @param title  题目 支持模糊查询
+     * @param keyword  题目/题号 支持模糊查询
      * @param difficulty 难度
      * @param source     来源
-     * @param tagIds     标签查询，只要题目包含这个子集即可
-     * @param size       标签列表的长度，方便直接拿取长度
      * @return 题单列表
      */
     Page<ProblemTableVO> pageQuery(IPage<ProblemTableVO> page,
-            @Param("title")       String title,
+            @Param("keyword")       String keyword,
             @Param("difficulty")  Integer difficulty,
-            @Param("source")      String source,
-            @Param("tagIds")      List<Long> tagIds,
-            @Param("size")        int size
+            @Param("source")      String source
     );
 }

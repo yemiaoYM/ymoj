@@ -64,8 +64,12 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
                 .eq(query.getStatus() != null, Judge::getStatus, query.getStatus())
                 //一定限制为非比赛提交
                 .ne(Judge::getContestId,JudgeConstants.CONTEST_SUBMISSION)
-                .like(StrUtil.isNotBlank(query.getProblemKey()), Judge::getDisplayId, query.getProblemKey())
-                .like(StrUtil.isNotBlank(query.getProblemKey()), Judge::getProblemTitle, query.getProblemKey())
+                //满足其一即可
+                .and(StrUtil.isNotBlank(query.getProblemKey()), wrapper -> wrapper
+                    .like(Judge::getDisplayId, query.getProblemKey())
+                    .or()
+                    .like(Judge::getProblemTitle, query.getProblemKey())
+                )
                 .like(StrUtil.isNotBlank(query.getUsername()), Judge::getUsername, query.getUsername())
                 .orderByDesc(Judge::getCreatedTime)
                 .page(page);

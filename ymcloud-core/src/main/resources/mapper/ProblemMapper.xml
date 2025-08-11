@@ -7,7 +7,7 @@
     <!-- Result Map 定义 -->
     <resultMap id="problemTableMap" type="com.ymcloud.pojo.vo.ProblemTableVO">
         <id column="id" />
-        <result column="problem_id" property="displayId"/>
+        <result column="problem_id" property="problemId"/>
         <result column="source" property="source"/>
         <result column="title" property="title"/>
         <result column="difficulty" property="difficulty"/>
@@ -18,37 +18,25 @@
 
     <!-- 主查询 -->
     <select id="pageQuery" resultMap="problemTableMap">
-        SELECT DISTINCT
-        p.id,
-        p.problem_id,
-        p.source,
-        p.title,
-        p.difficulty
+        SELECT
+            p.id,
+            p.problem_id,
+            p.title,
+            p.difficulty,
+            p.source
         FROM
-        problem p
-        <if test="tagIds != null and !tagIds.isEmpty()">
-            RIGHT JOIN
-            (
-                SELECT problem_id FROM problem_tag
-                <where>
-                    <foreach collection="tagIds" item="tagId" open="" separator=" or" close="">
-                        tag_id = #{tagId}
-                    </foreach>
-                </where>
-            ) pt
-            ON p.id = pt.problem_id
-        </if>
+            problem p
         <where>
             p.visibility = 1
-            <!-- 搜索关键字 -->
-            <if test="title != null and title.trim() != ''">
-                AND p.title LIKE CONCAT('%', #{title}, '%')
+            <if test="keyword != null and keyword.trim() != ''">
+                AND (
+                    p.problem_id LIKE CONCAT('%', #{keyword}, '%')
+                    OR p.title LIKE CONCAT('%', #{keyword}, '%')
+                )
             </if>
-            <!-- 难度过滤 -->
-            <if test="difficulty != null">
+            <if test="difficulty != null and difficulty >=0 ">
                 AND p.difficulty = #{difficulty}
             </if>
-            <!-- 来源过滤 -->
             <if test="source != null and source.trim() != ''">
                 AND p.source = #{source}
             </if>
@@ -59,8 +47,7 @@
     <select id="getTagsByProblemId" resultType="com.ymcloud.pojo.entity.Tag">
         SELECT t.*
         FROM tag t
-                 LEFT JOIN problem_tag pt
-                           ON t.id = pt.tag_id
+        LEFT JOIN problem_tag pt ON t.id = pt.tag_id
         WHERE pt.problem_id = #{id}
     </select>
 

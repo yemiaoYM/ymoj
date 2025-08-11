@@ -17,11 +17,11 @@ import java.util.List;
 public class ProblemTableVO implements Serializable {
     private static final long serialVersionUID = 1L;
     /**
-     * 表单展示序号：key+id
+     * 题目唯一标识
      */
-    private String displayId;
+    private String problemId;
     /**
-     * 题目描述内容（题干）
+     * 题目标题
      */
     private String title;
     /**
@@ -36,7 +36,6 @@ public class ProblemTableVO implements Serializable {
      * 标签
      */
     private List<Tag> tagList;
-
     /**
      * 通过提交数
      */
