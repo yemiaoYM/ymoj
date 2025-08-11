@@ -1,7 +1,6 @@
 package com.ymcloud.judge.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -12,6 +11,7 @@ import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
 import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.common.utils.ShortSnowflake;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.LanguageEntityService;
@@ -165,7 +165,8 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
             throw new JudgeException("自测只支持本地语言");
         }
         //将评测实体存储在redis中,默认存储3分钟
-        Long submissionId = DateUtil.current();
+        ShortSnowflake snowflake = new ShortSnowflake(1, 1);
+        Long submissionId = snowflake.nextId();
         TestJudge judge = new TestJudge();
         judge.setSubmissionId(submissionId);
         judge.setUserId(user.getId());

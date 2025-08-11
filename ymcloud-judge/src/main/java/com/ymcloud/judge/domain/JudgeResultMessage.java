@@ -44,4 +44,24 @@ public class JudgeResultMessage {
      * 评测状态
      */
     private JudgeStatus status;
+    /**
+     * 运行时间
+     */
+    private Long time;
+    /**
+     * 运行内存
+     */
+    private Long memory;
+    /**
+     * 错误消息
+     */
+    private String errorMessage;
+    /**
+     * 用户输入
+     */
+    private String input;
+    /**
+     * 程序输出
+     */
+    private String output;
 }

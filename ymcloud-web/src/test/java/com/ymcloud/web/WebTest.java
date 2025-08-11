@@ -6,6 +6,7 @@ import cn.hutool.core.util.RuntimeUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.common.utils.ShortSnowflake;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
 import com.ymcloud.pojo.vo.UserAcRankVO;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,17 @@ public class WebTest {
 
         encode = passwordEncoder.encode("12345");
         System.out.println(encode);
+    }
+
+    @Test
+    public void testShortSnowflake() {
+        ShortSnowflake snowflake = new ShortSnowflake(1, 1);
+        System.out.println(snowflake.nextId());
+        //674857423948032
+        //674857995364608
+        //674858377103616
+        //674858554624256
+        //1954861094082318336
     }
 
     @Test
@@ -97,7 +109,7 @@ public class WebTest {
     public void testCompile() {
         // 参数
         String submissionId = "10009";
-        String problemId = "1";
+        String tgproblemId = "1";
         String compileCmd = "g++ main.cpp -o main";
         String runCmd = "./main";
         String imageName = "oj-cpp-env";

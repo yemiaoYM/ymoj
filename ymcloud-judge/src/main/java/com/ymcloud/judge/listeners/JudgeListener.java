@@ -1,10 +1,12 @@
 package com.ymcloud.judge.listeners;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.alibaba.fastjson2.JSON;
 import com.ymcloud.common.constant.JudgeConstants;
 import com.ymcloud.common.constant.RabbitMQConstants;
 import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
+import com.ymcloud.core.websocket.WebSocketService;
 import com.ymcloud.judge.domain.JudgeMessage;
 import com.ymcloud.judge.domain.JudgeResultMessage;
 import com.ymcloud.judge.strategy.JudgeRun;
@@ -19,6 +21,9 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * @PackageName: com.ymcloud.judge.listeners
  * @ClassName: JudgeListener
@@ -30,6 +35,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class JudgeListener {
     //业务中尽量不要抛异常，不然会启动重试机制，发送到error队列中
+
+    @Autowired
+    private WebSocketService webSocketService;
 
     @Autowired
     private JudgeRun judgeRun;
@@ -120,7 +128,17 @@ public class JudgeListener {
     public void listenJudgeNotify(JudgeResultMessage msg) {
         log.info("评测结束通知前端:{}",msg.getSubmissionId());
         //websocket
-
+        Map<String,Object> mp =new HashMap<>();
+        mp.put("status",msg.getStatus());
+        mp.put("time",msg.getTime());
+        mp.put("memory",msg.getMemory());
+        mp.put("input",msg.getInput());
+        mp.put("output",msg.getOutput());
+        mp.put("errorMessage",msg.getErrorMessage());
+        //转化为json数据
+        String result = JSON.toJSONString(mp);
+        //通知前端
+        webSocketService.sendToOne(msg.getSubmissionId(), result);
     }
 
 }
