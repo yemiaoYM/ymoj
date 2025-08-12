@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.query.ContestPageQuery;
 import com.ymcloud.pojo.vo.ContestTableVO;
+import com.ymcloud.pojo.vo.ContestVO;
 import com.ymcloud.pojo.vo.PageVO;
 
 /**
@@ -17,8 +18,16 @@ public interface ContestService extends IService<Contest> {
 
     /**
      * 获取比赛列表表单 分页查询
-     * @param query
-     * @return
+     * @param query 查询请求体
+     * @return 比赛列表
      */
     PageVO<ContestTableVO> pageQuery(ContestPageQuery query);
+
+    /**
+     * 获取比赛详情
+     * @param contestId 比赛id
+     * @return 比赛详情
+     */
+    ContestVO getContestInfo(Long contestId);
+
 }

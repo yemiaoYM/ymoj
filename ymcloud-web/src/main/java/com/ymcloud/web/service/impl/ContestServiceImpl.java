@@ -5,12 +5,17 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.common.exception.contest.ContestNotExistException;
+import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.mapper.ContestMapper;
 import com.ymcloud.core.web.mapper.ContestUserMapper;
 import com.ymcloud.pojo.entity.Contest;
+import com.ymcloud.pojo.entity.ContestUser;
 import com.ymcloud.pojo.query.ContestPageQuery;
 import com.ymcloud.pojo.vo.ContestCountVO;
 import com.ymcloud.pojo.vo.ContestTableVO;
+import com.ymcloud.pojo.vo.ContestVO;
 import com.ymcloud.pojo.vo.PageVO;
 import com.ymcloud.web.service.ContestService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,12 +37,12 @@ import java.util.stream.Collectors;
 public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> implements ContestService {
 
     @Autowired
-    private ContestUserMapper contestUserMapper;
+    private ContestUserEntityService contestUserEntityService;
 
     /**
      * 获取比赛列表表单 分页查询
-     * @param query
-     * @return
+     * @param query 查询请求体
+     * @return 比赛列表
      */
     @Override
     public PageVO<ContestTableVO> pageQuery(ContestPageQuery query) {
@@ -51,7 +56,7 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         if(contestPage.getTotal()>0){
             //如果不为空就查询参与人数
             List<Long> contestIds = contestPage.getRecords().stream().map(Contest::getId).toList();
-            Map<Long, Integer> map = contestUserMapper.getCountByContestIds(contestIds).stream()
+            Map<Long, Integer> map = contestUserEntityService.getCountByContestIds(contestIds).stream()
                     .collect(Collectors.toMap(ContestCountVO::getId, ContestCountVO::getCount));
 
             return PageVO.of(contestPage,contest -> {
@@ -73,4 +78,37 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         //返回vo
         return PageVO.of(contestPage,ContestTableVO.class);
     }
+
+    /**
+     * 获取比赛详情
+     * @param contestId 比赛id
+     * @return 比赛详情
+     */
+    @Override
+    public ContestVO getContestInfo(Long contestId) {
+        //根据id查询
+        Contest contest = getById(contestId);
+        if(contest==null){
+            throw new ContestNotExistException();
+        }
+        //拷贝前端实体
+        ContestVO contestVO = BeanUtil.copyProperties(contest, ContestVO.class);
+        //查询当前用户的比赛权限
+        Long userId = SecurityUtils.getUserId();
+        boolean access = contestUserEntityService.lambdaQuery()
+                .eq(ContestUser::getContestId, contestId)
+                .eq(ContestUser::getUserId, userId)
+                .exists();
+        contestVO.setAccess(access);
+        //查询参与人数
+        Long count = contestUserEntityService.lambdaQuery()
+                .eq(ContestUser::getContestId, contestId)
+                .count();
+        contestVO.setCount(count);
+        //设置now为当前时间
+        contestVO.setNow(LocalDateTime.now());
+        return contestVO;
+    }
+
+
 }
