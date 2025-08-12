@@ -5,7 +5,7 @@ import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.result.Result;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.http.converter.HttpMessageConversionException;
 import org.springframework.validation.BindException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -46,17 +46,26 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 请求方式不支持 400
+     * 请求方式不支持 405
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public Result<?> handleHttpRequestMethodNotSupported(HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.warn("请求地址'{}',不支持'{}'请求", requestURI, e.getMethod());
-        return Result.fail().code(HttpStatus.BAD_REQUEST).msg("请求方式不支持");
+        return Result.fail().code(HttpStatus.BAD_METHOD).msg("请求方式不支持");
     }
 
     /**
-     * 处理自定义参数格式错误或者自定义验证异常
+     * 方法参数类型不匹配 400
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public Result<?> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+        log.warn("参数类型转换失败，请求URI：{}，参数名：{}，错误信息：{}", request.getRequestURI(), e.getName(), e.getMessage());
+        return Result.fail().code(HttpStatus.BAD_REQUEST).msg("参数类型不匹配");
+    }
+
+    /**
+     * 处理自定义参数格式错误或者自定义验证异常 400
      */
     @ExceptionHandler(BindException.class)
     public Result<?> handleBindException(BindException e) {
@@ -66,21 +75,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 请求体格式错误或缺失
+     * 捕获SpringMVC在参数绑定无法获取参数名称异常 400
      */
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public Result<?> handleHttpMessageNotReadable(HttpMessageNotReadableException e, HttpServletRequest request) {
-        log.warn("请求体无法读取，请求URI：{}，错误信息：{}", request.getRequestURI(), e.getMessage());
-        return Result.fail().code(HttpStatus.BAD_REQUEST).msg("请求体格式错误或缺失");
+    @ExceptionHandler(IllegalArgumentException.class)
+    public Result<?> handleIllegalArgument(IllegalArgumentException e, HttpServletRequest request) {
+        log.error("参数绑定失败，请求URI：{}，异常信息：{}", request.getRequestURI(), e.getMessage());
+        return Result.fail().code(HttpStatus.BAD_REQUEST).msg("参数格式错误");
     }
 
     /**
-     * 方法参数类型不匹配
+     * 请求体格式错误或缺失 400
      */
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public Result<?> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException e, HttpServletRequest request) {
-        log.warn("参数类型转换失败，请求URI：{}，参数名：{}，错误信息：{}", request.getRequestURI(), e.getName(), e.getMessage());
-        return Result.fail().code(HttpStatus.BAD_REQUEST).msg("方法参数类型不匹配");
+    @ExceptionHandler(HttpMessageConversionException.class)
+    public Result<?> handleHttpMessageNotReadable(HttpMessageConversionException e, HttpServletRequest request) {
+        log.warn("请求体无法读取，请求URI：{}，错误信息：{}", request.getRequestURI(), e.getMessage());
+        return Result.fail().code(HttpStatus.BAD_REQUEST).msg("请求参数格式不正确，请检查输入数据");
     }
 
     /**

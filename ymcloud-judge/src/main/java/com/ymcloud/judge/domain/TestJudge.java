@@ -1,6 +1,5 @@
 package com.ymcloud.judge.domain;
 
-import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import lombok.Data;
 
@@ -36,7 +35,7 @@ public class TestJudge {
     /**
      * 评测语言
      */
-    private Language language;
+    private String language;
     /**
      * 运行时间
      */

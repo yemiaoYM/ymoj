@@ -22,9 +22,17 @@ public class JudgeMessage {
      */
     private Long problemId;
     /**
+     * 题目唯一标识
+     */
+    private String displayId;
+    /**
      * 用户id
      */
     private Long userId;
+    /**
+     * 用户名
+     */
+    private String username;
     /**
      * 用户输入
      */
@@ -36,7 +44,7 @@ public class JudgeMessage {
     /**
      * 评测语言
      */
-    private Language language;
+    private Language languageConfig;
     /**
      * 时间限制ms
      */

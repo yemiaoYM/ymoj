@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.vo.JudgeResultVO;
 
 /**
  * @PackageName: com.ymcloud.judge.service
@@ -27,4 +28,12 @@ public interface JudgeService extends IService<Judge> {
      * @return 自测临时请求id
      */
     Long testJudge(TestJudgeDTO testJudgeDTO);
+
+    /**
+     * 定时评测轮询查询
+     * @param submissionId 提交id
+     * @param isTest 是否为自测提交
+     * @return 评测结果
+     */
+    JudgeResultVO getStatus(Long submissionId,Boolean isTest);
 }

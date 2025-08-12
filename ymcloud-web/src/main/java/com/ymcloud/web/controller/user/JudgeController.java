@@ -4,13 +4,11 @@ import com.ymcloud.common.result.Result;
 import com.ymcloud.judge.service.JudgeService;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
+import com.ymcloud.pojo.vo.JudgeResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @PackageName: com.ymcloud.web.controller.user
@@ -50,5 +48,20 @@ public class JudgeController {
         Long submissionId=judgeService.testJudge(testJudgeDTO);
         return Result.ok(submissionId).msg("自测提交成功");
     }
+
+    /**
+     * 定时评测轮询查询
+     * @param submissionId 提交id
+     * @param isTest 是否为自测提交
+     * @return 评测结果
+     */
+    @GetMapping("/status")
+    public Result<JudgeResultVO> getStatus(@RequestParam(value = "submissionId") Long submissionId,
+                                           @RequestParam(value = "isTest") Boolean isTest) {
+        log.info("定时评测轮询查询：{},是否为自测提交：{}", submissionId, isTest);
+        JudgeResultVO result=judgeService.getStatus(submissionId,isTest);
+        return Result.ok(result);
+    }
+
 
 }

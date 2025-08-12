@@ -1,7 +1,6 @@
 package com.ymcloud.judge.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.*;
@@ -27,6 +26,7 @@ import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.JudgeStatus;
+import com.ymcloud.pojo.vo.JudgeResultVO;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -120,16 +120,14 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
             throw new JudgeException("提交失败，请稍后再试");
         }
         //构造评测实体，将实体交给评测队列，等待评测
-        JudgeMessage message = new JudgeMessage();
+        JudgeMessage message = BeanUtil.copyProperties(submission, JudgeMessage.class);
         message.setSubmissionId(submission.getId());
-        message.setProblemId(problem.getId());
-        message.setUserId(user.getId());
-        message.setLanguage(language);
-        message.setCode(judgeDTO.getCode());
+        message.setLanguageConfig(language);
         message.setTimeLimit(problem.getTimeLimit());
         message.setMemoryLimit(problem.getMemoryLimit());
         message.setMode(problem.getMode());
         message.setStrategy(JudgeConstants.DEFAULT_JUDGE);
+        //发送消息
         rabbitTemplate.convertAndSend(RabbitMQConstants.JUDGE_EXCHANGE,
                 RabbitMQConstants.JUDGE_ROUTING_KEY, message,message1 -> {
                     message1.getMessageProperties().setDelayLong(5000L);
@@ -170,13 +168,14 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         TestJudge judge = new TestJudge();
         judge.setSubmissionId(submissionId);
         judge.setUserId(user.getId());
-        judge.setLanguage(language);
+        judge.setLanguage(language.getName());
         judge.setCode(testJudgeDTO.getCode());
         judge.setInput(testJudgeDTO.getInput());
         judge.setStatus(JudgeStatus.STATUS_PENDING);
         redisCache.setCacheObject(CacheConstants.JUDGE_KEY + submissionId, judge, 3, TimeUnit.MINUTES);
         //自测构造评测实体
         JudgeMessage message = BeanUtil.copyProperties(judge, JudgeMessage.class);
+        message.setLanguageConfig(language);
         message.setStrategy(JudgeConstants.TEST_JUDGE);
         //将评测信息交给评测队列
         rabbitTemplate.convertAndSend(RabbitMQConstants.JUDGE_EXCHANGE,
@@ -187,6 +186,31 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         //缓存提交
         redisCache.setCacheObject(key, submissionId, 10, TimeUnit.SECONDS);
         return submissionId;
+    }
+
+    /**
+     * 定时评测轮询查询
+     * @param submissionId 提交id
+     * @param isTest 是否为自测提交
+     * @return 评测结果
+     */
+    @Override
+    public JudgeResultVO getStatus(Long submissionId,Boolean isTest) {
+        if(isTest){
+            //自测提交
+            String key = CacheConstants.JUDGE_KEY + submissionId;
+            TestJudge judge = redisCache.getCacheObject(key);
+            if(judge == null){
+                throw new JudgeException("自测提交超时或不存在，请重新提交");
+            }
+            return BeanUtil.copyProperties(judge, JudgeResultVO.class);
+        }
+        //正式提交
+        Judge judge = judgeEntityService.getById(submissionId);
+        if(judge == null){
+            throw new JudgeException("提交不存在");
+        }
+        return BeanUtil.copyProperties(judge, JudgeResultVO.class);
     }
 
 }
