@@ -1,6 +1,7 @@
 package com.ymcloud.web.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.query.ContestPageQuery;
 import com.ymcloud.pojo.vo.ContestTableVO;
@@ -30,4 +31,9 @@ public interface ContestService extends IService<Contest> {
      */
     ContestVO getContestInfo(Long contestId);
 
+    /**
+     * 注册进入比赛
+     * @param registerContestDTO 请求体
+     */
+    void registerContest(RegisterContestDTO registerContestDTO);
 }

@@ -5,11 +5,13 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.common.exception.contest.ContestException;
 import com.ymcloud.common.exception.contest.ContestNotExistException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.mapper.ContestMapper;
 import com.ymcloud.core.web.mapper.ContestUserMapper;
+import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestUser;
 import com.ymcloud.pojo.query.ContestPageQuery;
@@ -61,15 +63,9 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
 
             return PageVO.of(contestPage,contest -> {
                 ContestTableVO vo = BeanUtil.copyProperties(contest, ContestTableVO.class);
-                //判断当前比赛状态
-                LocalDateTime startTime = vo.getStartTime();
-                LocalDateTime endTime = vo.getEndTime();
-                LocalDateTime now = LocalDateTime.now();
-                if(now.isBefore(startTime)){
-                    vo.setStatus(ContestConstants.STATUS_NOT_STARTED);
-                }else if(now.isAfter(endTime)){
-                    vo.setStatus(ContestConstants.STATUS_ENDED);
-                }else vo.setStatus(ContestConstants.STATUS_RUNNING);
+                //设置比赛状态
+                String contestStatus = getContestStatus(vo.getStartTime(), vo.getEndTime(), LocalDateTime.now());
+                vo.setStatus(contestStatus);
                 //设置参与人数
                 vo.setParticipantCount(map.getOrDefault(contest.getId(), 0));
                 return vo;
@@ -93,22 +89,89 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         }
         //拷贝前端实体
         ContestVO contestVO = BeanUtil.copyProperties(contest, ContestVO.class);
-        //查询当前用户的比赛权限
-        Long userId = SecurityUtils.getUserId();
-        boolean access = contestUserEntityService.lambdaQuery()
-                .eq(ContestUser::getContestId, contestId)
-                .eq(ContestUser::getUserId, userId)
-                .exists();
-        contestVO.setAccess(access);
-        //查询参与人数
-        Long count = contestUserEntityService.lambdaQuery()
-                .eq(ContestUser::getContestId, contestId)
-                .count();
-        contestVO.setCount(count);
+        if (contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)) {
+            contestVO.setAccess(true);
+        }else {
+            //查询当前用户的比赛权限
+            Long userId = SecurityUtils.getUserId();
+            contestVO.setAccess(isAccess(contestId, userId));
+            //查询参与人数
+            Long count = contestUserEntityService.lambdaQuery()
+                    .eq(ContestUser::getContestId, contestId)
+                    .count();
+            contestVO.setCount(count);
+        }
         //设置now为当前时间
         contestVO.setNow(LocalDateTime.now());
+        //设置比赛状态
+        String contestStatus = getContestStatus(contestVO.getStartTime(), contestVO.getEndTime(), contestVO.getNow());
+        contestVO.setStatus(contestStatus);
         return contestVO;
     }
 
+    /**
+     * 注册进入比赛
+     * @param registerContestDTO 请求体
+     */
+    @Override
+    public void registerContest(RegisterContestDTO registerContestDTO) {
+        //1.获取请求体信息
+        Long contestId = registerContestDTO.getContestId();
+        String password = registerContestDTO.getPassword();
+        //2.根据id查询
+        Contest contest = getById(contestId);
+        if(contest==null){
+            throw new ContestNotExistException();
+        }
+        //3.公开赛不需要注册报名
+        if(contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
+            throw new ContestException("公开赛不需要注册报名");
+        }
+        //4.验证密码
+        if(!contest.getPassword().equals(password)){
+            throw new ContestException("比赛密码错误，请重新输入！");
+        }
+        //5.获取当前用户信息
+        Long userId = SecurityUtils.getUserId();
+        //6.先查询该用户是否已经注册过比赛
+        boolean exists = contestUserEntityService.lambdaQuery()
+                .eq(ContestUser::getContestId, contestId)
+                .eq(ContestUser::getUserId, userId)
+                .exists();
+        if(exists){
+            throw new ContestException("您已注册过该比赛，请勿重复注册！");
+        }
+        //6.为该用户注册比赛
+        ContestUser contestUser = new ContestUser();
+        contestUser.setUserId(userId);
+        contestUser.setContestId(contestId);
+        boolean save = contestUserEntityService.save(contestUser);
+        if(!save){
+            throw new ContestException("注册比赛失败，请稍后再试");
+        }
+    }
 
+    /**
+     * 查询当前用户的比赛权限
+     * @param contestId 比赛id
+     * @param userId 用户id
+     * @return 是否具有权限
+     */
+    private Boolean isAccess(Long contestId, Long userId){
+        return contestUserEntityService.lambdaQuery()
+                .eq(ContestUser::getContestId, contestId)
+                .eq(ContestUser::getUserId, userId)
+                .exists();
+    }
+
+    /**
+     * 获取比赛状态
+     */
+    private String getContestStatus(LocalDateTime startTime, LocalDateTime endTime, LocalDateTime now){
+        if(now.isBefore(startTime)){
+            return ContestConstants.STATUS_NOT_STARTED;
+        }else if(now.isAfter(endTime)){
+            return ContestConstants.STATUS_ENDED;
+        }else return ContestConstants.STATUS_RUNNING;
+    }
 }

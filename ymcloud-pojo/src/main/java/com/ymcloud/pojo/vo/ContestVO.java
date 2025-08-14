@@ -62,6 +62,10 @@ public class ContestVO implements Serializable {
      */
     private LocalDateTime now;
     /**
+     * 比赛当前状态
+     */
+    private String status;
+    /**
      * 比赛时长（单位：分钟）
      */
     private Long duration;

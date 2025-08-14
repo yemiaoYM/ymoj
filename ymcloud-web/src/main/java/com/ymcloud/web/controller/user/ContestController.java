@@ -1,14 +1,13 @@
 package com.ymcloud.web.controller.user;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.vo.ContestVO;
 import com.ymcloud.web.service.ContestService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @PackageName: com.ymcloud.web.controller.user
@@ -36,5 +35,20 @@ public class ContestController {
         ContestVO contest=contestService.getContestInfo(contestId);
         return Result.ok(contest);
     }
+
+    /**
+     * 注册进入比赛
+     * @param registerContestDTO 请求体
+     */
+    @PostMapping("/register")
+    public Result<?> registerContest(@Validated @RequestBody RegisterContestDTO registerContestDTO) {
+        log.info("注册进入比赛");
+        contestService.registerContest(registerContestDTO);
+        return Result.ok().msg("进入比赛成功");
+    }
+
+
+
+
 
 }

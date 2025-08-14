@@ -10,7 +10,7 @@ package com.ymcloud.common.exception.contest;
 public class ContestNotExistException extends ContestException{
 
     public ContestNotExistException() {
-        super("比赛不存在或已删除");
+        super("该比赛不存在或已删除");
     }
 
 }

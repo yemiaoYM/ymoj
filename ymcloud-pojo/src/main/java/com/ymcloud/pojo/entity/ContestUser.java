@@ -18,10 +18,6 @@ public class ContestUser {
     private Long contestId;
     @Schema(description="用户ID")
     private Long userId;
-    @Schema(description="报名时间")
-    private LocalDateTime registeredTime;
-    @Schema(description="报名状态：1=已报名，0=已取消")
-    private Integer status;
     @Schema(description="创建时间")
     private LocalDateTime createdTime;
     @Schema(description="更新时间")
