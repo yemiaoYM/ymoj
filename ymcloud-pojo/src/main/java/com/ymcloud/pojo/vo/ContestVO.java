@@ -1,6 +1,5 @@
 package com.ymcloud.pojo.vo;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -29,10 +28,6 @@ public class ContestVO implements Serializable {
      * 比赛说明内容
      */
     private String description;
-    /**
-     * 比赛规则说明（评测规则、计分机制）
-     */
-    private String rules;
     /**
      * 来源比赛ID（0表示原创，其它为克隆赛ID）
      */
@@ -70,17 +65,9 @@ public class ContestVO implements Serializable {
      */
     private Long duration;
     /**
-     * 是否开放排行榜（0=否，1=是）
-     */
-    private Integer openRank;
-    /**
      * 是否允许比赛结束后继续提交（0=否，1=是）
      */
-    private Integer allowPostSubmit;
-    /**
-     * 封榜时间（可选）
-     */
-    private LocalDateTime sealRankTime;
+    private Integer allowEndSubmit;
     /**
      * 参与人数
      */

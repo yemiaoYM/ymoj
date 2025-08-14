@@ -1,13 +1,14 @@
 package com.ymcloud.web;
 
-import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RuntimeUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.common.utils.ShortSnowflake;
+import com.ymcloud.core.web.mapper.ContestProblemMapper;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
+import com.ymcloud.pojo.vo.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.UserAcRankVO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.io.File;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -24,8 +26,8 @@ import java.util.List;
  * @CreateTime: 2025-07-18  21:55
  * @Description: 测试类
  */
-//@SpringBootTest
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+//@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest
 public class WebTest {
     @Autowired
     private RedisCache redisCache;
@@ -35,6 +37,9 @@ public class WebTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ContestProblemMapper contestProblemMapper;
 
     @Test
     public void generatePassword() {
@@ -58,10 +63,8 @@ public class WebTest {
 
     @Test
     public void getDateStamp(){
-        long current = DateUtil.current();
-        long l = DateUtil.currentSeconds();
-        System.out.println(current);
-        System.out.println(l);
+        List<ContestProblemTableVO> list = contestProblemMapper.getContestProblemList(1L, 1L, LocalDateTime.now());
+        list.forEach(System.out::println);
     }
 
     @Test
@@ -109,7 +112,7 @@ public class WebTest {
     public void testCompile() {
         // 参数
         String submissionId = "10009";
-        String tgproblemId = "1";
+        String problemId = "1";
         String compileCmd = "g++ main.cpp -o main";
         String runCmd = "./main";
         String imageName = "oj-cpp-env";

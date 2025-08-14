@@ -6,19 +6,22 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.exception.contest.ContestException;
+import com.ymcloud.common.exception.contest.ContestNotAccessException;
 import com.ymcloud.common.exception.contest.ContestNotExistException;
+import com.ymcloud.common.exception.contest.ContestNotStartException;
 import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
+import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.ContestMapper;
-import com.ymcloud.core.web.mapper.ContestUserMapper;
+import com.ymcloud.core.web.mapper.ContestProblemMapper;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.Contest;
+import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.ContestUser;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ContestPageQuery;
-import com.ymcloud.pojo.vo.ContestCountVO;
-import com.ymcloud.pojo.vo.ContestTableVO;
-import com.ymcloud.pojo.vo.ContestVO;
-import com.ymcloud.pojo.vo.PageVO;
+import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.ContestService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -40,6 +43,9 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
 
     @Autowired
     private ContestUserEntityService contestUserEntityService;
+
+    @Autowired
+    private ContestProblemMapper contestProblemMapper;
 
     /**
      * 获取比赛列表表单 分页查询
@@ -149,6 +155,62 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         if(!save){
             throw new ContestException("注册比赛失败，请稍后再试");
         }
+    }
+
+    /**
+     * 查询比赛题目详情
+     * @param contestId 比赛id
+     * @param displayId 题目展示id
+     * @return 比赛题目详情
+     */
+    @Override
+    public ProblemVO getContestProblem(Long contestId, String displayId) {
+
+
+
+
+        return null;
+    }
+
+    /**
+     * 用户获取当前比赛题目提交状态
+     * @param contestId 比赛id
+     * @param displayId 题目展示id
+     * @return 状态
+     */
+    @Override
+    public JudgeStatus getContestProblemSubmissionStatus(Long contestId, String displayId) {
+        return null;
+    }
+
+    /**
+     * 查询比赛题目列表
+     * @param contestId 比赛id
+     * @return 比赛题目列表
+     */
+    @Override
+    public List<ContestProblemTableVO> getContestProblemList(Long contestId) {
+        //查询比赛
+        Contest contest = getById(contestId);
+        if(contest==null){
+            throw new ContestNotExistException();
+        }
+        //验证比赛当前状态
+        LocalDateTime now = LocalDateTime.now();
+        if(contest.getStartTime().isAfter(now)){
+            //比赛还未开始
+            throw new ContestNotStartException();
+        }
+        //获取当前用户信息
+        Long userId = SecurityUtils.getUserId();
+        //比赛不是公共的，需验证用户的权限
+        if(!contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
+            if(!isAccess(contestId, userId)){
+                throw new ContestNotAccessException();
+            }
+        }
+        //查询比赛题目列表
+        return contestProblemMapper.getContestProblemList(contestId,userId,contest.getEndTime());
     }
 
     /**

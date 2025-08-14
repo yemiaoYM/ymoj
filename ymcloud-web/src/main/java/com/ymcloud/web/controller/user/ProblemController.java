@@ -1,7 +1,6 @@
 package com.ymcloud.web.controller.user;
 
 import com.ymcloud.common.result.Result;
-import com.ymcloud.pojo.dto.ProblemDTO;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.PageVO;
@@ -13,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -32,25 +32,25 @@ public class ProblemController {
 
     /**
      * 获取题目信息
-     * @param problemDTO 查询题目实体
+     * @param problemId 题目id
      * @return 题目信息
      */
     @GetMapping
-    public Result<ProblemVO> getProblemInfo(@Validated ProblemDTO problemDTO) {
-        log.info("获取题目信息:{}", problemDTO);
-        ProblemVO problem=problemService.getProblemInfo(problemDTO);
+    public Result<ProblemVO> getProblemInfo(@RequestParam(value = "problemId") String problemId) {
+        log.info("获取题目信息:{}", problemId);
+        ProblemVO problem=problemService.getProblemInfo(problemId);
         return Result.ok(problem);
     }
 
     /**
      * 用户获取当前题目提交状态
-     * @param dto 查询实体
+     * @param problemId 题目id
      * @return 状态
      */
     @GetMapping("/submission-status")
-    public Result<JudgeStatus> problemSubmissionStatus(@Validated ProblemDTO dto) {
-        log.info("用户获取当前题目提交状态:{}", dto);
-        JudgeStatus status=problemService.problemSubmissionStatus(dto);
+    public Result<JudgeStatus> problemSubmissionStatus(@RequestParam(value = "problemId") String problemId) {
+        log.info("用户获取当前题目提交状态:{}", problemId);
+        JudgeStatus status=problemService.problemSubmissionStatus(problemId);
         return Result.ok(status);
     }
 

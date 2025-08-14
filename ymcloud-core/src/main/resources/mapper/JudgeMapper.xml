@@ -16,7 +16,7 @@
             COUNT(*) AS total
         FROM judge
         <where>
-            contest_id=0 AND group_id is null
+            contest_id=0
             <if test="problemIds!=null and problemIds.size > 0">
                 AND display_id in
                 <foreach collection="problemIds" item="problemId" open="(" separator="," close=")">

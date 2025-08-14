@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.ymcloud.core.web.mapper.ContestProblemMapper">
+
+    <select id="getContestProblemList" resultType="com.ymcloud.pojo.vo.ContestProblemTableVO">
+        SELECT
+            cp.id,
+            cp.display_id,
+            cp.contest_id,
+            cp.problem_id,
+            cp.display_title,
+            cp.color,
+            COUNT(j.id) AS total,
+            SUM(j.status = 0) AS ac,
+            MAX(j.status = 0 AND j.user_id = #{userId}) AS is_accepted
+        FROM contest_problem cp
+        LEFT JOIN judge j
+            ON j.contest_problem_id = cp.id
+            AND j.contest_id = cp.contest_id
+            AND j.problem_id = cp.problem_id
+            AND #{endTime}>=j.created_time
+        WHERE cp.contest_id = #{contestId}
+        GROUP BY cp.id, cp.display_id, cp.contest_id, cp.problem_id, cp.display_title, cp.color
+        ORDER BY cp.display_id asc;
+    </select>
+
+
+</mapper>

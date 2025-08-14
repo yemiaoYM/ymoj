@@ -2,12 +2,17 @@ package com.ymcloud.web.controller.user;
 
 import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
+import com.ymcloud.pojo.enums.JudgeStatus;
+import com.ymcloud.pojo.vo.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.ContestVO;
+import com.ymcloud.pojo.vo.ProblemVO;
 import com.ymcloud.web.service.ContestService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.web.controller.user
@@ -47,7 +52,46 @@ public class ContestController {
         return Result.ok().msg("进入比赛成功");
     }
 
+    /**
+     * 查询比赛题目列表
+     * @param contestId 比赛id
+     * @return 比赛题目列表
+     */
+    @GetMapping("/problem-list")
+    public Result<List<ContestProblemTableVO>> getContestProblem(@RequestParam(value = "contestId") Long contestId) {
+        log.info("查询比赛题目列表：{}", contestId);
+        List<ContestProblemTableVO> list=contestService.getContestProblemList(contestId);
+        return Result.ok(list);
+    }
 
+
+    /**
+     * 查询比赛题目详情
+     * @param contestId 比赛id
+     * @param displayId 题目展示id
+     * @return 比赛题目详情
+     */
+    @GetMapping("/problem")
+    public Result<ProblemVO> getContestProblem(@RequestParam(value = "contestId") Long contestId,
+                                               @RequestParam(value = "displayId") String displayId) {
+        log.info("查询比赛：{},题目：{}", contestId, displayId);
+        ProblemVO problem=contestService.getContestProblem(contestId,displayId);
+        return Result.ok(problem);
+    }
+
+    /**
+     * 用户获取当前比赛题目提交状态
+     * @param contestId 比赛id
+     * @param displayId 题目展示id
+     * @return 状态
+     */
+    @GetMapping("/problem/submission-status")
+    public Result<JudgeStatus> getContestProblemSubmissionStatus(@RequestParam(value = "contestId") Long contestId,
+                                                                 @RequestParam(value = "displayId") String displayId){
+        log.info("用户获取当前比赛{}题目{}提交状态", contestId, displayId);
+        JudgeStatus status=contestService.getContestProblemSubmissionStatus(contestId,displayId);
+        return Result.ok(status);
+    }
 
 
 

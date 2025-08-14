@@ -5,7 +5,6 @@ import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.Version;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -48,8 +47,8 @@ public class Judge {
     private Integer isManual;
     @Schema(description="所属比赛ID，非比赛默认为0")
     private Long contestId;
-    @Schema(description="比赛中题目的排序ID")
-    private Long contestProblemIndex;
+    @Schema(description="比赛题目ID")
+    private Long contestProblemId;
     @Schema(description="团队ID，普通提交为 NULL")
     private Long groupId;
     @Schema(description="执行判题的机器标识")
@@ -57,7 +56,6 @@ public class Judge {
     @Schema(description="提交用户IP")
     private String ip;
     @Schema(description="乐观锁版本号")
-    @Version
     private Integer version;
     @Schema(description="vjudge判题在其它oj的提交id")
     private Long vjudgeSubmitId;

@@ -3,10 +3,11 @@ package com.ymcloud.web.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.Contest;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ContestPageQuery;
-import com.ymcloud.pojo.vo.ContestTableVO;
-import com.ymcloud.pojo.vo.ContestVO;
-import com.ymcloud.pojo.vo.PageVO;
+import com.ymcloud.pojo.vo.*;
+
+import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.web.service
@@ -36,4 +37,27 @@ public interface ContestService extends IService<Contest> {
      * @param registerContestDTO 请求体
      */
     void registerContest(RegisterContestDTO registerContestDTO);
+
+    /**
+     * 查询比赛题目详情
+     * @param contestId 比赛id
+     * @param displayId 题目展示id
+     * @return 比赛题目详情
+     */
+    ProblemVO getContestProblem(Long contestId, String displayId);
+
+    /**
+     * 用户获取当前比赛题目提交状态
+     * @param contestId 比赛id
+     * @param displayId 题目展示id
+     * @return 状态
+     */
+    JudgeStatus getContestProblemSubmissionStatus(Long contestId, String displayId);
+
+    /**
+     * 查询比赛题目列表
+     * @param contestId 比赛id
+     * @return 比赛题目列表
+     */
+    List<ContestProblemTableVO> getContestProblemList(Long contestId);
 }

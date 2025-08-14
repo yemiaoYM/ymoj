@@ -11,7 +11,6 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.constant.ProblemConstants;
-import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
@@ -88,19 +87,13 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
 
     /**
      * 获取题目信息
-     * @param problemDTO 查询题目实体
+     * @param problemId 题目id
      * @return 题目信息
      */
     @Override
-    public ProblemVO getProblemInfo(ProblemDTO problemDTO) {
-        //检查是否为比赛题目
-        if(problemDTO.getIsContest()){
-            Long contestId = problemDTO.getContestId();
-            String contestProblemIndex = problemDTO.getContestProblemIndex();
-            throw new ProblemException("暂不支持查询比赛题目信息");
-        }
+    public ProblemVO getProblemInfo(String problemId) {
         //校验参数
-        Problem problem = validateProblem(problemDTO.getProblemId());
+        Problem problem = validateProblem(problemId);
         //私有题目查询权限
         if(problem.getVisibility() == ProblemConstants.PRIVATE){
             Long userId = SecurityUtils.getUserId();
@@ -124,17 +117,12 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
 
     /**
      * 用户获取当前题目提交状态
-     * @param dto 查询实体
+     * @param problemId 题目id
      * @return 状态
      */
     @Override
-    public JudgeStatus problemSubmissionStatus(ProblemDTO dto) {
-        //判断是否为比赛提交
-        if(dto.getIsContest()){
-            throw new ServiceException("暂不支持比赛模块");
-        }
+    public JudgeStatus problemSubmissionStatus(String problemId) {
         //校验参数
-        String problemId = dto.getProblemId();
         Problem problem=validateProblem(problemId);
         //私有题目查询权限
         Long userId = SecurityUtils.getUserId();

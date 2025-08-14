@@ -1,7 +1,6 @@
 package com.ymcloud.web.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
-import com.ymcloud.pojo.dto.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ProblemPageQuery;
@@ -29,17 +28,17 @@ public interface ProblemService extends IService<Problem> {
 
     /**
      * 获取题目信息
-     * @param problemDTO 查询题目实体
+     * @param problemId 题目id
      * @return 题目信息
      */
-    ProblemVO getProblemInfo(ProblemDTO problemDTO);
+    ProblemVO getProblemInfo(String problemId);
 
     /**
      * 用户获取当前题目提交状态
-     * @param dto 查询实体
+     * @param problemId 题目id
      * @return 状态
      */
-    JudgeStatus problemSubmissionStatus(ProblemDTO dto);
+    JudgeStatus problemSubmissionStatus(String problemId);
 
     /**
      * 随机获取一道题目
