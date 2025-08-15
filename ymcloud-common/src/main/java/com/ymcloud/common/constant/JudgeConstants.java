@@ -9,14 +9,6 @@ package com.ymcloud.common.constant;
  */
 public class JudgeConstants {
     /**
-     * 个人提交
-     */
-    public static final Integer PERSONAL_SUBMISSION = 0;
-    /**
-     * 比赛提交
-     */
-    public static final Integer CONTEST_SUBMISSION = 1;
-    /**
      * 评测策略
      */
     public static final Integer DEFAULT_JUDGE = 0;

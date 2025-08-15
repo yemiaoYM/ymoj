@@ -108,7 +108,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public Result<?> handleException(Exception e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
-        log.error("系统异常，请求URI：{}，异常信息：{}", requestURI, e.getMessage());
+        log.error("系统异常，请求URI：{}，异常信息：{}", requestURI, e.getMessage(),e);
         return Result.fail().code(HttpStatus.ERROR).msg("系统繁忙，请稍后再试");
     }
 

@@ -4,16 +4,17 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.ymcloud.common.constant.JudgeConstants;
+import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.common.exception.contest.ContestNotAccessException;
+import com.ymcloud.common.exception.contest.ContestNotExistException;
 import com.ymcloud.common.exception.submission.SubmissionException;
 import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.core.web.dao.ContestEntityService;
+import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.dao.JudgeCaseEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.JudgeMapper;
-import com.ymcloud.pojo.entity.Judge;
-import com.ymcloud.pojo.entity.JudgeCase;
-import com.ymcloud.pojo.entity.User;
-import com.ymcloud.pojo.enums.JudgeStatus;
+import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.query.SubmissionPageQuery;
 import com.ymcloud.pojo.vo.JudgeCaseVO;
 import com.ymcloud.pojo.vo.PageVO;
@@ -23,6 +24,7 @@ import com.ymcloud.web.service.SubmissionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -41,6 +43,12 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
     @Autowired
     private JudgeCaseEntityService judgeCaseEntityService;
 
+    @Autowired
+    private ContestEntityService contestEntityService;
+
+    @Autowired
+    private ContestUserEntityService contestUserEntityService;
+
     /**
      * 获取公共评测结果列表 分页查询
      * @param query 查询实体
@@ -55,15 +63,15 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
             //查询个人记录不支持模糊匹配用户名
             query.setUsername(null);
         }
-        //1.构建分页实体
+        //构建分页实体
         Page<Judge> page=new Page<>(query.getPageNo(),query.getPageSize());
         //分页条件查询
         Page<Judge> judgePage = judgeEntityService.lambdaQuery()
                 //个人提交
-                .eq(userId != null, Judge::getUserId, userId)
+                .eq(query.getIsMine(), Judge::getUserId, userId)
                 .eq(query.getStatus() != null, Judge::getStatus, query.getStatus())
                 //一定限制为非比赛提交
-                .ne(Judge::getContestId,JudgeConstants.CONTEST_SUBMISSION)
+                .eq(Judge::getContestId,0L)
                 //满足其一即可
                 .and(StrUtil.isNotBlank(query.getProblemKey()), wrapper -> wrapper
                     .like(Judge::getDisplayId, query.getProblemKey())
@@ -88,29 +96,38 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
      */
     @Override
     public SubmissionVO getSubmissionDetail(Long submissionId) {
-        //检查提交id是否合法
-        if(submissionId==null || submissionId<0){
-            throw new SubmissionException("提交参数和合法");
-        }
         //查询提交记录
-        Judge submission = judgeEntityService.lambdaQuery()
-                .eq(Judge::getId, submissionId)
-                .one();
+        Judge submission = judgeEntityService.getById(submissionId);
         if(submission==null){
             throw new SubmissionException("提交记录不存在");
         }
-        System.out.println(submission);
-        //暂不支持查看比赛提交
+        //获取当前用户
+        Long userId = SecurityUtils.getUserId();
+        //处理比赛提交
         if(submission.getContestId()!=0){
-            throw new SubmissionException("暂不支持查看比赛提交");
-        }
-        //只有编译错误才支持查看错误信息
-        if(submission.getStatus()!=JudgeStatus.STATUS_COMPILE_ERROR){
-            submission.setErrorMessage(null);
+            //查询比赛
+            Contest contest = contestEntityService.getById(submission.getContestId());
+            if(contest==null) {
+                throw new ContestNotExistException();
+            }
+            //先验证权限
+            if(!contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
+                boolean isAccess = contestUserEntityService.lambdaQuery()
+                        .eq(ContestUser::getContestId, contest.getId())
+                        .eq(ContestUser::getUserId, userId)
+                        .exists();
+                if(!isAccess){
+                    throw new ContestNotAccessException();
+                }
+            }
+            //如果比赛为结束允许查看他人提交详情
+            LocalDateTime now = LocalDateTime.now();
+            if(!userId.equals(submission.getUserId())&&now.isBefore(contest.getEndTime())){
+                throw new SubmissionException("比赛结束前禁止查看他人提交详情");
+            }
         }
         //个人提交和公开分享才支持查看代码
-        User user=SecurityUtils.getUser();
-        if(!submission.getUserId().equals(user.getId()) && !submission.getShare()){
+        if(!submission.getUserId().equals(userId) && !submission.getShare()){
             //不为本人且不公开分享
             submission.setCode(null);
         }

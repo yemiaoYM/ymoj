@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.common.constant.JudgeConstants;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.exception.contest.*;
 import com.ymcloud.core.security.utils.SecurityUtils;
@@ -20,6 +21,7 @@ import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ContestPageQuery;
 import com.ymcloud.pojo.query.ContestProblemSubmissionPageQuery;
+import com.ymcloud.pojo.query.ContestSubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.ContestService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -262,6 +264,53 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
             return vo;
         });
     }
+
+    /**
+     * 获取比赛评测列表 分页查询
+     * @param query 查询实体
+     * @return 分页实体
+     */
+    @Override
+    public PageVO<SubmissionTableVO> getSubmissionList(ContestSubmissionPageQuery query) {
+        //获取用户信息
+        Long userId = SecurityUtils.getUserId();
+        //检验比赛
+        Contest contest = validateContest(query.getContestId(), userId);
+        //构建分页实体
+        Page<Judge> page=new Page<>(query.getPageNo(),query.getPageSize());
+        //分页条件查询
+        Page<Judge> judgePage = judgeEntityService.lambdaQuery()
+                //个人提交
+                .eq(query.getIsMine(), Judge::getUserId, userId)
+                .eq(query.getStatus() != null, Judge::getStatus, query.getStatus())
+                .eq(Judge::getContestId, contest.getId())
+                //满足其一即可
+                .and(StrUtil.isNotBlank(query.getProblemKey()), wrapper -> wrapper
+                        .like(Judge::getDisplayId, query.getProblemKey())
+                        .or()
+                        .like(Judge::getProblemTitle, query.getProblemKey())
+                )
+                //当查询所有人并且用户名不为空时触发
+                .like(!query.getIsMine()&&StrUtil.isNotBlank(query.getUsername()), Judge::getUsername, query.getUsername())
+                .orderByDesc(Judge::getCreatedTime)
+                .page(page);
+        //判断比赛是否结束
+        LocalDateTime now = LocalDateTime.now();
+        boolean isEnd = now.isAfter(contest.getEndTime());
+        //返回vo实体
+        return PageVO.of(judgePage,judge->{
+            SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
+            vo.setSubmissionId(judge.getId());
+            if(!isEnd&&!judge.getUserId().equals(userId)){
+                //如果比赛没有结束则禁止查看其他人的提交时间，内存等等
+                vo.setTime(null);
+                vo.setMemory(null);
+                vo.setCodeLength(null);
+            }
+            return vo;
+        });
+    }
+
 
     /**
      * 检验比赛

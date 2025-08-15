@@ -116,7 +116,7 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
                 .eq(Judge::getProblemId, problem.getId())
                 .eq(Judge::getUserId, userId)
                 //不能查询比赛提交
-                .ne(Judge::getContestId, 0L)
+                .eq(Judge::getContestId, 0L)
                 .eq(Judge::getShare, JudgeStatus.STATUS_ACCEPTED)
                 .exists();
         problemVO.setAccepted(isAccepted);
@@ -162,7 +162,7 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
                 .eq(Judge::getUserId, userId)
                 .eq(Judge::getProblemId, problem.getId())
                 //不能查询比赛提交
-                .ne(Judge::getContestId, 0L)
+                .eq(Judge::getContestId, 0L)
                 .orderByDesc(Judge::getCreatedTime)
                 .page(page);
         //返回提交vo

@@ -33,6 +33,5 @@ public class SubmissionPageQuery extends PageQuery {
     /**
      * 用户名
      */
-    @Size(min = 2, max = 20, message = "用户名长度在2到20之间")
     private String username;
 }

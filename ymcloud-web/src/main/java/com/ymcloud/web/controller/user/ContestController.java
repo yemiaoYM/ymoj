@@ -3,6 +3,7 @@ package com.ymcloud.web.controller.user;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.query.ContestProblemSubmissionPageQuery;
+import com.ymcloud.pojo.query.ContestSubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.ContestService;
 import lombok.extern.slf4j.Slf4j;
@@ -87,5 +88,22 @@ public class ContestController {
         PageVO<SubmissionTableVO> pageVO = contestService.problemSubmissionList(query);
         return Result.ok(pageVO);
     }
+
+    /**
+     * 获取比赛评测列表 分页查询
+     * @param query 查询实体
+     * @return 分页实体
+     */
+    @GetMapping("/submission-list")
+    public Result<PageVO<SubmissionTableVO>> submissionList(@Validated ContestSubmissionPageQuery query) {
+        log.info("获取比赛评测列表表单:{}",query);
+        PageVO<SubmissionTableVO> list=contestService.getSubmissionList(query);
+        return Result.ok(list);
+    }
+
+
+
+
+
 
 }

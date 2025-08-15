@@ -6,6 +6,7 @@ import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ContestPageQuery;
 import com.ymcloud.pojo.query.ContestProblemSubmissionPageQuery;
+import com.ymcloud.pojo.query.ContestSubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
 
 import java.util.List;
@@ -60,4 +61,11 @@ public interface ContestService extends IService<Contest> {
      * @return 提交列表
      */
     PageVO<SubmissionTableVO> problemSubmissionList(ContestProblemSubmissionPageQuery query);
+
+    /**
+     * 获取比赛评测列表 分页查询
+     * @param query 查询实体
+     * @return 分页实体
+     */
+    PageVO<SubmissionTableVO> getSubmissionList(ContestSubmissionPageQuery query);
 }
