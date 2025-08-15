@@ -43,18 +43,6 @@ public class ProblemController {
     }
 
     /**
-     * 用户获取当前题目提交状态
-     * @param problemId 题目id
-     * @return 状态
-     */
-    @GetMapping("/submission-status")
-    public Result<JudgeStatus> problemSubmissionStatus(@RequestParam(value = "problemId") String problemId) {
-        log.info("用户获取当前题目提交状态:{}", problemId);
-        JudgeStatus status=problemService.problemSubmissionStatus(problemId);
-        return Result.ok(status);
-    }
-
-    /**
      * 查询用户当前题目提交列表
      * @param query 分页查询实体
      * @return 提交列表
@@ -65,7 +53,6 @@ public class ProblemController {
         PageVO<SubmissionTableVO> pageVO = problemService.problemSubmissionList(query);
         return Result.ok(pageVO);
     }
-
 
     /**
      * 随机获取一道题目

@@ -34,13 +34,6 @@ public interface ProblemService extends IService<Problem> {
     ProblemVO getProblemInfo(String problemId);
 
     /**
-     * 用户获取当前题目提交状态
-     * @param problemId 题目id
-     * @return 状态
-     */
-    JudgeStatus problemSubmissionStatus(String problemId);
-
-    /**
      * 随机获取一道题目
      * @return 题目唯一标识
      */

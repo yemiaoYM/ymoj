@@ -6,8 +6,11 @@ import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.common.utils.ShortSnowflake;
+import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.ContestProblemMapper;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
+import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.UserAcRankVO;
 import org.junit.jupiter.api.Test;
@@ -40,6 +43,20 @@ public class WebTest {
 
     @Autowired
     private ContestProblemMapper contestProblemMapper;
+
+    @Autowired
+    private JudgeEntityService judgeEntityService;
+
+    @Test
+    public void testUserJudgeStatus(){
+        boolean exists = judgeEntityService.lambdaQuery()
+                .eq(Judge::getProblemId, 1L)
+                .eq(Judge::getUserId, 2L)
+                .eq(Judge::getContestId, 0L)
+                .eq(Judge::getShare, JudgeStatus.STATUS_ACCEPTED)
+                .exists();
+        System.out.println(exists);
+    }
 
     @Test
     public void generatePassword() {

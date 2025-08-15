@@ -2,6 +2,7 @@ package com.ymcloud.pojo.vo;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -64,7 +65,6 @@ public class ProblemVO implements Serializable {
      * 出题人用户名
      */
     private String authorUsername;
-
     /**
      * 题面样例
      */
@@ -74,4 +74,8 @@ public class ProblemVO implements Serializable {
      * 编程语言选项
      */
     private List<LanguageVO> languageList;
+    /**
+     * 用户该题目的通过状态
+     */
+    private boolean isAccepted;
 }

@@ -18,19 +18,7 @@ public class ProblemSubmissionPageQuery extends PageQuery {
     /**
      * 题目唯一标识
      */
+    @NotNull(message = "题目id不能为空")
     private String problemId;
-    /**
-     * 是否为比赛题目
-     */
-    @NotNull(message = "请指定是否为比赛题目")
-    private Boolean isContest;
-    /**
-     * 所属比赛id
-     */
-    private Long contestId;
-    /**
-     * 比赛中该题的题号索引
-     */
-    private String contestProblemIndex;
 
 }

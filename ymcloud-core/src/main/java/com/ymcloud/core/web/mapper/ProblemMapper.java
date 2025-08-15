@@ -29,7 +29,8 @@ public interface ProblemMapper extends BaseMapper<Problem> {
      * @param source     来源
      * @return 题单列表
      */
-    Page<ProblemTableVO> pageQuery(IPage<ProblemTableVO> page,
+    Page<ProblemTableVO> pageQuery(
+            IPage<ProblemTableVO> page,
             @Param("keyword")       String keyword,
             @Param("difficulty")  Integer difficulty,
             @Param("source")      String source

@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.Version;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -56,6 +57,7 @@ public class Judge {
     @Schema(description="提交用户IP")
     private String ip;
     @Schema(description="乐观锁版本号")
+    @Version
     private Integer version;
     @Schema(description="vjudge判题在其它oj的提交id")
     private Long vjudgeSubmitId;

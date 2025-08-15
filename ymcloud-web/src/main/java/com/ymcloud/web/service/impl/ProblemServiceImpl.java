@@ -18,7 +18,6 @@ import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.LanguageMapper;
 import com.ymcloud.core.web.mapper.ProblemMapper;
-import com.ymcloud.pojo.dto.ProblemDTO;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
@@ -59,6 +58,7 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
     public PageVO<ProblemTableVO> pageQuery(ProblemPageQuery query) {
         //使用sql优化查询
         Page<ProblemTableVO> page=new Page<>(query.getPageNo(),query.getPageSize());
+        //这里sql限制了只查询权限为公开的题目
         Page<ProblemTableVO> pageResult=getBaseMapper().pageQuery(
                 page,
                 query.getKeyword(),
@@ -95,8 +95,8 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         //校验参数
         Problem problem = validateProblem(problemId);
         //私有题目查询权限
+        Long userId = SecurityUtils.getUserId();
         if(problem.getVisibility() == ProblemConstants.PRIVATE){
-            Long userId = SecurityUtils.getUserId();
             if(!Objects.equals(problem.getAuthorId(), userId)){
                 throw new ProblemPermissionException("私有题目，请联系题目创建者:"+problem.getAuthorUsername());
             }
@@ -111,45 +111,17 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         //直接使用sql语言来优化性能
         List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(LanguageConstants.ABLE, problem.getSource());
         problemVO.setLanguageList(languageVOList);
+        //查询用户该题目的通过状态
+        boolean isAccepted = judgeEntityService.lambdaQuery()
+                .eq(Judge::getProblemId, problem.getId())
+                .eq(Judge::getUserId, userId)
+                //不能查询比赛提交
+                .ne(Judge::getContestId, 0L)
+                .eq(Judge::getShare, JudgeStatus.STATUS_ACCEPTED)
+                .exists();
+        problemVO.setAccepted(isAccepted);
         //返回题目前端实体
         return problemVO;
-    }
-
-    /**
-     * 用户获取当前题目提交状态
-     * @param problemId 题目id
-     * @return 状态
-     */
-    @Override
-    public JudgeStatus problemSubmissionStatus(String problemId) {
-        //校验参数
-        Problem problem=validateProblem(problemId);
-        //私有题目查询权限
-        Long userId = SecurityUtils.getUserId();
-        if(problem.getVisibility() == ProblemConstants.PRIVATE) {
-            if(!Objects.equals(problem.getAuthorId(), userId)){
-                throw new ProblemPermissionException("没有访问此题目的权限，请联系题目创建者");
-            }
-        }
-        //查询该用户该题目的提交列表
-        List<Judge> submissionList = judgeEntityService.lambdaQuery().eq(Judge::getProblemId, problem.getId())
-                .eq(Judge::getUserId, userId)
-                .orderByDesc(Judge::getCreatedTime)
-                .list();
-        //没有提交记录
-        if(CollectionUtil.isEmpty(submissionList)){
-            return JudgeStatus.STATUS_NULL;
-        }
-        //提交结果是倒序，相当于设置最近一次的提交状态
-        JudgeStatus status=submissionList.get(0).getStatus();
-        //如果存在通过，直接返回通过
-        for(Judge judge : submissionList){
-            if(judge.getStatus() == JudgeStatus.STATUS_ACCEPTED){
-                status = judge.getStatus();
-                break;
-            }
-        }
-        return status;
     }
 
     /**
@@ -159,7 +131,8 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
     @Override
     public String randomProblem() {
         //只随机公共题目
-        List<String> list = lambdaQuery().select(Problem::getProblemId)
+        List<String> list = lambdaQuery()
+                .select(Problem::getProblemId)
                 .eq(Problem::getVisibility, ProblemConstants.PUBLIC)
                 .list().stream().map(Problem::getProblemId).toList();
         if(CollectionUtil.isEmpty(list)){
@@ -177,12 +150,9 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
      */
     @Override
     public PageVO<SubmissionTableVO> problemSubmissionList(ProblemSubmissionPageQuery query) {
-        //检查是否为比赛提交
-        if(query.getIsContest()){
-            throw new ProblemException("暂不支持查询比赛提交");
-        }
         //检查题目信息
-        Problem problem = validateProblem(query.getProblemId());
+        String problemId = query.getProblemId();
+        Problem problem = validateProblem(problemId);
         //获取当前用户信息
         Long userId = SecurityUtils.getUserId();
         //构造分页实体
@@ -191,6 +161,8 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         Page<Judge> judgePage = judgeEntityService.lambdaQuery()
                 .eq(Judge::getUserId, userId)
                 .eq(Judge::getProblemId, problem.getId())
+                //不能查询比赛提交
+                .ne(Judge::getContestId, 0L)
                 .orderByDesc(Judge::getCreatedTime)
                 .page(page);
         //返回提交vo
@@ -211,7 +183,7 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
         if(problemId==null || StrUtil.isBlank(problemId)){
             throw new ProblemException("题目标识参数为空", HttpStatus.BAD_REQUEST);
         }
-        //2.根据题目id查询
+        //2.根据题目唯一标识查询
         Problem problem = lambdaQuery().eq(Problem::getProblemId, problemId).one();
         if(problem==null){
             //题目不存在或者已删除
