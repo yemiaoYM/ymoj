@@ -7,22 +7,19 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.LanguageConstants;
-import com.ymcloud.common.exception.contest.ContestException;
-import com.ymcloud.common.exception.contest.ContestNotAccessException;
-import com.ymcloud.common.exception.contest.ContestNotExistException;
-import com.ymcloud.common.exception.contest.ContestNotStartException;
+import com.ymcloud.common.exception.contest.*;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.mapper.ContestMapper;
-import com.ymcloud.core.web.mapper.ContestProblemMapper;
 import com.ymcloud.core.web.mapper.LanguageMapper;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ContestPageQuery;
+import com.ymcloud.pojo.query.ContestProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.ContestService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -201,12 +198,12 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
                 .eq(ContestProblem::getDisplayId, displayId)
                 .one();
         if (contestProblem == null) {
-            throw new ContestException("该比赛不存在此题目或者已被删除");
+            throw new ContestProblemNotExistException();
         }
         //查询比赛题目详细信息
         Problem problem = problemEntityService.getById(contestProblem.getProblemId());
         if (problem == null) {
-            throw new ContestException("该比赛不存在此题目或者已被删除");
+            throw new ContestProblemNotExistException();
         }
         //拷贝实体
         ProblemVO problemVO = BeanUtil.copyProperties(problem, ProblemVO.class);
@@ -229,6 +226,41 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         problemVO.setAccepted(isAccepted);
         //返回题目前端实体
         return problemVO;
+    }
+
+    /**
+     * 查询用户当前比赛题目提交列表
+     * @param query 分页查询实体
+     * @return 提交列表
+     */
+    @Override
+    public PageVO<SubmissionTableVO> problemSubmissionList(ContestProblemSubmissionPageQuery query) {
+        //检查当前比赛状态
+        Long userId = SecurityUtils.getUserId();
+        Contest contest = validateContest(query.getContestId(), userId);
+        //查询比赛题目简单信息
+        ContestProblem contestProblem = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contest.getId())
+                .eq(ContestProblem::getDisplayId, query.getDisplayId())
+                .one();
+        if (contestProblem == null) {
+            throw new ContestProblemNotExistException();
+        }
+        //构造分页实体
+        Page<Judge> page=new Page<>(query.getPageNo(),query.getPageSize());
+        //根据限定条件进行查询
+        Page<Judge> judgePage = judgeEntityService.lambdaQuery()
+                .eq(Judge::getUserId, userId)
+                .eq(Judge::getProblemId,contestProblem.getProblemId())
+                .eq(Judge::getContestId, contest.getId())
+                .orderByDesc(Judge::getCreatedTime)
+                .page(page);
+        //返回提交vo
+        return PageVO.of(judgePage,judge->{
+            SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
+            vo.setSubmissionId(judge.getId());
+            return vo;
+        });
     }
 
     /**

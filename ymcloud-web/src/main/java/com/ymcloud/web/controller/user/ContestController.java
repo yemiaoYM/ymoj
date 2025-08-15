@@ -2,10 +2,8 @@ package com.ymcloud.web.controller.user;
 
 import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
-import com.ymcloud.pojo.enums.JudgeStatus;
-import com.ymcloud.pojo.vo.ContestProblemTableVO;
-import com.ymcloud.pojo.vo.ContestVO;
-import com.ymcloud.pojo.vo.ProblemVO;
+import com.ymcloud.pojo.query.ContestProblemSubmissionPageQuery;
+import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.ContestService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,7 +62,6 @@ public class ContestController {
         return Result.ok(list);
     }
 
-
     /**
      * 查询比赛题目详情
      * @param contestId 比赛id
@@ -79,5 +76,16 @@ public class ContestController {
         return Result.ok(problem);
     }
 
+    /**
+     * 查询用户当前比赛题目提交列表
+     * @param query 分页查询实体
+     * @return 提交列表
+     */
+    @GetMapping("/problem/submission-list")
+    public Result<PageVO<SubmissionTableVO>> problemSubmissionList(@Validated ContestProblemSubmissionPageQuery query) {
+        log.info("查询当用当前比赛题目提交列表：{}",query);
+        PageVO<SubmissionTableVO> pageVO = contestService.problemSubmissionList(query);
+        return Result.ok(pageVO);
+    }
 
 }

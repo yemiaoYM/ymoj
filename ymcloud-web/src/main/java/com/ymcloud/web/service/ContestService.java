@@ -5,6 +5,7 @@ import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ContestPageQuery;
+import com.ymcloud.pojo.query.ContestProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
 
 import java.util.List;
@@ -52,4 +53,11 @@ public interface ContestService extends IService<Contest> {
      * @return 比赛题目列表
      */
     List<ContestProblemTableVO> getContestProblemList(Long contestId);
+
+    /**
+     * 查询用户当前比赛题目提交列表
+     * @param query 分页查询实体
+     * @return 提交列表
+     */
+    PageVO<SubmissionTableVO> problemSubmissionList(ContestProblemSubmissionPageQuery query);
 }

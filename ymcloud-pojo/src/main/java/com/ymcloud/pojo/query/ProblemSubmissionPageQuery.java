@@ -1,6 +1,6 @@
 package com.ymcloud.pojo.query;
 
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -18,7 +18,7 @@ public class ProblemSubmissionPageQuery extends PageQuery {
     /**
      * 题目唯一标识
      */
-    @NotNull(message = "题目id不能为空")
+    @NotBlank(message = "题目id不能为空")
     private String problemId;
 
 }
