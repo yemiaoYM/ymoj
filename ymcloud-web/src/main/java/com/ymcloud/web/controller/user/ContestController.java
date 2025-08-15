@@ -79,20 +79,5 @@ public class ContestController {
         return Result.ok(problem);
     }
 
-    /**
-     * 用户获取当前比赛题目提交状态
-     * @param contestId 比赛id
-     * @param displayId 题目展示id
-     * @return 状态
-     */
-    @GetMapping("/problem/submission-status")
-    public Result<JudgeStatus> getContestProblemSubmissionStatus(@RequestParam(value = "contestId") Long contestId,
-                                                                 @RequestParam(value = "displayId") String displayId){
-        log.info("用户获取当前比赛{}题目{}提交状态", contestId, displayId);
-        JudgeStatus status=contestService.getContestProblemSubmissionStatus(contestId,displayId);
-        return Result.ok(status);
-    }
-
-
 
 }

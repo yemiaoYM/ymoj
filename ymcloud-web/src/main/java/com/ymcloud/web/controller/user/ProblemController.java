@@ -1,7 +1,6 @@
 package com.ymcloud.web.controller.user;
 
 import com.ymcloud.common.result.Result;
-import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.PageVO;
 import com.ymcloud.pojo.vo.ProblemVO;

@@ -2,9 +2,11 @@ package com.ymcloud.web.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.exception.contest.ContestException;
 import com.ymcloud.common.exception.contest.ContestNotAccessException;
 import com.ymcloud.common.exception.contest.ContestNotExistException;
@@ -13,12 +15,12 @@ import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.mapper.ContestMapper;
 import com.ymcloud.core.web.mapper.ContestProblemMapper;
+import com.ymcloud.core.web.mapper.LanguageMapper;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
-import com.ymcloud.pojo.entity.Contest;
-import com.ymcloud.pojo.entity.ContestProblem;
-import com.ymcloud.pojo.entity.ContestUser;
+import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ContestPageQuery;
 import com.ymcloud.pojo.vo.*;
@@ -45,7 +47,16 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
     private ContestUserEntityService contestUserEntityService;
 
     @Autowired
-    private ContestProblemMapper contestProblemMapper;
+    private ContestProblemEntityService contestProblemEntityService;
+
+    @Autowired
+    private ProblemEntityService problemEntityService;
+
+    @Autowired
+    private JudgeEntityService judgeEntityService;
+
+    @Autowired
+    private LanguageMapper languageMapper;
 
     /**
      * 获取比赛列表表单 分页查询
@@ -95,10 +106,12 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         }
         //拷贝前端实体
         ContestVO contestVO = BeanUtil.copyProperties(contest, ContestVO.class);
+        //查询当前用户的比赛权限
         if (contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)) {
+            //公开比赛每个人都有权限访问
             contestVO.setAccess(true);
         }else {
-            //查询当前用户的比赛权限
+            //私有比赛需要用户注册报名该比赛
             Long userId = SecurityUtils.getUserId();
             contestVO.setAccess(isAccess(contestId, userId));
             //查询参与人数
@@ -158,6 +171,20 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
     }
 
     /**
+     * 查询比赛题目列表
+     * @param contestId 比赛id
+     * @return 比赛题目列表
+     */
+    @Override
+    public List<ContestProblemTableVO> getContestProblemList(Long contestId) {
+        //检查当前比赛状态
+        Long userId = SecurityUtils.getUserId();
+        Contest contest = validateContest(contestId, userId);
+        //查询比赛题目列表
+        return contestProblemEntityService.getContestProblemList(contest.getId(),userId,contest.getEndTime());
+    }
+
+    /**
      * 查询比赛题目详情
      * @param contestId 比赛id
      * @param displayId 题目展示id
@@ -165,32 +192,50 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
      */
     @Override
     public ProblemVO getContestProblem(Long contestId, String displayId) {
-
-
-
-
-        return null;
+        //检查当前比赛状态
+        Long userId = SecurityUtils.getUserId();
+        Contest contest = validateContest(contestId, userId);
+        //查询比赛题目简单信息
+        ContestProblem contestProblem = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contest.getId())
+                .eq(ContestProblem::getDisplayId, displayId)
+                .one();
+        if (contestProblem == null) {
+            throw new ContestException("该比赛不存在此题目或者已被删除");
+        }
+        //查询比赛题目详细信息
+        Problem problem = problemEntityService.getById(contestProblem.getProblemId());
+        if (problem == null) {
+            throw new ContestException("该比赛不存在此题目或者已被删除");
+        }
+        //拷贝实体
+        ProblemVO problemVO = BeanUtil.copyProperties(problem, ProblemVO.class);
+        //比赛题目优先实现简单信息中的标题和标识
+        problemVO.setProblemId(contestProblem.getDisplayId());
+        problemVO.setTitle(contestProblem.getDisplayTitle());
+        //查询题目的题面样例,将json转化为对象
+        List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
+        problemVO.setProblemCaseList(problemCaseVOList);
+        //查询题目的语言配置
+        List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(LanguageConstants.ABLE, problem.getSource());
+        problemVO.setLanguageList(languageVOList);
+        //查询用户该题目的通过状态
+        boolean isAccepted = judgeEntityService.lambdaQuery()
+                .eq(Judge::getProblemId, problem.getId())
+                .eq(Judge::getUserId, userId)
+                .eq(Judge::getContestId, contest.getId())
+                .eq(Judge::getShare, JudgeStatus.STATUS_ACCEPTED)
+                .exists();
+        problemVO.setAccepted(isAccepted);
+        //返回题目前端实体
+        return problemVO;
     }
 
     /**
-     * 用户获取当前比赛题目提交状态
-     * @param contestId 比赛id
-     * @param displayId 题目展示id
-     * @return 状态
+     * 检验比赛
      */
-    @Override
-    public JudgeStatus getContestProblemSubmissionStatus(Long contestId, String displayId) {
-        return null;
-    }
-
-    /**
-     * 查询比赛题目列表
-     * @param contestId 比赛id
-     * @return 比赛题目列表
-     */
-    @Override
-    public List<ContestProblemTableVO> getContestProblemList(Long contestId) {
-        //查询比赛
+    private Contest validateContest(Long contestId,Long userId) {
+        //先根据比赛id查询
         Contest contest = getById(contestId);
         if(contest==null){
             throw new ContestNotExistException();
@@ -201,16 +246,13 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
             //比赛还未开始
             throw new ContestNotStartException();
         }
-        //获取当前用户信息
-        Long userId = SecurityUtils.getUserId();
-        //比赛不是公共的，需验证用户的权限
+        //如果比赛不是公共的，需验证用户的权限
         if(!contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
             if(!isAccess(contestId, userId)){
                 throw new ContestNotAccessException();
             }
         }
-        //查询比赛题目列表
-        return contestProblemMapper.getContestProblemList(contestId,userId,contest.getEndTime());
+        return contest;
     }
 
     /**

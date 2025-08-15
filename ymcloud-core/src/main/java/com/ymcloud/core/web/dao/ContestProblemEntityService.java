@@ -2,6 +2,11 @@ package com.ymcloud.core.web.dao;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.ContestProblem;
+import com.ymcloud.pojo.vo.ContestProblemTableVO;
+import org.apache.ibatis.annotations.Param;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.core.web.dao
@@ -11,4 +16,16 @@ import com.ymcloud.pojo.entity.ContestProblem;
  * @Description: ContestProblemEntityService
  */
 public interface ContestProblemEntityService extends IService<ContestProblem> {
+
+    /**
+     * 获取比赛题目列表
+     * @param contestId 比赛id
+     * @param userId 用户id
+     * @param endTime 比赛结束时间
+     * @return 比赛题目列表
+     */
+    List<ContestProblemTableVO> getContestProblemList(@Param("contestId") Long contestId,
+                                                      @Param("userId") Long userId,
+                                                      @Param("endTime") LocalDateTime endTime);
+
 }

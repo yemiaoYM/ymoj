@@ -30,6 +30,4 @@ public interface ContestProblemMapper extends BaseMapper<ContestProblem> {
                                                       @Param("userId") Long userId,
                                                       @Param("endTime") LocalDateTime endTime);
 
-
-
 }

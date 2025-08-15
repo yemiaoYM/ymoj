@@ -47,14 +47,6 @@ public interface ContestService extends IService<Contest> {
     ProblemVO getContestProblem(Long contestId, String displayId);
 
     /**
-     * 用户获取当前比赛题目提交状态
-     * @param contestId 比赛id
-     * @param displayId 题目展示id
-     * @return 状态
-     */
-    JudgeStatus getContestProblemSubmissionStatus(Long contestId, String displayId);
-
-    /**
      * 查询比赛题目列表
      * @param contestId 比赛id
      * @return 比赛题目列表

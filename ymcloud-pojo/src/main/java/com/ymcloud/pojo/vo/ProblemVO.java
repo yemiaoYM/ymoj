@@ -69,7 +69,6 @@ public class ProblemVO implements Serializable {
      * 题面样例
      */
     private List<ProblemCaseVO> problemCaseList;
-
     /**
      * 编程语言选项
      */

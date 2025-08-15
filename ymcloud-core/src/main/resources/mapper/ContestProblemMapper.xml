@@ -21,8 +21,7 @@
             AND #{endTime}>=j.created_time
         WHERE cp.contest_id = #{contestId}
         GROUP BY cp.id, cp.display_id, cp.contest_id, cp.problem_id, cp.display_title, cp.color
-        ORDER BY cp.display_id asc;
+        ORDER BY cp.display_id;
     </select>
-
 
 </mapper>
