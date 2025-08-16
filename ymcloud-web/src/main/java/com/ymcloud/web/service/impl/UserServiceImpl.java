@@ -5,18 +5,17 @@ import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.ymcloud.common.constant.CacheConstants;
-import com.ymcloud.common.constant.FileConstants;
-import com.ymcloud.common.constant.HttpStatus;
-import com.ymcloud.common.constant.UserConstants;
+import com.ymcloud.common.constant.*;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.exception.file.FileEmptyException;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.exception.file.FileTypeNotMatchException;
 import com.ymcloud.common.exception.user.*;
 import com.ymcloud.common.utils.IpUtils;
+import com.ymcloud.common.utils.MailUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.context.AuthenticationContextHolder;
 import com.ymcloud.core.security.domain.LoginUser;
@@ -51,6 +50,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @PackageName: com.ymcloud.web.service.impl
@@ -72,10 +72,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private RedisCache redisCache;
 
     @Autowired
-    private FileService fileService;
+    private MailUtils mailUtils;
 
     @Autowired
-    private UserEntityService userEntityService;
+    private FileService fileService;
 
     @Autowired
     private JudgeEntityService judgeEntityService;
@@ -118,7 +118,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setId(userId);
         user.setLoginDate(LocalDateTime.now());
         user.setLoginIp(IpUtils.getIpAddr());
-        userEntityService.updateById(user);
+        updateById(user);
         //5.根据用户信息生成token
         return tokenService.createToken(loginUser);
     }
@@ -141,11 +141,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new UserException("两次密码不同，请检查输入");
         }
         //2.2用户名也是唯一字段，查询是否已存在
-        if(userEntityService.lambdaQuery().eq(User::getUsername,username).exists()){
+        if(lambdaQuery().eq(User::getUsername,username).exists()){
             throw new UserException("该用户名已被注册");
         }
         //2.3校验email是否被注册过
-        if(userEntityService.lambdaQuery().eq(User::getEmail,email).exists()){
+        if(lambdaQuery().eq(User::getEmail,email).exists()){
             throw new UserException("该邮箱已被其他用户使用");
         }
         //3.生成加密密码
@@ -158,10 +158,47 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         //必须设置默认个性签名
         user.setSignature("<p>这个家伙很懒，什么也没写…<p>");
         //5.插入新用户
-        boolean save = userEntityService.save(user);
+        boolean save = save(user);
         if(!save){
             throw new UserException("系统注册失败，请稍后再试");
         }
+    }
+
+    /**
+     * 获取忘记密码用户的邮箱验证码
+     * @param forgetPasswordDTO 请求体
+     * @return 验证码的唯一标识
+     */
+    @Override
+    public String getForgetCode(ForgetPasswordDTO forgetPasswordDTO) {
+        String username = forgetPasswordDTO.getUsername();
+        String email = forgetPasswordDTO.getEmail();
+        //1分钟内禁止重复发送邮箱
+        String reSendKey = CacheConstants.REPEAT_SUBMIT_KEY + username;
+        if (redisCache.hasKey(reSendKey)) {
+            throw new UserException("验证码已发送，请稍后再试");
+        }
+        //先检查用户信息
+        User user = validateUsername(username);
+        //检查该用户是否绑定此邮箱
+        if (!StrUtil.equals(email, user.getEmail())) {
+            throw new UserException("该用户与邮箱绑定不一致，请检查邮箱");
+        }
+        //生成验证码和唯一标识
+        String uuid = IdUtil.simpleUUID();
+        String code = RandomUtil.randomString(6);
+        //将code缓存到redis中
+        String verifyKey = CacheConstants.CAPTCHA_CODE_KEY + uuid;
+        redisCache.setCacheObject(verifyKey, code, 5, TimeUnit.MINUTES);
+        //将code发送到用户邮箱
+        try {
+            mailUtils.sendCodeMail(CollectionUtil.newArrayList(user.getEmail()), code);
+        }catch (Exception e){
+            throw new UserException("验证码发送失败，请稍后重试");
+        }
+        //缓存重复提交key
+        redisCache.setCacheObject(reSendKey, uuid, 1, TimeUnit.MINUTES);
+        return uuid;
     }
 
     /**
@@ -218,7 +255,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User updateUser=new User();
         updateUser.setId(user.getId());
         updateUser.setPassword(encodePassword);
-        boolean b = userEntityService.updateById(updateUser);
+        boolean b = updateById(updateUser);
         if(!b){
             throw new UserException("修改密码失败，请稍后再试");
         }
@@ -248,14 +285,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new UserPasswordNotMatchException();
         }
         //2.判断新邮箱是否已被其他用户使用
-        if (userEntityService.lambdaQuery().eq(User::getEmail,newEmail).exists()) {
+        if (lambdaQuery().eq(User::getEmail,newEmail).exists()) {
             throw new UserException("当前邮箱已被其他用户使用");
         }
         //3.更新邮箱
         User updateUser=new User();
         updateUser.setId(user.getId());
         updateUser.setEmail(newEmail);
-        boolean b = userEntityService.updateById(updateUser);
+        boolean b = updateById(updateUser);
         if(!b){
             throw new UserException("修改邮箱失败，请稍后再试");
         }
@@ -282,7 +319,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         updateUser.setBlog(userProfileDTO.getBlog());
         updateUser.setSex(userProfileDTO.getSex());
         //3.更新用户基本信息
-        boolean b = userEntityService.updateById(updateUser);
+        boolean b = updateById(updateUser);
         if(!b){
             throw new UserException("修改用户基本信息失败，请稍后再试");
         }
@@ -390,7 +427,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User updateUser=new User();
         updateUser.setId(user.getId());
         updateUser.setAvatar(url);
-        boolean b = userEntityService.updateById(updateUser);
+        boolean b = updateById(updateUser);
         if(!b){
             throw new UserException("用户头像更新失败，请稍后再试");
         }
@@ -416,7 +453,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new UserException("用户名参数或格式错误", HttpStatus.BAD_REQUEST);
         }
         //2.查询用户基本信息
-        User profile = userEntityService.lambdaQuery().eq(User::getUsername, username).one();
+        User profile = lambdaQuery().eq(User::getUsername, username).one();
         //3.校验用户状态
         if(profile==null||profile.getStatus()== UserStatus.DISABLE){
             throw new UserException("用户不存在或者已停用");

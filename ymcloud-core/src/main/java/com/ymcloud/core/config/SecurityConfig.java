@@ -78,7 +78,7 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable);
         // 注解标记允许匿名访问的url
         http.authorizeHttpRequests(request->{
-           request.requestMatchers("/login","/register","/captchaImage").permitAll()
+           request.requestMatchers("/login","/register","/captchaImage","/forget-code").permitAll()
                    .requestMatchers("/public/**").permitAll()
                    .requestMatchers("/files/public/**").permitAll()
                    .anyRequest().authenticated();

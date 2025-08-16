@@ -1,15 +1,14 @@
 package com.ymcloud.web.controller.common;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.pojo.dto.ForgetPasswordDTO;
 import com.ymcloud.pojo.dto.LoginDTO;
 import com.ymcloud.pojo.dto.RegisterDTO;
 import com.ymcloud.web.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @PackageName: com.ymcloud.web.controller.user
@@ -46,6 +45,18 @@ public class LoginController {
     public Result<?> register(@Validated @RequestBody RegisterDTO registerDTO) {
         userService.register(registerDTO);
         return Result.ok().msg("注册成功");
+    }
+
+    /**
+     * 获取忘记密码用户的邮箱验证码
+     * @param forgetPasswordDTO 请求体
+     * @return 验证码的唯一标识
+     */
+    @PostMapping("/forget-code")
+    public Result<String> getForgetCode(@Validated @RequestBody ForgetPasswordDTO forgetPasswordDTO) {
+        log.info("用户：{}，电子邮箱为：{}，忘记密码",forgetPasswordDTO.getUsername(),forgetPasswordDTO.getEmail());
+        String uuid=userService.getForgetCode(forgetPasswordDTO);
+        return Result.ok(uuid).msg("发送成功，有效期为5分钟，请及时验证");
     }
 
 }

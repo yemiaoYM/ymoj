@@ -50,8 +50,6 @@ public class Judge {
     private Long contestId;
     @Schema(description="比赛题目ID")
     private Long contestProblemId;
-    @Schema(description="团队ID，普通提交为 NULL")
-    private Long groupId;
     @Schema(description="执行判题的机器标识")
     private String judgeServer;
     @Schema(description="提交用户IP")

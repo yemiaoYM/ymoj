@@ -44,6 +44,7 @@
         <jwt.version>0.9.1</jwt.version>
         <spring.security.version>6.5.1</spring.security.version>
         <mybatis-plus.version>3.5.10.1</mybatis-plus.version>
+        <javax.mail.version>1.6.2</javax.mail.version>
     </properties>
 
     <!--父工程只控制版本统一，子工程还需要自己引入-->
@@ -113,6 +114,12 @@
                 <groupId>com.github.xiaoymin</groupId>
                 <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
                 <version>${knife4j.version}</version>
+            </dependency>
+            <!--mail-->
+            <dependency>
+                <groupId>com.sun.mail</groupId>
+                <artifactId>javax.mail</artifactId>
+                <version>${javax.mail.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

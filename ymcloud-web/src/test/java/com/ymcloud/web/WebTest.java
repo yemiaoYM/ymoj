@@ -1,9 +1,11 @@
 package com.ymcloud.web;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.RuntimeUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
+import com.ymcloud.common.utils.MailUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.common.utils.ShortSnowflake;
 import com.ymcloud.core.web.dao.JudgeEntityService;
@@ -21,7 +23,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.io.File;
+import java.security.GeneralSecurityException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -48,6 +52,17 @@ public class WebTest {
 
     @Autowired
     private JudgeEntityService judgeEntityService;
+
+    @Autowired
+    private MailUtils mailUtils;
+
+    @Test
+    public void testMail(){
+        ArrayList<String> tos = new ArrayList<>();
+        tos.add("2458544202@qq.com");
+        String code= RandomUtil.randomString(4);
+        mailUtils.sendCodeMail(tos,code);
+    }
 
     @Test
     public void testUserJudgeStatus(){

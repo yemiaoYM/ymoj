@@ -14,7 +14,12 @@ import java.io.Serializable;
 @Data
 public class CaptchaVO implements Serializable {
     private static final long serialVersionUID = 1L;
-
+    /**
+     * 唯一标识
+     */
     private String uuid;
+    /**
+     * 验证码图片（Base64）
+     */
     private String image;
 }

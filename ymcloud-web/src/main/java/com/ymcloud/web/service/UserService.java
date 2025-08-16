@@ -66,4 +66,11 @@ public interface UserService extends IService<User> {
      * @param file 头像文件
      */
     void uploadAvatar(MultipartFile file);
+
+    /**
+     * 获取忘记密码用户的邮箱验证码
+     * @param forgetPasswordDTO 请求体
+     * @return 验证码的唯一标识
+     */
+    String getForgetCode(ForgetPasswordDTO forgetPasswordDTO);
 }

@@ -6,7 +6,6 @@ import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
-import com.ymcloud.common.constant.JudgeConstants;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.exception.contest.*;
 import com.ymcloud.core.security.utils.SecurityUtils;
@@ -310,7 +309,6 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
             return vo;
         });
     }
-
 
     /**
      * 检验比赛
