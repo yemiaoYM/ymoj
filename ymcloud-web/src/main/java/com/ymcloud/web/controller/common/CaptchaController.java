@@ -30,8 +30,6 @@ public class CaptchaController {
 
     /**
      * 生成验证码
-     * @return
-     * @throws CaptchaGenerateException
      */
     @GetMapping("/captchaImage")
     public Result<CaptchaVO> captchaImage() throws CaptchaGenerateException {

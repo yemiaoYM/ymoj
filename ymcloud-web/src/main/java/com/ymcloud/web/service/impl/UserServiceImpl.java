@@ -23,7 +23,6 @@ import com.ymcloud.core.security.service.TokenService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
-import com.ymcloud.core.web.dao.UserEntityService;
 import com.ymcloud.core.web.mapper.UserMapper;
 import com.ymcloud.pojo.dto.*;
 import com.ymcloud.pojo.entity.File;
@@ -174,9 +173,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String username = forgetPasswordDTO.getUsername();
         String email = forgetPasswordDTO.getEmail();
         //1分钟内禁止重复发送邮箱
-        String reSendKey = CacheConstants.REPEAT_SUBMIT_KEY + username;
-        if (redisCache.hasKey(reSendKey)) {
-            throw new UserException("验证码已发送，请稍后再试");
+        String reSendKey = CacheConstants.EMAIL_CODE_REPEAT_SUBMIT_KEY + username;
+        String reSendMsg = redisCache.getCacheObject(reSendKey);
+        if (reSendMsg != null) {
+            throw new UserException(reSendMsg);
         }
         //先检查用户信息
         User user = validateUsername(username);
@@ -187,9 +187,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         //生成验证码和唯一标识
         String uuid = IdUtil.simpleUUID();
         String code = RandomUtil.randomString(6);
+        Map<String,Object> payload=new HashMap<>();
+        //后期需要检验用户
+        payload.put("username",user.getUsername());
+        payload.put("code",code);
+        payload.put("retryCount",0);
         //将code缓存到redis中
         String verifyKey = CacheConstants.CAPTCHA_CODE_KEY + uuid;
-        redisCache.setCacheObject(verifyKey, code, 5, TimeUnit.MINUTES);
+        redisCache.setCacheObject(verifyKey, payload, 5, TimeUnit.MINUTES);
         //将code发送到用户邮箱
         try {
             mailUtils.sendCodeMail(CollectionUtil.newArrayList(user.getEmail()), code);
@@ -197,8 +202,66 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new UserException("验证码发送失败，请稍后重试");
         }
         //缓存重复提交key
-        redisCache.setCacheObject(reSendKey, uuid, 1, TimeUnit.MINUTES);
+        redisCache.setCacheObject(reSendKey, "已发送，注意查收", 1, TimeUnit.MINUTES);
         return uuid;
+    }
+
+    /**
+     * 通过忘记密码来重置密码
+     * @param resetPasswordDTO 请求体
+     */
+    @Override
+    public void forgetPassword(ResetPasswordDTO resetPasswordDTO) {
+        String username = resetPasswordDTO.getUsername();
+        String password = resetPasswordDTO.getPassword();
+        String rePassword = resetPasswordDTO.getRePassword();
+        String code = resetPasswordDTO.getCode();
+        String uuid = resetPasswordDTO.getUuid();
+        //校验参数
+        if (!StrUtil.equals(password, rePassword)) {
+            throw new UserException("两次密码不同，请检查输入");
+        }
+        //获取缓存验证码
+        String verifyKey = CacheConstants.CAPTCHA_CODE_KEY + uuid;
+        Map<String, Object> payload = redisCache.getCacheObject(verifyKey);
+        if (payload == null) {
+            throw new CaptchaExpireException();
+        }
+        //校验是否为当前用户
+        if (!username.equals(payload.get("username"))) {
+            throw new UserException("用户名与验证码不一致");
+        }
+        //获取当前用户的缓存试错次数
+        Integer retryCount = (Integer) payload.get("retryCount");
+        //超过最大试错次数
+        if (retryCount >= 3) {
+            throw new UserException("错误次数超过3次请10分钟后再试");
+        }
+        //获取验证码
+        String captcha = (String) payload.get("code");
+        //校验邮箱验证码
+        String reSendKey = CacheConstants.EMAIL_CODE_REPEAT_SUBMIT_KEY + username;
+        if (!code.equalsIgnoreCase(captcha)) {
+            payload.put("retryCount", retryCount + 1);
+            redisCache.setCacheObject(verifyKey, payload, 10, TimeUnit.MINUTES);
+            redisCache.setCacheObject(reSendKey,"错误次数超过3次请10分钟后再试", 10, TimeUnit.MINUTES);
+            throw new CaptchaException();
+        } else {
+            //如果正确则试错次数清零
+            redisCache.deleteObject(verifyKey);
+            redisCache.deleteObject(reSendKey);
+            //防止出现一些问题，这里先验证拿到用户再进行更新用户
+            User user = validateUsername(username);
+            String encodePassword = SecurityUtils.encryptPassword(password);
+            //只更新密码字段，防止无意中覆盖了其他字段
+            boolean success = lambdaUpdate()
+                    .eq(User::getId, user.getId())
+                    .set(User::getPassword, encodePassword)
+                    .update();
+            if (!success) {
+                throw new UserException("重置密码失败，请稍后再试");
+            }
+        }
     }
 
     /**

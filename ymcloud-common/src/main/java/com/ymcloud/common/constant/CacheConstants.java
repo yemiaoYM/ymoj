@@ -28,6 +28,11 @@ public class CacheConstants {
     public static final String JUDGE_KEY = "judge:";
 
     /**
+     * 邮箱验证码防重提交 redis key
+     */
+    public static final String EMAIL_CODE_REPEAT_SUBMIT_KEY = "email_code_repeat_submit:";
+
+    /**
      * 登录用户 redis key
      */
     public static final String LOGIN_TOKEN_KEY = "login_tokens:";

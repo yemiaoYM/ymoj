@@ -68,9 +68,6 @@ public class SecurityConfig {
 
     /**
      * SpringSecurity安全链配置
-     * @param http
-     * @return
-     * @throws Exception
      */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -78,7 +75,7 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable);
         // 注解标记允许匿名访问的url
         http.authorizeHttpRequests(request->{
-           request.requestMatchers("/login","/register","/captchaImage","/forget-code").permitAll()
+           request.requestMatchers("/login","/register","/captchaImage","/forget-code","/forget-password").permitAll()
                    .requestMatchers("/public/**").permitAll()
                    .requestMatchers("/files/public/**").permitAll()
                    .anyRequest().authenticated();

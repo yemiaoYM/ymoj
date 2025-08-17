@@ -73,4 +73,11 @@ public interface UserService extends IService<User> {
      * @return 验证码的唯一标识
      */
     String getForgetCode(ForgetPasswordDTO forgetPasswordDTO);
+
+    /**
+     * 通过忘记密码来重置密码
+     * @param resetPasswordDTO 请求体
+     */
+    void forgetPassword(ResetPasswordDTO resetPasswordDTO);
+
 }

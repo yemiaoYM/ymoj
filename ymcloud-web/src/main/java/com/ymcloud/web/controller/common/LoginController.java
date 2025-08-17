@@ -4,6 +4,7 @@ import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.ForgetPasswordDTO;
 import com.ymcloud.pojo.dto.LoginDTO;
 import com.ymcloud.pojo.dto.RegisterDTO;
+import com.ymcloud.pojo.dto.ResetPasswordDTO;
 import com.ymcloud.web.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,17 @@ public class LoginController {
         log.info("用户：{}，电子邮箱为：{}，忘记密码",forgetPasswordDTO.getUsername(),forgetPasswordDTO.getEmail());
         String uuid=userService.getForgetCode(forgetPasswordDTO);
         return Result.ok(uuid).msg("发送成功，有效期为5分钟，请及时验证");
+    }
+
+    /**
+     * 通过忘记密码来重置密码
+     * @param resetPasswordDTO 请求体
+     */
+    @PutMapping("/forget-password")
+    public Result<?> forgetPassword(@Validated @RequestBody ResetPasswordDTO resetPasswordDTO) {
+        log.info("用户：{}通过忘记密码来重置密码",resetPasswordDTO.getUsername());
+        userService.forgetPassword(resetPasswordDTO);
+        return Result.ok().msg("重置密码成功请返回进行登录");
     }
 
 }
