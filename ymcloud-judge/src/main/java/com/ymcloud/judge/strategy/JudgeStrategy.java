@@ -123,7 +123,8 @@ public class JudgeStrategy {
                 if (!b) {
                     //答案不正确直接wa
                     judgeCase.setStatus(JudgeStatus.STATUS_WRONG_ANSWER);
-                    judgeCase.setErrorMessage(FileUtils.readFileString(userOutFile));
+                    //对于错误信息有待完善处理
+                    //judgeCase.setErrorMessage(FileUtils.readFileString(userOutFile));
                 } else if (time > request.getTimeLimit()) {
                     //判断是否超时
                     judgeCase.setStatus(JudgeStatus.STATUS_TIME_LIMIT_EXCEEDED);

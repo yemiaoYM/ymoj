@@ -3,6 +3,7 @@ package com.ymcloud.web.controller.user;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.query.ContestProblemSubmissionPageQuery;
+import com.ymcloud.pojo.query.ContestRankPageQuery;
 import com.ymcloud.pojo.query.ContestSubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.ContestService;
@@ -101,6 +102,17 @@ public class ContestController {
         return Result.ok(list);
     }
 
+    /**
+     * 获取比赛排名列表
+     * @param query 查询请求题
+     * @return 比赛排名列表
+     */
+    @GetMapping("/rank-list")
+    public Result<ContestRankTableVO> rankList(@Validated ContestRankPageQuery query) {
+        log.info("查询比赛排名列表：{}",query);
+        ContestRankTableVO tableVO=contestService.getContestRankList(query);
+        return Result.ok(tableVO);
+    }
 
 
 

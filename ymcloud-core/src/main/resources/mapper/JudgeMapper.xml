@@ -27,4 +27,25 @@
         GROUP BY display_id
     </select>
 
+    <select id="getContestSubmissionRecordList" resultType="com.ymcloud.pojo.vo.ContestSubmissionRecord">
+        SELECT
+        u.username,
+        u.school,
+        j.display_id,
+        j.status,
+        j.score,
+        j.created_time as submitTime
+        FROM user u
+        JOIN judge j ON u.id=j.user_id
+        <where>
+            j.contest_id=#{contestId}
+            AND #{endTime} >= j.created_time
+            <if test="keyword!=null and keyword.trim()!=''">
+                AND (u.username LIKE CONCAT('%',#{keyword},'%') OR u.school LIKE CONCAT('%',#{keyword},'%'))
+            </if>
+        </where>
+        ORDER BY u.username, j.display_id, j.created_time
+    </select>
+
+
 </mapper>

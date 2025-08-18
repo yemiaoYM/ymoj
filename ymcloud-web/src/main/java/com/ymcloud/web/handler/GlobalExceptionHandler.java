@@ -1,5 +1,6 @@
 package com.ymcloud.web.handler;
 
+import cn.hutool.core.util.StrUtil;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.result.Result;
@@ -70,7 +71,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BindException.class)
     public Result<?> handleBindException(BindException e) {
         String message = e.getAllErrors().get(0).getDefaultMessage();
-        log.warn("参数绑定失败：{}",message);
+        log.warn("参数绑定失败：{}", message);
+        //防止返回给前端太长的详细错误
+        if (StrUtil.isNotBlank(message) && message.length() > 20) {
+            message = "参数格式错误";
+        }
         return Result.fail().code(HttpStatus.BAD_REQUEST).msg(message);
     }
 

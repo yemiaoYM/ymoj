@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.JudgeMapper;
 import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.vo.ContestSubmissionRecord;
 import com.ymcloud.pojo.vo.ProblemCountVO;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -27,6 +29,18 @@ public class JudgeEntityServiceImpl extends ServiceImpl<JudgeMapper, Judge> impl
     @Override
     public List<ProblemCountVO> getProblemListCount(List<String> problemIds){
         return baseMapper.getProblemListCount(problemIds);
+    }
+
+    /**
+     * 查询比赛提交记录列表
+     * @param contestId 比赛id
+     * @param endTime 比赛结束时间
+     * @param keyword 用户名称或者学校名称
+     * @return 赛提交记录列表
+     */
+    @Override
+    public List<ContestSubmissionRecord> getContestSubmissionRecordList(Long contestId, LocalDateTime endTime, String keyword) {
+        return baseMapper.getContestSubmissionRecordList(contestId,endTime,keyword);
     }
 
 }

@@ -14,6 +14,7 @@ import com.ymcloud.core.web.mapper.UserAcproblemMapper;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.ContestProblemTableVO;
+import com.ymcloud.pojo.vo.ContestSubmissionRecord;
 import com.ymcloud.pojo.vo.ProblemVO;
 import com.ymcloud.pojo.vo.UserAcRankVO;
 import com.ymcloud.web.service.ContestService;
@@ -66,13 +67,15 @@ public class WebTest {
 
     @Test
     public void testUserJudgeStatus(){
-        boolean exists = judgeEntityService.lambdaQuery()
-                .eq(Judge::getProblemId, 1L)
-                .eq(Judge::getUserId, 2L)
-                .eq(Judge::getContestId, 0L)
-                .eq(Judge::getShare, JudgeStatus.STATUS_ACCEPTED)
-                .exists();
-        System.out.println(exists);
+//        boolean exists = judgeEntityService.lambdaQuery()
+//                .eq(Judge::getProblemId, 1L)
+//                .eq(Judge::getUserId, 2L)
+//                .eq(Judge::getContestId, 0L)
+//                .eq(Judge::getShare, JudgeStatus.STATUS_ACCEPTED)
+//                .exists();
+//        System.out.println(exists);
+        List<ContestSubmissionRecord> contestSubmissionRecordList = judgeEntityService.getContestSubmissionRecordList(1L, LocalDateTime.of(2025, 8, 10, 20, 0), null);
+        contestSubmissionRecordList.forEach(System.out::println);
     }
 
     @Test
