@@ -18,6 +18,10 @@ public class JudgeMessage {
      */
     private Long submissionId;
     /**
+     * 比赛id
+     */
+    private Long contestId;
+    /**
      * 题目id
      */
     private Long problemId;

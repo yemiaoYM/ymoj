@@ -161,9 +161,6 @@ public class JudgeRun {
                 FileConstants.DIR_TMP + "/"
                 + "submission_" + message.getSubmissionId();
         try{
-            //先更新评测状态
-            judge.setStatus(JudgeStatus.STATUS_JUDGING);
-            judgeEntityService.updateById(judge);
             //获取语言配置
             Language language = message.getLanguageConfig();
             //创建用户代码文件并写入
@@ -183,6 +180,9 @@ public class JudgeRun {
             boolean compile = true;
             //判断是否需要编译
             if(language.getType().equals(LanguageConstants.COMPILE)){
+                //先更新编译状态
+                judge.setStatus(JudgeStatus.STATUS_COMPILING);
+                judgeEntityService.updateById(judge);
                 //需要编译
                 JudgeResponse response=judgeStrategy.compile(request);
                 if(StrUtil.isNotBlank(response.getErrorMessage())){
@@ -195,6 +195,9 @@ public class JudgeRun {
             }
             //不需要编译或者编译成功
             if(compile) {
+                //进行评测
+                judge.setStatus(JudgeStatus.STATUS_JUDGING);
+                judgeEntityService.updateById(judge);
                 //c,c++为默认一倍时间和空间，其他语言两倍
                 if (!language.getFileName().endsWith(".cpp") || !language.getFileName().endsWith(".c")) {
                     request.setTimeLimit(message.getTimeLimit() * 2);
@@ -247,7 +250,8 @@ public class JudgeRun {
                     RabbitMQConstants.FILE_CLEAN_ROUTING_KEY,
                     submissionDir);
             //如果通过则更新用户ac表
-            if(judge.getStatus()==JudgeStatus.STATUS_ACCEPTED){
+            //如果为比赛则不记录
+            if (judge.getContestId() > 0 && judge.getStatus() == JudgeStatus.STATUS_ACCEPTED) {
                 rabbitTemplate.convertAndSend(
                         RabbitMQConstants.JUDGE_EXCHANGE,
                         RabbitMQConstants.JUDGE_AC_UPDATE_ROUTING_KEY,

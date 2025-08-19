@@ -2,6 +2,7 @@ package com.ymcloud.core.web.dao;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.ContestProblem;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.vo.ContestProblemTableVO;
 import org.apache.ibatis.annotations.Param;
 
@@ -24,8 +25,6 @@ public interface ContestProblemEntityService extends IService<ContestProblem> {
      * @param endTime 比赛结束时间
      * @return 比赛题目列表
      */
-    List<ContestProblemTableVO> getContestProblemList(@Param("contestId") Long contestId,
-                                                      @Param("userId") Long userId,
-                                                      @Param("endTime") LocalDateTime endTime);
+    List<ContestProblemTableVO> getContestProblemList(Long contestId, Long userId, LocalDateTime endTime);
 
 }

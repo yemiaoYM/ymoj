@@ -5,6 +5,10 @@ import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.*;
 import com.ymcloud.common.exception.ServiceException;
+import com.ymcloud.common.exception.contest.ContestNotAccessException;
+import com.ymcloud.common.exception.contest.ContestNotExistException;
+import com.ymcloud.common.exception.contest.ContestNotStartException;
+import com.ymcloud.common.exception.contest.ContestProblemNotExistException;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
@@ -12,25 +16,21 @@ import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.common.utils.ShortSnowflake;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.core.web.dao.JudgeEntityService;
-import com.ymcloud.core.web.dao.LanguageEntityService;
-import com.ymcloud.core.web.dao.ProblemEntityService;
+import com.ymcloud.core.web.dao.*;
 import com.ymcloud.core.web.mapper.JudgeMapper;
 import com.ymcloud.judge.domain.JudgeMessage;
 import com.ymcloud.judge.domain.TestJudge;
 import com.ymcloud.judge.service.JudgeService;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
-import com.ymcloud.pojo.entity.Judge;
-import com.ymcloud.pojo.entity.Language;
-import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.JudgeResultVO;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -58,6 +58,15 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
     @Autowired
     private LanguageEntityService languageEntityService;
 
+    @Autowired
+    private ContestEntityService contestEntityService;
+
+    @Autowired
+    private ContestProblemEntityService contestProblemEntityService;
+
+    @Autowired
+    private ContestUserEntityService contestUserEntityService;
+
     /**
      * 提交评测
      * @param judgeDTO 评测请求
@@ -65,16 +74,16 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
      */
     @Override
     public Long submitJudge(JudgeDTO judgeDTO) {
+        //判断是否为比赛提交
+        if(judgeDTO.getIsContest()){
+            return contestJudge(judgeDTO);
+        }
         //获取当前用户
         User user = SecurityUtils.getUser();
         //防止重复提交和提交太快
         String key= CacheConstants.REPEAT_SUBMIT_KEY + user.getUsername();
         if (redisCache.hasKey(key)) {
             throw new ServiceException("提交太快，稍等一下再提交");
-        }
-        //判断是否为比赛提交
-        if(judgeDTO.getIsContest()){
-            throw new ServiceException("暂不支持比赛提交");
         }
         //查询题目
         String problemId = judgeDTO.getProblemId();
@@ -85,14 +94,15 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         }
         //判断题目的权限
         if(problem.getVisibility() == ProblemConstants.CONTEST_PROBLEM){
-            throw new ServiceException("暂不支持比赛提交");
+            throw new JudgeException("请从比赛官网进行提交评测");
         }
         //私有题目暂只支持题目创建者提交
         if(problem.getVisibility() == ProblemConstants.PRIVATE && !ObjectUtil.equals(user.getId(), problem.getAuthorId())){
             throw new ProblemPermissionException();
         }
         //再查询可用语言
-        Language language = languageEntityService.lambdaQuery().eq(Language::getName, judgeDTO.getLanguage())
+        Language language = languageEntityService.lambdaQuery()
+                .eq(Language::getName, judgeDTO.getLanguage())
                 .eq(Language::getOj, problem.getSource())
                 .eq(Language::getStatus, LanguageConstants.ABLE)
                 .one();
@@ -112,7 +122,7 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         submission.setCode(judgeDTO.getCode());
         submission.setCodeLength(judgeDTO.getCode().length());
         submission.setJudgeServer(JudgeConstants.LOCAL_JUDGE_SERVER);
-        //这里重新再获取提交id，防止用户异地登录多设备提交，后续添加控制提交ip功能
+        //这里重新再获取提交ip
         submission.setIp(IpUtils.getIpAddr());
         //向数据库中保存评测记录
         boolean save = judgeEntityService.save(submission);
@@ -140,6 +150,109 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
     }
 
     /**
+     * 比赛提交
+     * @param judgeDTO 评测请求体
+     * @return 提交id
+     */
+    private Long contestJudge(JudgeDTO judgeDTO){
+        //校验比赛id
+        Long contestId = judgeDTO.getContestId();
+        if (contestId == null || contestId <= 0) {
+            throw new JudgeException("比赛id不能为空或参数格式错误", HttpStatus.BAD_REQUEST);
+        }
+        //获取当前用户
+        User user = SecurityUtils.getUser();
+        //防止重复提交和提交太快
+        String key= CacheConstants.REPEAT_SUBMIT_KEY + user.getUsername();
+        if (redisCache.hasKey(key)) {
+            throw new ServiceException("提交太快，稍等一下再提交");
+        }
+        //校验比赛状态
+        Contest contest = contestEntityService.getById(contestId);
+        if(contest==null){
+            throw new ContestNotExistException();
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if(now.isBefore(contest.getStartTime())){
+            throw new ContestNotStartException();
+        }
+        //如果为私有赛则验证权限
+        if(!contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
+            boolean access = contestUserEntityService.lambdaQuery()
+                    .eq(ContestUser::getContestId, contestId)
+                    .eq(ContestUser::getUserId, user.getId())
+                    .exists();
+            if(!access){
+                throw new ContestNotAccessException();
+            }
+        }
+        //查询比赛题目
+        String displayId = judgeDTO.getProblemId();
+        ContestProblem contestProblem = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .eq(ContestProblem::getDisplayId, displayId)
+                .one();
+        if(contestProblem == null){
+            throw new ContestProblemNotExistException();
+        }
+        //再查询题目详细信息
+        Problem problem = problemEntityService.getById(contestProblem.getProblemId());
+        if(problem == null){
+            throw new ProblemNotExistException();
+        }
+        //查询题目的语言配置
+        Language language = languageEntityService.lambdaQuery()
+                .eq(Language::getName, judgeDTO.getLanguage())
+                .eq(Language::getOj, problem.getSource())
+                .eq(Language::getStatus, LanguageConstants.ABLE)
+                .one();
+        if(language == null){
+            throw new JudgeException("该题目不支持此编程语言");
+        }
+        //创建提交记录实体
+        Judge submission = new Judge();
+        submission.setContestId(contest.getId());
+        submission.setContestProblemId(contestProblem.getId());
+        submission.setProblemId(problem.getId());
+        submission.setProblemTitle(contestProblem.getDisplayTitle());
+        submission.setDisplayId(contestProblem.getDisplayId());
+        submission.setUserId(user.getId());
+        submission.setUsername(user.getUsername());
+        submission.setLanguage(language.getName());
+        submission.setCode(judgeDTO.getCode());
+        submission.setCodeLength(judgeDTO.getCode().length());
+        //评测状态为评测排队中
+        submission.setStatus(JudgeStatus.STATUS_PENDING);
+        //这里重新再获取提交ip
+        submission.setIp(IpUtils.getIpAddr());
+        submission.setJudgeServer(JudgeConstants.LOCAL_JUDGE_SERVER);
+        //向数据库中保存评测记录
+        boolean success = judgeEntityService.save(submission);
+        if(!success){
+            throw new JudgeException("提交失败，请稍后再试");
+        }
+        //构造评测实体，将实体交给评测队列，等待评测
+        JudgeMessage message = BeanUtil.copyProperties(submission, JudgeMessage.class);
+        message.setSubmissionId(submission.getId());
+        message.setTimeLimit(problem.getTimeLimit());
+        message.setMemoryLimit(problem.getMemoryLimit());
+        message.setLanguageConfig(language);
+        //以赛制为准
+        message.setMode(contest.getMode());
+        message.setStrategy(JudgeConstants.DEFAULT_JUDGE);
+        //发送消息
+        //比赛提交立即进入队列，不进行延迟缓冲
+        rabbitTemplate.convertAndSend(
+                RabbitMQConstants.JUDGE_EXCHANGE,
+                RabbitMQConstants.JUDGE_ROUTING_KEY,
+                message);
+        //缓存提交
+        redisCache.setCacheObject(key, submission.getId(), 10, TimeUnit.SECONDS);
+        //获取当前的评测id，用于前端请求当前评测状态
+        return submission.getId();
+    }
+
+    /**
      * 自测提交
      * @param testJudgeDTO 评测请求
      * @return 自测临时请求id
@@ -156,6 +269,7 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         //再查询可用语言
         Language language = languageEntityService.lambdaQuery()
                 .eq(Language::getName, testJudgeDTO.getLanguage())
+                //只查询本地可用语言
                 .eq(Language::getOj, "myy")
                 .eq(Language::getStatus, LanguageConstants.ABLE)
                 .one();

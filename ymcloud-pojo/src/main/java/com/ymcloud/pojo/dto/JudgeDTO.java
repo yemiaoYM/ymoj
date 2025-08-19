@@ -13,7 +13,16 @@ import lombok.Data;
 @Data
 public class JudgeDTO {
     /**
-     * 题目唯一标识
+     * 是否为比赛提交
+     */
+    @NotNull(message = "需指定是否为比赛提交")
+    private Boolean isContest;
+    /**
+     * 所属比赛id
+     */
+    private Long contestId;
+    /**
+     * 题目唯一标识，当为比赛题目时，作为比赛题目的索引
      */
     @NotBlank(message = "题目编号不能为空")
     private String problemId;
@@ -28,17 +37,4 @@ public class JudgeDTO {
     @NotBlank(message = "代码不能为空")
     @Size(min = 5, max = 65535, message = "代码长度必须在5到65535个字符之间")
     private String code;
-    /**
-     * 是否为比赛提交
-     */
-    @NotNull(message = "需指定是否为比赛提交")
-    private Boolean isContest;
-    /**
-     * 所属比赛id
-     */
-    private Long contestId;
-    /**
-     * 比赛中该题的题号索引
-     */
-    private String contestProblemIndex;
 }
