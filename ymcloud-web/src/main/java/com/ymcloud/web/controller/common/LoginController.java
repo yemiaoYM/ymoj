@@ -40,7 +40,6 @@ public class LoginController {
     /**
      * 用户注册
      * @param registerDTO 注册请求体
-     * @return 无
      */
     @PostMapping("/register")
     public Result<?> register(@Validated @RequestBody RegisterDTO registerDTO) {

@@ -44,9 +44,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         }
         //3.校验密码以及试错次数控制
         passwordService.validate(user);
-        //4.查询角色和权限
-
-        //5.返回UserDetails对象
+        //4.返回UserDetails对象
         return new LoginUser(user);
     }
 }

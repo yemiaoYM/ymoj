@@ -1,12 +1,14 @@
 package com.ymcloud.core.security.domain;
 
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.UserStatus;
 import lombok.Data;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 /**
  * @PackageName: com.ymcloud.core.security.domain
@@ -38,13 +40,22 @@ public class LoginUser implements UserDetails {
      */
     private User user;
 
+    /**
+     * 用户角色信息
+     */
+    private Set<String> roles;
+
+    /**
+     * 用户权限信息
+     */
+    private Set<String> permissions;
+
     public LoginUser(User user) {
         this.user = user;
     }
 
     /**
      * 返回权限列表
-     * @return
      */
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -53,7 +64,6 @@ public class LoginUser implements UserDetails {
 
     /**
      * 获取密码
-     * @return
      */
     @Override
     public String getPassword() {
@@ -62,7 +72,6 @@ public class LoginUser implements UserDetails {
 
     /**
      * 获取用户名
-     * @return
      */
     @Override
     public String getUsername() {
@@ -71,7 +80,6 @@ public class LoginUser implements UserDetails {
 
     /**
      * 判断账户是否过期
-     * @return
      */
     @Override
     public boolean isAccountNonExpired() {
@@ -80,7 +88,6 @@ public class LoginUser implements UserDetails {
 
     /**
      * 判断账户是否没有锁定
-     * @return
      */
     @Override
     public boolean isAccountNonLocked() {
@@ -89,7 +96,6 @@ public class LoginUser implements UserDetails {
 
     /**
      * 判断账户凭证（密码）是否未过期
-     * @return
      */
     @Override
     public boolean isCredentialsNonExpired() {
@@ -98,10 +104,9 @@ public class LoginUser implements UserDetails {
 
     /**
      * 判断账户是否可用
-     * @return
      */
     @Override
     public boolean isEnabled() {
-        return true;
+        return user.getStatus() == UserStatus.OK;
     }
 }
