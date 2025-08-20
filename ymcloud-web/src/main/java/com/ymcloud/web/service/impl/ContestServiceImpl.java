@@ -224,7 +224,7 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
                 .eq(Judge::getProblemId, problem.getId())
                 .eq(Judge::getUserId, userId)
                 .eq(Judge::getContestId, contest.getId())
-                .eq(Judge::getShare, JudgeStatus.STATUS_ACCEPTED)
+                .eq(Judge::getStatus, JudgeStatus.STATUS_ACCEPTED)
                 .exists();
         problemVO.setAccepted(isAccepted);
         //返回题目前端实体

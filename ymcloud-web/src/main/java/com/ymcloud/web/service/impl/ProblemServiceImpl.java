@@ -117,7 +117,7 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
                 .eq(Judge::getUserId, userId)
                 //不能查询比赛提交
                 .eq(Judge::getContestId, 0L)
-                .eq(Judge::getShare, JudgeStatus.STATUS_ACCEPTED)
+                .eq(Judge::getStatus, JudgeStatus.STATUS_ACCEPTED)
                 .exists();
         problemVO.setAccepted(isAccepted);
         //返回题目前端实体
