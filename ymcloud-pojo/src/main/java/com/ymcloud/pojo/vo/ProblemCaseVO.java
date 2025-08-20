@@ -1,6 +1,7 @@
 package com.ymcloud.pojo.vo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -18,13 +19,16 @@ public class ProblemCaseVO implements Serializable {
     /**
      * 输入内容
      */
+    @Size(max = 200,message = "测试样例输入内容长度不能超过200")
     private String input;
     /**
      * 输出内容
      */
+    @Size(max = 200,message = "测试样例输出内容长度不能超过200")
     private String output;
     /**
      * 样例解释或者提示
      */
+    @Size(max = 200,message = "测试样例备注内容长度不能超过200")
     private String note;
 }

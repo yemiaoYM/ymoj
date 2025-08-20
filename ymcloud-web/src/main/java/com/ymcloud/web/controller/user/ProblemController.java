@@ -1,6 +1,7 @@
 package com.ymcloud.web.controller.user;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.pojo.dto.ProblemAddOrUpdateDTO;
 import com.ymcloud.pojo.query.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.PageVO;
 import com.ymcloud.pojo.vo.ProblemVO;
@@ -8,11 +9,9 @@ import com.ymcloud.pojo.vo.SubmissionTableVO;
 import com.ymcloud.web.service.ProblemService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @PackageName: com.ymcloud.web.controller.user
@@ -62,6 +61,28 @@ public class ProblemController {
         log.info("随机获取一道题目");
         String problemId=problemService.randomProblem();
         return Result.ok(problemId);
+    }
+
+    /**
+     * 添加题目
+     * @param problemAddOrUpdateDTO 题目信息
+     */
+    @PostMapping("/add")
+    @PreAuthorize("hasAuthority('problem:add')")
+    public Result<?> addProblem(@Validated @RequestBody ProblemAddOrUpdateDTO problemAddOrUpdateDTO) {
+        log.info("添加题目：{}",problemAddOrUpdateDTO.getProblemId());
+        return Result.ok().msg("添加题目成功");
+    }
+
+    /**
+     * 更新题目
+     * @param problemAddOrUpdateDTO 题目信息
+     */
+    @PutMapping("/update")
+    @PreAuthorize("hasAuthority('problem:update')")
+    public Result<?> updateProblem(@Validated @RequestBody ProblemAddOrUpdateDTO problemAddOrUpdateDTO) {
+        log.info("更新题目：{}",problemAddOrUpdateDTO.getProblemId());
+        return Result.ok().msg("更新题目成功");
     }
 
 

@@ -2,11 +2,14 @@ package com.ymcloud.core.security.domain;
 
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.UserStatus;
+import com.ymcloud.pojo.vo.AuthVO;
 import lombok.Data;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -43,15 +46,21 @@ public class LoginUser implements UserDetails {
     /**
      * 用户角色信息
      */
-    private Set<String> roles;
+    private List<String> roles;
 
     /**
      * 用户权限信息
      */
-    private Set<String> permissions;
+    private List<AuthVO> permissions;
 
     public LoginUser(User user) {
         this.user = user;
+    }
+
+    public LoginUser(User user, List<String> roles, List<AuthVO> permissions) {
+        this.user = user;
+        this.roles = roles;
+        this.permissions = permissions;
     }
 
     /**
@@ -59,7 +68,14 @@ public class LoginUser implements UserDetails {
      */
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
+        Set<GrantedAuthority> authorities = new HashSet<>();
+        for (String role : roles) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+        }
+        for (AuthVO perm : permissions) {
+            authorities.add(new SimpleGrantedAuthority(perm.getCode()));
+        }
+        return authorities;
     }
 
     /**

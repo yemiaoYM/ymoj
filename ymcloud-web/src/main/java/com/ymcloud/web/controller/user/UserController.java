@@ -2,6 +2,7 @@ package com.ymcloud.web.controller.user;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.ymcloud.common.result.Result;
+import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.pojo.dto.UpdateUserEmailDTO;
 import com.ymcloud.pojo.dto.UpdateUserPasswordDTO;
@@ -37,8 +38,10 @@ public class UserController {
     @GetMapping("/profile")
     public Result<UserProfileVO> profile() {
         log.info("获取当前用户基本信息");
-        User user = SecurityUtils.getUser();
-        UserProfileVO userVO = BeanUtil.copyProperties(user, UserProfileVO.class);
+        LoginUser loginUser = SecurityUtils.getLoginUser();
+        UserProfileVO userVO = BeanUtil.copyProperties(loginUser.getUser(), UserProfileVO.class);
+        userVO.setRoles(loginUser.getRoles());
+        userVO.setPermissions(loginUser.getPermissions());
         return Result.ok(userVO);
     }
 

@@ -3,6 +3,9 @@ package com.ymcloud.core.web.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ymcloud.pojo.entity.Role;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.core.web.mapper
@@ -13,4 +16,7 @@ import org.apache.ibatis.annotations.Mapper;
  */
 @Mapper
 public interface RoleMapper extends BaseMapper<Role> {
+
+    List<String> selectRolesByUserId(@Param("userId") Long userId);
+
 }

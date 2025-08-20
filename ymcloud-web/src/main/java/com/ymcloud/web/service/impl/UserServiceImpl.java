@@ -90,14 +90,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     public String login(LoginDTO loginDTO) {
         //1.验证码检测
-//        validateCaptcha(loginDTO.getCode(),loginDTO.getUuid());
+        //validateCaptcha(loginDTO.getCode(),loginDTO.getUuid());
         //2.信息校验（简化放到DTO的注释检验实现）
         String username=loginDTO.getUsername().trim();
         String password=loginDTO.getPassword();
-        //TODO 黑名单校验
-
-        Authentication authentication=null;
         //3.登录校验
+        Authentication authentication=null;
         try {
             UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(username, password);
             //将验证信息先存放在当前线程中，为了后续密码校验获取当前验证信息

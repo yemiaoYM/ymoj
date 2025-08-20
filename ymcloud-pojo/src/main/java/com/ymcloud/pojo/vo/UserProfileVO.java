@@ -4,6 +4,7 @@ import com.ymcloud.pojo.enums.UserSex;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.pojo.vo
@@ -48,4 +49,13 @@ public class UserProfileVO implements Serializable {
      * 博客
      */
     private String blog;
+    /**
+     * 用户角色信息
+     */
+    private List<String> roles;
+
+    /**
+     * 用户权限信息
+     */
+    private List<AuthVO> permissions;
 }
