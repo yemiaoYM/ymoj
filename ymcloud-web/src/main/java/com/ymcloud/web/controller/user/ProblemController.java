@@ -70,7 +70,7 @@ public class ProblemController {
     @PostMapping("/add")
     @PreAuthorize("hasAuthority('problem:add')")
     public Result<?> addProblem(@Validated @RequestBody ProblemAddOrUpdateDTO problemAddOrUpdateDTO) {
-        log.info("添加题目：{}",problemAddOrUpdateDTO.getProblemId());
+        log.info("添加题目：{}",problemAddOrUpdateDTO.getTitle());
         return Result.ok().msg("添加题目成功");
     }
 
@@ -81,7 +81,7 @@ public class ProblemController {
     @PutMapping("/update")
     @PreAuthorize("hasAuthority('problem:update')")
     public Result<?> updateProblem(@Validated @RequestBody ProblemAddOrUpdateDTO problemAddOrUpdateDTO) {
-        log.info("更新题目：{}",problemAddOrUpdateDTO.getProblemId());
+        log.info("更新题目：{}",problemAddOrUpdateDTO.getTitle());
         return Result.ok().msg("更新题目成功");
     }
 

@@ -5,10 +5,7 @@ import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.*;
 import com.ymcloud.common.exception.ServiceException;
-import com.ymcloud.common.exception.contest.ContestNotAccessException;
-import com.ymcloud.common.exception.contest.ContestNotExistException;
-import com.ymcloud.common.exception.contest.ContestNotStartException;
-import com.ymcloud.common.exception.contest.ContestProblemNotExistException;
+import com.ymcloud.common.exception.contest.*;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
@@ -185,6 +182,10 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
             if(!access){
                 throw new ContestNotAccessException();
             }
+        }
+        //检查比赛后是否允许提交
+        if(!contest.getAllowEndSubmit()){
+            throw new ContestException("比赛结束后禁止提交");
         }
         //查询比赛题目
         String displayId = judgeDTO.getProblemId();

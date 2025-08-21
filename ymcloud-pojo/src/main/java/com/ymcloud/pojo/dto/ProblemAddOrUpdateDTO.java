@@ -17,7 +17,7 @@ import java.util.List;
 public class ProblemAddOrUpdateDTO {
 
     /**
-     * 题目展示id 例如 YMOJ-1000（本题库），P1005（洛谷）等等
+     * 题目展示id
      */
     @NotBlank(message = "题目展示id不能为空")
     @Size(max = 20, message = "题目展示id长度不能超过20个字符")
@@ -71,6 +71,11 @@ public class ProblemAddOrUpdateDTO {
     @Max(value = 1, message = "评测模式参数非法")
     private Integer mode;
 
+    @NotNull(message = "请选择题目可见性")
+    @Min(value = 1, message = "可见性参数非法")
+    @Max(value = 3, message = "可见性参数非法")
+    private Integer visibility;
+
     /**
      * 时间限制（ms）
      */
@@ -80,15 +85,16 @@ public class ProblemAddOrUpdateDTO {
     private Long timeLimit;
 
     /**
-     * 内存限制（KB）
+     * 内存限制（MB）
      */
     @NotNull(message = "请设定内存限制")
-    @Min(value = 32768, message = "内存限制不能少于32MB")
-    @Max(value = 1048576, message = "内存限制不能超过1GB")
+    @Min(value = 16, message = "内存限制不能少于16MB")
+    @Max(value = 128, message = "内存限制不能超过128MB")
     private Long memoryLimit;
 
     /**
      * 题面样例
      */
+    @Size(max = 5,message = "最多设置5个测试样例")
     private List<ProblemCaseVO> problemCaseList;
 }

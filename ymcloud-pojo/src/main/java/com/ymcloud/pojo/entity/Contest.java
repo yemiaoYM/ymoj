@@ -43,7 +43,7 @@ public class Contest {
     @Schema(description="比赛时长（单位：分钟）")
     private Long duration;
     @Schema(description="是否允许比赛结束后进行提交")
-    private Integer allowEndSubmit;
+    private Boolean allowEndSubmit;
     @Schema(description="创建时间")
     private LocalDateTime createdTime;
     @Schema(description="更新时间")
