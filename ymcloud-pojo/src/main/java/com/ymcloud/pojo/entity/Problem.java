@@ -41,7 +41,7 @@ public class Problem {
     @Schema(description="可见性：1=公开，2=私有，3=比赛专用")
     private Integer visibility;
     @Schema(description="是否允许查看测试样例结果（0=否，1=是）")
-    private Integer openCaseResult;
+    private Boolean openCaseResult;
     @Schema(description="出题人ID（user.id）")
     private Long authorId;
     @Schema(description="出题人用户名")

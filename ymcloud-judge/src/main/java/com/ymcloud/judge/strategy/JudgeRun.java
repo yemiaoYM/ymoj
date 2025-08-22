@@ -133,11 +133,7 @@ public class JudgeRun {
                     RabbitMQConstants.FILE_EXCHANGE,
                     RabbitMQConstants.FILE_CLEAN_ROUTING_KEY,
                     submissionDir);
-        }catch (JudgeException | FileException e){
-            log.warn("自测评测业务异常：",e);
-            //逻辑异常就回滚重测
-            throw e;
-        }catch (Exception e){
+        } catch (Exception e){
             log.error("自测评测系统异常",e);
             judge.setStatus(JudgeStatus.STATUS_SYSTEM_ERROR);
             judge.setErrorMessage("评测失败，请联系管理员");
@@ -257,10 +253,6 @@ public class JudgeRun {
                         RabbitMQConstants.JUDGE_AC_UPDATE_ROUTING_KEY,
                         message);
             }
-        }catch (JudgeException | FileException e){
-            log.warn("默认评测业务异常：",e);
-            //逻辑异常就回滚重测
-            throw e;
         }catch (Exception e){
             log.error("默认评测系统异常",e);
             judge.setStatus(JudgeStatus.STATUS_SYSTEM_ERROR);

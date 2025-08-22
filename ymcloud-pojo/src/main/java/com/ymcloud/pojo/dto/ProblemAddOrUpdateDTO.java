@@ -21,6 +21,7 @@ public class ProblemAddOrUpdateDTO {
      */
     @NotBlank(message = "题目展示id不能为空")
     @Size(max = 20, message = "题目展示id长度不能超过20个字符")
+    @Pattern(regexp = "^[a-zA-Z0-9-]+$", message = "题目展示id只能包含字母、数字和 -")
     private String problemId;
 
     /**
@@ -39,12 +40,14 @@ public class ProblemAddOrUpdateDTO {
     /**
      * 输入描述
      */
+    @NotBlank(message = "输入描述不能为空")
     @Size(max = 2000, message = "输入描述长度不能超过2000字符")
     private String input;
 
     /**
      * 输出描述
      */
+    @NotBlank(message = "输出描述不能为空")
     @Size(max = 2000, message = "输出描述长度不能超过2000字符")
     private String output;
 
@@ -71,10 +74,19 @@ public class ProblemAddOrUpdateDTO {
     @Max(value = 1, message = "评测模式参数非法")
     private Integer mode;
 
+    /**
+     * 题目可见性
+     */
     @NotNull(message = "请选择题目可见性")
     @Min(value = 1, message = "可见性参数非法")
     @Max(value = 3, message = "可见性参数非法")
     private Integer visibility;
+
+    /**
+     * 是否允许查看测试样例结果
+     */
+    @NotNull(message = "请设置是否允许查看测试样例结果")
+    private Boolean openCaseResult;
 
     /**
      * 时间限制（ms）
@@ -97,4 +109,10 @@ public class ProblemAddOrUpdateDTO {
      */
     @Size(max = 5,message = "最多设置5个测试样例")
     private List<ProblemCaseVO> problemCaseList;
+
+    /**
+     * 标签列表
+     */
+    @Size(max = 5,message = "最多设置5个标签")
+    private List<Long> tagList;
 }

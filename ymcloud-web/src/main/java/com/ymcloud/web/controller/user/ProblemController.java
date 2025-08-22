@@ -71,19 +71,8 @@ public class ProblemController {
     @PreAuthorize("hasAuthority('problem:add')")
     public Result<?> addProblem(@Validated @RequestBody ProblemAddOrUpdateDTO problemAddOrUpdateDTO) {
         log.info("添加题目：{}",problemAddOrUpdateDTO.getTitle());
+        problemService.addProblem(problemAddOrUpdateDTO);
         return Result.ok().msg("添加题目成功");
     }
-
-    /**
-     * 更新题目
-     * @param problemAddOrUpdateDTO 题目信息
-     */
-    @PutMapping("/update")
-    @PreAuthorize("hasAuthority('problem:update')")
-    public Result<?> updateProblem(@Validated @RequestBody ProblemAddOrUpdateDTO problemAddOrUpdateDTO) {
-        log.info("更新题目：{}",problemAddOrUpdateDTO.getTitle());
-        return Result.ok().msg("更新题目成功");
-    }
-
 
 }

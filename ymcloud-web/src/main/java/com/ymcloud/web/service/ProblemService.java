@@ -1,6 +1,7 @@
 package com.ymcloud.web.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ymcloud.pojo.dto.ProblemAddOrUpdateDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ProblemPageQuery;
@@ -46,5 +47,9 @@ public interface ProblemService extends IService<Problem> {
      */
     PageVO<SubmissionTableVO> problemSubmissionList(ProblemSubmissionPageQuery query);
 
-
+    /**
+     * 添加题目
+     * @param problemAddOrUpdateDTO 题目信息
+     */
+    void addProblem(ProblemAddOrUpdateDTO problemAddOrUpdateDTO);
 }
