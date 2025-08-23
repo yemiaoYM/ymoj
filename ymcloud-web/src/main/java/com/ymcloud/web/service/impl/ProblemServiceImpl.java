@@ -8,12 +8,14 @@ import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
+import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
@@ -29,6 +31,7 @@ import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.ProblemService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -187,6 +190,7 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
      * @param problemAddOrUpdateDTO 题目信息
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void addProblem(ProblemAddOrUpdateDTO problemAddOrUpdateDTO) {
         //题目展示id需保证唯一
         String problemId = problemAddOrUpdateDTO.getProblemId();
@@ -241,16 +245,16 @@ public class ProblemServiceImpl extends ServiceImpl<ProblemMapper, Problem> impl
      * @return 当前查询题目
      */
     private Problem validateProblem(String problemId) {
-        //1.校验参数
-        if(problemId==null || StrUtil.isBlank(problemId)){
+        //校验参数
+        if(StrUtil.isBlank(problemId)){
             throw new ProblemException("题目标识参数为空", HttpStatus.BAD_REQUEST);
         }
-        //2.根据题目唯一标识查询
         Problem problem = lambdaQuery().eq(Problem::getProblemId, problemId).one();
         if(problem==null){
             //题目不存在或者已删除
             throw new ProblemNotExistException();
         }
+        //校验题目是否是比赛题
         if(problem.getVisibility() == ProblemConstants.CONTEST_PROBLEM){
             throw new ProblemPermissionException("请从比赛官网查询题目");
         }

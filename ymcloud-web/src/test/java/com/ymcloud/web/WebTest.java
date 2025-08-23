@@ -58,6 +58,12 @@ public class WebTest {
     private MailUtils mailUtils;
 
     @Test
+    public void testCache(){
+        String key="cache::problem";
+        redisCache.setCacheObject(key,"hello");
+    }
+
+    @Test
     public void testMail(){
         ArrayList<String> tos = new ArrayList<>();
         tos.add("2458544202@qq.com");

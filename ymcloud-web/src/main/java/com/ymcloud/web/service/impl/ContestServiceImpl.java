@@ -6,16 +6,11 @@ import cn.hutool.core.date.LocalDateTimeUtil;
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.exception.contest.*;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.core.web.dao.ContestProblemEntityService;
-import com.ymcloud.core.web.dao.ContestUserEntityService;
-import com.ymcloud.core.web.dao.JudgeEntityService;
-import com.ymcloud.core.web.dao.ProblemEntityService;
-import com.ymcloud.core.web.mapper.ContestMapper;
+import com.ymcloud.core.web.dao.*;
 import com.ymcloud.core.web.mapper.LanguageMapper;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.*;
@@ -41,7 +36,10 @@ import java.util.stream.Collectors;
  * @Description: ContestServiceImpl
  */
 @Service
-public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> implements ContestService {
+public class ContestServiceImpl implements ContestService {
+
+    @Autowired
+    private ContestEntityService contestEntityService;
 
     @Autowired
     private ContestUserEntityService contestUserEntityService;
@@ -67,7 +65,7 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
     public PageVO<ContestTableVO> pageQuery(ContestPageQuery query) {
         //创建分页实体
         Page<Contest> page = new Page<>(query.getPageNo(),query.getPageSize());
-        Page<Contest> contestPage = lambdaQuery()
+        Page<Contest> contestPage = contestEntityService.lambdaQuery()
                 .like(StrUtil.isNotBlank(query.getKeyword()), Contest::getTitle, query.getKeyword())
                 .orderByDesc(Contest::getStartTime)
                 .page(page);
@@ -100,10 +98,7 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
     @Override
     public ContestVO getContestInfo(Long contestId) {
         //根据id查询
-        Contest contest = getById(contestId);
-        if(contest==null){
-            throw new ContestNotExistException();
-        }
+        Contest contest = contestEntityService.getInfoById(contestId);
         //拷贝前端实体
         ContestVO contestVO = BeanUtil.copyProperties(contest, ContestVO.class);
         //查询当前用户的比赛权限
@@ -138,10 +133,7 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         Long contestId = registerContestDTO.getContestId();
         String password = registerContestDTO.getPassword();
         //2.根据id查询
-        Contest contest = getById(contestId);
-        if(contest==null){
-            throw new ContestNotExistException();
-        }
+        Contest contest = contestEntityService.getInfoById(contestId);
         //3.公开赛不需要注册报名
         if(contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
             throw new ContestException("公开赛不需要注册报名");
@@ -490,10 +482,7 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
      */
     private Contest validateContest(Long contestId,Long userId) {
         //先根据比赛id查询
-        Contest contest = getById(contestId);
-        if(contest==null){
-            throw new ContestNotExistException();
-        }
+        Contest contest = contestEntityService.getInfoById(contestId);
         //验证比赛当前状态
         LocalDateTime now = LocalDateTime.now();
         if(contest.getStartTime().isAfter(now)){

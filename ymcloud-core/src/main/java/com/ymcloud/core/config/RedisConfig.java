@@ -69,8 +69,8 @@ public class RedisConfig {
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
                 .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(keySerializer))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(valueSerializer))
-                //禁止缓存null值，优点：避免缓存穿透（恶意请求不存在的 key），节省Redis存储空间
-                .disableCachingNullValues();
+                //修改默认的：：为：，统一redis缓存命名
+                .computePrefixWith(cacheName -> cacheName + ":");
         //返回配置
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(config)

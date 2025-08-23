@@ -21,6 +21,14 @@ public class CacheConstants {
      * 用户ac排名列表 redis key
      */
     public static final String USER_AC_RANK_KEY = "user_ac_rank";
+    /**
+     * 比赛缓存 redis key
+     */
+    public static final String CONTEST_KEY = "contest";
+    /**
+     * 题目缓存 redis key
+     */
+    public static final String PROBLEM_KEY = "problem";
 
     /**
      * 评测状态 redis key
@@ -46,11 +54,6 @@ public class CacheConstants {
      * 参数管理 cache key
      */
     public static final String SYS_CONFIG_KEY = "sys_config:";
-
-    /**
-     * 字典管理 cache key
-     */
-    public static final String SYS_DICT_KEY = "sys_dict:";
 
     /**
      * 防重提交 redis key

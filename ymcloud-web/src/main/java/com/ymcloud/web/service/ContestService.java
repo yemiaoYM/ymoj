@@ -1,9 +1,6 @@
 package com.ymcloud.web.service;
 
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
-import com.ymcloud.pojo.entity.Contest;
-import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ContestPageQuery;
 import com.ymcloud.pojo.query.ContestProblemSubmissionPageQuery;
 import com.ymcloud.pojo.query.ContestRankPageQuery;
@@ -19,7 +16,7 @@ import java.util.List;
  * @CreateTime: 2025-07-22  19:47
  * @Description: ContestService
  */
-public interface ContestService extends IService<Contest> {
+public interface ContestService {
 
     /**
      * 获取比赛列表表单 分页查询
