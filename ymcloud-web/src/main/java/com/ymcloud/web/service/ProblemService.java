@@ -3,7 +3,6 @@ package com.ymcloud.web.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.dto.ProblemAddOrUpdateDTO;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.ProblemPageQuery;
 import com.ymcloud.pojo.query.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.PageVO;

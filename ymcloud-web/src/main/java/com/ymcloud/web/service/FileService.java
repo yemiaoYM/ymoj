@@ -2,7 +2,6 @@ package com.ymcloud.web.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.File;
-import com.ymcloud.pojo.enums.FileBizType;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
