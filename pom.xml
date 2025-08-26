@@ -45,6 +45,7 @@
         <spring.security.version>6.5.1</spring.security.version>
         <mybatis-plus.version>3.5.10.1</mybatis-plus.version>
         <javax.mail.version>1.6.2</javax.mail.version>
+        <docker.version>3.4.0</docker.version>
     </properties>
 
     <!--父工程只控制版本统一，子工程还需要自己引入-->
@@ -121,6 +122,18 @@
                 <artifactId>javax.mail</artifactId>
                 <version>${javax.mail.version}</version>
             </dependency>
+            <!-- docker-api -->
+            <dependency>
+                <groupId>com.github.docker-java</groupId>
+                <artifactId>docker-java</artifactId>
+                <version>${docker.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.docker-java</groupId>
+                <artifactId>docker-java-transport-httpclient5</artifactId>
+                <version>${docker.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 

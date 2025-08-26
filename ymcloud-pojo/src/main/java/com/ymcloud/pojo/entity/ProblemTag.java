@@ -11,9 +11,6 @@ import lombok.Data;
 @Data
 @Schema(description = "题目标签连接表")
 public class ProblemTag {
-    @TableId(type = IdType.AUTO)
-    @Schema(description="唯一标识")
-    private Long id;
     @Schema(description="题目ID")
     private Long problemId;
     @Schema(description="标签ID")

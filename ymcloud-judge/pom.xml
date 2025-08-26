@@ -19,11 +19,20 @@
     </properties>
 
     <dependencies>
-        <!--引入核心core模块-->
+        <!-- 引入核心core模块 -->
         <dependency>
             <groupId>com.ymcloud.core</groupId>
             <artifactId>ymcloud-core</artifactId>
             <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+        <!-- docker-api -->
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-httpclient5</artifactId>
         </dependency>
     </dependencies>
 </project>
