@@ -7,9 +7,7 @@ import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.StreamType;
 import com.ymcloud.judge.domain.CmdExecResult;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -25,26 +23,16 @@ import java.util.concurrent.TimeUnit;
  * @CreateTime: 2025-08-24  22:56
  * @Description: docker操作容器
  */
-@Getter
+@Data
 @AllArgsConstructor
+@NoArgsConstructor
 public abstract class DockerContainer {
 
-    protected DockerClient dockerClient;
-
+    private DockerClient dockerClient;
     /**
      * 容器id
      */
-    protected String containerId;
-
-    /**
-     * 容器名称
-     */
-    protected String containerName;
-    /**
-     * 最后使用时间
-     */
-    @Setter
-    protected long lastUsedTime;
+    private String containerId;
 
     public void start() {
         dockerClient.startContainerCmd(containerId).exec();
@@ -54,8 +42,45 @@ public abstract class DockerContainer {
         dockerClient.stopContainerCmd(containerId).exec();
     }
 
-    public void remove() {
-        dockerClient.removeContainerCmd(containerId).exec();
+    public void restart() {
+        dockerClient.restartContainerCmd(containerId).exec();
+    }
+
+    public void pause() {
+        dockerClient.pauseContainerCmd(containerId).exec();
+    }
+
+    public void unpause() {
+        dockerClient.unpauseContainerCmd(containerId).exec();
+    }
+
+    public void kill() {
+        dockerClient.killContainerCmd(containerId).exec();
+    }
+
+    public void remove(boolean force) {
+        dockerClient.removeContainerCmd(containerId).withForce(force).exec();
+    }
+
+    /**
+     * 查看容器信息
+     */
+    public InspectContainerResponse inspectContainer() {
+        return dockerClient.inspectContainerCmd(containerId).exec();
+    }
+
+    /**
+     * 判断容器是否在运行
+     */
+    public boolean isRunning() {
+        return Boolean.TRUE.equals(inspectContainer().getState().getRunning());
+    }
+
+    /**
+     * 判断容器是否被OOM杀死
+     */
+    public boolean isOOMKilled() {
+        return Boolean.TRUE.equals(inspectContainer().getState().getOOMKilled());
     }
 
     /**
@@ -134,27 +159,6 @@ public abstract class DockerContainer {
                 .stderr(err.toString())
                 .isTimeout(!awaited)
                 .build();
-    }
-
-    /**
-     * 查看容器信息
-     */
-    public InspectContainerResponse inspectContainer() {
-        return dockerClient.inspectContainerCmd(containerId).exec();
-    }
-
-    /**
-     * 判断容器是否在运行
-     */
-    public boolean isRunning() {
-        return Boolean.TRUE.equals(inspectContainer().getState().getRunning());
-    }
-
-    /**
-     * 判断容器是否被OOM杀死
-     */
-    public boolean isOOMKilled() {
-        return Boolean.TRUE.equals(inspectContainer().getState().getOOMKilled());
     }
 
 }

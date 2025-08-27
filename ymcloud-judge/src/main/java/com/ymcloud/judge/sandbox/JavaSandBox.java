@@ -7,7 +7,7 @@ import com.ymcloud.judge.docker.container.CodeExecContainer;
  * @ClassName: JavaSandBox
  * @Author: Yemiao
  * @CreateTime: 2025-08-27  00:31
- * @Description: TODO
+ * @Description: Java沙箱
  */
 public class JavaSandBox extends SandBox {
 

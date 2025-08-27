@@ -16,6 +16,19 @@ import java.util.List;
 public class FileUtils {
 
     /**
+     * 自动根据环境获取文件路径
+     * @param path 文件路径
+     * @return 文件路径
+     */
+    public static String getAbsolutePath(String path) {
+        try{
+            return FileUtil.getCanonicalPath(new File(path));
+        }catch (Exception e){
+            throw new FileException("获取文件路径失败",e);
+        }
+    }
+
+    /**
      * 文件内容是否为空
      * @param path 文件路径
      * @return 是否为空

@@ -10,7 +10,7 @@ package com.ymcloud.common.exception.judge;
 public class SandBoxException extends JudgeException {
 
     public SandBoxException() {
-        super("沙箱运行异常");
+        super("对不起，沙箱运行异常，请联系管理员");
     }
 
     public SandBoxException(String message) {

@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
  * @ClassName: CodeRunResult
  * @Author: Yemiao
  * @CreateTime: 2025-08-27  00:33
- * @Description: TODO
+ * @Description: 代码运行结果
  */
 @Data
 @AllArgsConstructor

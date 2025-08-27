@@ -15,8 +15,8 @@ public class CodeExecContainer extends DockerContainer {
 
     private final String hostWorkingDir;
 
-    public CodeExecContainer(DockerClient dockerClient, String containerId, String containerName, String hostWorkingDir) {
-        super(dockerClient, containerId, containerName, System.currentTimeMillis());
+    public CodeExecContainer(DockerClient dockerClient, String containerId, String hostWorkingDir) {
+        super(dockerClient, containerId);
         this.hostWorkingDir = hostWorkingDir;
     }
 

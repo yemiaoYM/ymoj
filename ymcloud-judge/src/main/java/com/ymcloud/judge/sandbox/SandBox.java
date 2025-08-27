@@ -1,6 +1,6 @@
 package com.ymcloud.judge.sandbox;
 
-import com.ymcloud.common.exception.judge.SandBoxException;
+import com.ymcloud.common.exception.judge.*;
 import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
 import com.ymcloud.judge.domain.CmdExecResult;
@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
  * @ClassName: SandBox
  * @Author: Yemiao
  * @CreateTime: 2025-08-27  00:26
- * @Description: TODO
+ * @Description: 代码沙箱
  */
 public abstract class SandBox {
 
@@ -36,7 +36,7 @@ public abstract class SandBox {
             throw new SandBoxException("编译代码时被中断", e);
         }
         if (!res.getStderr().isEmpty()) {
-            throw new SandBoxException("编译错误: " + res.getStderr());
+            throw new CompileException("编译错误: " + res.getStderr());
         }
     }
 
@@ -71,21 +71,20 @@ public abstract class SandBox {
         } catch (InterruptedException e) {
             throw new SandBoxException("运行代码时出错", e);
         }
-
-        if(res.isTimeout()) throw new SandBoxException();
-
+        //运行超时
+        if(res.isTimeout()) throw new TimeLimitExceededException();
         // 检查容器是否oom
         if (Boolean.TRUE.equals(container.inspectContainer().getState().getOOMKilled())) {
-            throw new SandBoxException();
+            throw new MemoryLimitExceededException();
         }
-
+        //读输出
         if (res.getStderr().startsWith("__TIME__:")) {
             String[] parts = res.getStderr().substring(9).trim().split(" ");
             long timeUsed = (long)(Double.parseDouble(parts[2].split(":")[1]) * 1000);
             long memoryUsed = Long.parseLong(parts[3]);
             return new CodeRunResult(res.getStdout(), null, timeUsed, memoryUsed);
         }else{
-            throw new SandBoxException(res.getStderr().split("__TIME__:")[0].trim());
+            throw new RuntimeErrorException(res.getStderr().split("__TIME__:")[0].trim());
         }
     }
 
