@@ -49,6 +49,9 @@ public class CodeExecContainerFactory implements DockerContainerFactory<CodeExec
                 .createContainerCmd(imageName)
                 .withHostConfig(hostConfig)
                 .withWorkingDir(containerWorkingDir)
+                .withAttachStdout(true)
+                .withAttachStderr(true)
+                .withAttachStdin(true)
                 .withTty(true)
                 .exec();
         return new CodeExecContainer(

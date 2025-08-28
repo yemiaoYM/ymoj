@@ -136,4 +136,17 @@ public class FileUtils {
         }
     }
 
+    /**
+     * 返回文件夹中文件的数量
+     * @param fileName 文件路径
+     * @return 文件数量
+     */
+    public static int countFile(String fileName){
+        try{
+            return FileUtil.listFileNames(fileName).size();
+        }catch (Exception e){
+            return 0;
+        }
+    }
+
 }

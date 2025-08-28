@@ -1,10 +1,14 @@
 package com.ymcloud.web;
 
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.model.Frame;
+import com.github.dockerjava.api.model.StreamType;
 import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
 import com.ymcloud.judge.docker.factory.CodeExecContainerFactory;
+import com.ymcloud.judge.domain.CmdExecResult;
 import com.ymcloud.judge.domain.CodeRunResult;
 import com.ymcloud.judge.sandbox.SandBox;
 import com.ymcloud.judge.sandbox.SandBoxFactory;
@@ -12,7 +16,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.io.*;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @PackageName: com.ymcloud.web
@@ -29,15 +35,20 @@ public class DockerTest {
 
     @Test
     public void testCreateContainer() {
-//        String hostWorkingDir="E:\\Java\\ymcloud\\files\\tmp\\submission_10020";
-        String hostWorkingDir="E:/Java/ymcloud/files/tmp/submission_10020";
-        String absolutePath = FileUtils.getAbsolutePath(hostWorkingDir);
+        String hostWorkingDir="E:/Java/ymcloud/files/tmp/submission_10075";
         String containerWorkingDir="/app";
+        String hostTestCaseDir="E:/Java/ymcloud/files/private/problem/problem_7/in";
+        String containerTestCaseDir="/app/in";
 
         long memoryLimitMb=128;
-        String imageName="oj-java-env";
+        String imageName="oj-cpp-env";
 
-        CodeExecContainerFactory factory=new CodeExecContainerFactory(dockerClient,absolutePath,containerWorkingDir,memoryLimitMb,imageName);
+        CodeExecContainerFactory factory=new CodeExecContainerFactory(
+                dockerClient,
+                hostWorkingDir,
+                containerWorkingDir,
+                memoryLimitMb,
+                imageName);
         CodeExecContainer container = factory.createDockerContainer();
 
         String containerId = container.getContainerId();
@@ -45,31 +56,24 @@ public class DockerTest {
 
         container.start();
 
-        SandBoxFactory sandBoxFactory = new SandBoxFactory("Java");
+        SandBoxFactory sandBoxFactory = new SandBoxFactory("C++");
         SandBox sandBox = sandBoxFactory.createSandBox(container);
 
         sandBox.compile(container);
 
-        ArrayList<String> testCases=new ArrayList<>();
-        testCases.add("1 2");
-        testCases.add("11 55");
-        testCases.add("0 0");
-        testCases.add("4 5");
-        testCases.add("5 5");
-        testCases.add("1 2");
-        testCases.add("11 55");
-        testCases.add("0 0");
-        testCases.add("4 5");
-        testCases.add("5 5");
-        testCases.add("1 2");
-        testCases.add("11 55");
-        testCases.add("0 0");
-        testCases.add("4 5");
-        testCases.add("5 5");
-        testCases.add("1 1");
-        for(String testCase:testCases){
-            CodeRunResult execute = sandBox.execute(container, testCase + "\n");
-            System.out.println(execute);
+        int countFile = FileUtils.countFile(hostTestCaseDir);
+        System.out.println(countFile);
+
+        for (int i = 1; i <= countFile; i++) {
+            String inputFile = hostTestCaseDir+"/"+i+".in";
+            try{
+                String in=FileUtils.readFileString(inputFile);
+                System.out.println("[第"+i+"个]测试样例开始评测...");
+                CodeRunResult execute = sandBox.execute(container, in);
+                System.out.println("[第"+i+"个]测试样例的结果为："+execute);
+            } catch (Exception e){
+                System.out.println("评测出现问题"+e);
+            }
         }
 
 //        container.remove(true);
@@ -89,6 +93,45 @@ public class DockerTest {
         String absolutePath = FileUtils.getAbsolutePath(hostWorkingDir);
 
         System.out.println(absolutePath);
+    }
+
+    @Test
+    public void testCodeExec() {
+        File inputFile = new File("E:/Java/ymcloud/files/private/problem/problem_7/in/5.in");
+        File outputFile = new File("E:/Java/ymcloud/files/tmp/submission_10075/5.out");
+
+
+        String execId = dockerClient.execCreateCmd("e143cfe4c50cd41017669e338d328b92046c0365d59e45f97ef46f3574521191")
+                .withAttachStdout(true)
+                .withAttachStderr(true)
+                .withAttachStdin(true)
+                .withCmd(new String[]{"./main"})
+                .exec().getId();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        try (InputStream in = new FileInputStream(inputFile);
+             OutputStream out = new FileOutputStream(outputFile)) {
+
+            dockerClient.execStartCmd(execId)
+                    .withStdIn(in)
+                    .exec(new ResultCallback.Adapter<Frame>() {
+                        @Override
+                        public void onNext(Frame frame) {
+                            try {
+                                if (frame.getStreamType() == StreamType.STDOUT) {
+                                    out.write(frame.getPayload());
+                                } else if (frame.getStreamType() == StreamType.STDERR) {
+                                    err.write(frame.getPayload());
+                                }
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    }).awaitCompletion(10, TimeUnit.SECONDS);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+
+        System.out.println(err);
     }
 
 }

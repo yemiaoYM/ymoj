@@ -7,12 +7,10 @@ import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.StreamType;
 import com.ymcloud.judge.domain.CmdExecResult;
+import com.ymcloud.judge.utils.StringInputStream;
 import lombok.*;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
@@ -135,7 +133,7 @@ public abstract class DockerContainer {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
 
-        InputStream in = new ByteArrayInputStream(stdin.getBytes());
+        InputStream in = new StringInputStream(stdin);
 
         boolean awaited = dockerClient.execStartCmd(execID)
                 .withStdIn(in)

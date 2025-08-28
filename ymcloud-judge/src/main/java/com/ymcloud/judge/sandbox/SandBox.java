@@ -6,6 +6,7 @@ import com.ymcloud.judge.docker.container.CodeExecContainer;
 import com.ymcloud.judge.domain.CmdExecResult;
 import com.ymcloud.judge.domain.CodeRunResult;
 
+import java.io.InputStream;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -17,7 +18,7 @@ import java.util.concurrent.TimeUnit;
  */
 public abstract class SandBox {
 
-    protected CodeExecContainer container;
+    private final CodeExecContainer container;
 
     public SandBox(CodeExecContainer codeExecContainer) {
         this.container = codeExecContainer;
@@ -68,7 +69,7 @@ public abstract class SandBox {
         CmdExecResult res;
         try {
             res = container.execCmd(cmd, stdin, 10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
             throw new SandBoxException("运行代码时出错", e);
         }
         //运行超时

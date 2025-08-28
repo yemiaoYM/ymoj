@@ -1,5 +1,6 @@
 package com.ymcloud.judge.sandbox;
 
+import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
 
 /**
@@ -17,13 +18,19 @@ public class SandBoxFactory {
         this.language = language;
     }
 
+    /**
+     * 根据语言返回代码沙箱
+     * @param container 执行容器
+     * @return 代码沙箱
+     */
     public SandBox createSandBox(CodeExecContainer container) {
         return switch (language) {
             case "Java" -> new JavaSandBox(container);
             case "C++" -> new CppSandBox(container);
             case "C" -> new CSandBox(container);
             case "Python" -> new PythonSandBox(container);
-            default -> throw new IllegalArgumentException("不支持的语言类型: " + language);
+            default -> throw new JudgeException("不支持的语言类型: " + language);
         };
     }
+
 }

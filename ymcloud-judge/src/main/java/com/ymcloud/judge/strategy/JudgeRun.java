@@ -55,9 +55,6 @@ public class JudgeRun {
     @Autowired
     private JudgeCaseEntityService judgeCaseEntityService;
 
-    @Autowired
-    private JudgeStrategy judgeStrategy;
-
     @Value("${ymcloud.file.base-dir}")
     private String BASE_DIR;
 
@@ -118,7 +115,7 @@ public class JudgeRun {
             //判断是否需要编译
             if(language.getType().equals(LanguageConstants.COMPILE)){
                 //需要编译
-                JudgeResponse response=judgeStrategy.compile(request);
+                JudgeResponse response=new JudgeResponse();
                 if(StrUtil.isNotBlank(response.getErrorMessage())){
                     //有错误信息表示编译失败
                     judge.setStatus(JudgeStatus.STATUS_COMPILE_ERROR);
@@ -135,7 +132,7 @@ public class JudgeRun {
                     request.setMemoryLimit(request.getMemoryLimit() * 2);
                 }
                 //进行执行代码
-                JudgeResponse response = judgeStrategy.testJudge(request);
+                JudgeResponse response = new JudgeResponse();
                 //设置运行时间和内存
                 judge.setStatus(response.getStatus());
                 judge.setTime(response.getTime());
@@ -178,6 +175,8 @@ public class JudgeRun {
             CodeExecContainerFactory factory = new CodeExecContainerFactory(
                     dockerClient, hostFilePath, containerWorkingDir, message.getMemoryLimit(), language.getEnv());
             container = factory.createDockerContainer();
+            //启动容器
+            container.start();
             //根据语言选择沙箱判题策略
             SandBoxFactory sandBoxFactory = new SandBoxFactory(language.getName());
             SandBox sandBox = sandBoxFactory.createSandBox(container);
@@ -189,7 +188,7 @@ public class JudgeRun {
             List<TestCase> testCases=getAllTestCases(message.getProblemId());
             for(TestCase testCase:testCases){
                 System.out.println("[第"+testCase.getId()+"个]测试样例开始评测...");
-                CodeRunResult execute = sandBox.execute(container, testCase.getInput());
+                CodeRunResult execute = sandBox.execute(container, testCase.getInput()+"\n");
                 System.out.println("[第"+testCase.getId()+"个]测试样例的结果为："+execute);
             }
         }catch (CompileException e){
@@ -208,9 +207,9 @@ public class JudgeRun {
             judgeEntityService.updateById(judge);
         }finally {
             //删除容器
-            if (container != null) {
-                container.remove(true);
-            }
+//            if (container != null) {
+//                container.remove(true);
+//            }
         }
     }
 
