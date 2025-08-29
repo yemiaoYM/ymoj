@@ -8,8 +8,7 @@ import com.github.dockerjava.api.model.StreamType;
 import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
 import com.ymcloud.judge.docker.factory.CodeExecContainerFactory;
-import com.ymcloud.judge.domain.CmdExecResult;
-import com.ymcloud.judge.domain.CodeRunResult;
+import com.ymcloud.judge.bo.CodeRunResult;
 import com.ymcloud.judge.sandbox.SandBox;
 import com.ymcloud.judge.sandbox.SandBoxFactory;
 import org.junit.jupiter.api.Test;
@@ -17,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.*;
-import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
 /**

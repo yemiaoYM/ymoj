@@ -1,13 +1,11 @@
 package com.ymcloud.judge.docker.container;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse;
-import com.github.dockerjava.api.model.Frame;
-import com.github.dockerjava.api.model.StreamType;
-import com.ymcloud.judge.domain.CmdExecResult;
-import com.ymcloud.judge.utils.StringInputStream;
+import com.ymcloud.judge.bo.CmdExecResult;
+import com.ymcloud.judge.bo.DockerFrameCallback;
+import com.ymcloud.judge.bo.StringInputStream;
 import lombok.*;
 
 import java.io.*;
@@ -25,7 +23,9 @@ import java.util.concurrent.TimeUnit;
 @AllArgsConstructor
 @NoArgsConstructor
 public abstract class DockerContainer {
-
+    /**
+     * docker客户端
+     */
     private DockerClient dockerClient;
     /**
      * 容器id
@@ -96,28 +96,24 @@ public abstract class DockerContainer {
                 .exec();
     }
 
-    public CmdExecResult execCmd(String[] cmd, int timeout, TimeUnit unit) throws InterruptedException {
+    /**
+     * 执行命令
+     * @param cmd 命令
+     * @param timeout 超时时间
+     * @param unit 时间格式
+     * @return 执行结果
+     */
+    public CmdExecResult execCmd(String[] cmd, int timeout, TimeUnit unit) throws Exception {
 
         String execID = this.createCmd(cmd).getId();
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
 
-        boolean awaited = dockerClient.execStartCmd(execID)
-                .exec(new ResultCallback.Adapter<Frame>() {
-                    @Override
-                    public void onNext(Frame frame) {
-                        try {
-                            if (frame.getStreamType() == StreamType.STDOUT) {
-                                out.write(frame.getPayload());
-                            } else if (frame.getStreamType() == StreamType.STDERR) {
-                                err.write(frame.getPayload());
-                            }
-                        } catch (IOException e) {
-                            throw new RuntimeException("Error writing to output streams", e);
-                        }
-                    }
-                }).awaitCompletion(timeout, unit);
+        boolean awaited = dockerClient
+                .execStartCmd(execID)
+                .exec(new DockerFrameCallback(out,err))
+                .awaitCompletion(timeout, unit);
 
         return CmdExecResult.builder()
                 .stdout(out.toString(StandardCharsets.UTF_8))
@@ -126,7 +122,15 @@ public abstract class DockerContainer {
                 .build();
     }
 
-    public CmdExecResult execCmd(String[] cmd, String stdin, int timeout, TimeUnit unit) throws InterruptedException {
+    /**
+     * 执行命令带输入流
+     * @param cmd 命令
+     * @param stdin 输入
+     * @param timeout 超时时间
+     * @param unit 时间格式
+     * @return 执行结果
+     */
+    public CmdExecResult execCmd(String[] cmd, String stdin, int timeout, TimeUnit unit) throws Exception {
 
         String execID = this.createCmd(cmd).getId();
 
@@ -135,22 +139,11 @@ public abstract class DockerContainer {
 
         InputStream in = new StringInputStream(stdin);
 
-        boolean awaited = dockerClient.execStartCmd(execID)
+        boolean awaited = dockerClient
+                .execStartCmd(execID)
                 .withStdIn(in)
-                .exec(new ResultCallback.Adapter<Frame>() {
-                    @Override
-                    public void onNext(Frame frame) {
-                        try {
-                            if (frame.getStreamType() == StreamType.STDOUT) {
-                                out.write(frame.getPayload());
-                            } else if (frame.getStreamType() == StreamType.STDERR) {
-                                err.write(frame.getPayload());
-                            }
-                        } catch (IOException e) {
-                            throw new RuntimeException("Error writing to output streams", e);
-                        }
-                    }
-                }).awaitCompletion(timeout, unit);
+                .exec(new DockerFrameCallback(out,err))
+                .awaitCompletion(timeout, unit);
 
         return CmdExecResult.builder()
                 .stdout(out.toString())

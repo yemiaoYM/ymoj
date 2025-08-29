@@ -52,14 +52,12 @@ public class JudgeController {
     /**
      * 定时评测轮询查询
      * @param submissionId 提交id
-     * @param isTest 是否为自测提交
      * @return 评测结果
      */
     @GetMapping("/status")
-    public Result<JudgeResultVO> getStatus(@RequestParam(value = "submissionId") Long submissionId,
-                                           @RequestParam(value = "isTest") Boolean isTest) {
-        log.info("定时评测轮询查询：{},是否为自测提交：{}", submissionId, isTest);
-        JudgeResultVO result=judgeService.getStatus(submissionId,isTest);
+    public Result<JudgeResultVO> getStatus(@RequestParam(value = "submissionId") Long submissionId) {
+        log.info("定时评测轮询查询：{}", submissionId);
+        JudgeResultVO result=judgeService.getStatus(submissionId);
         return Result.ok(result);
     }
 

@@ -17,13 +17,9 @@ public class JudgeCaseVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 样例在评测中的顺序编号（从0或1开始）
+     * 样例在评测中的顺序编号（从1开始）
      */
-    private Integer caseIndex;
-    /**
-     * 测试样例分组编号（OI模式下使用）
-     */
-    private Integer groupIndex;
+    private Integer Index;
     /**
      * 评测结果
      */

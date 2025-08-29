@@ -1,42 +1,31 @@
-package com.ymcloud.judge.domain;
+package com.ymcloud.pojo.bo;
 
 import com.ymcloud.pojo.entity.Language;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * @PackageName: com.ymcloud.judge.domain
- * @ClassName: JudgeMessage
+ * @PackageName: com.ymcloud.pojo.bo
+ * @ClassName: JudgeTask
  * @Author: Yemiao
- * @CreateTime: 2025-08-03  17:19
- * @Description: 评测队列消息
+ * @CreateTime: 2025-08-29  16:05
+ * @Description: 评测任务实体
  */
 @Data
-public class JudgeMessage {
-
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+public class JudgeTask {
     /**
      * 评测id
      */
     private Long submissionId;
     /**
-     * 比赛id
-     */
-    private Long contestId;
-    /**
      * 题目id
      */
     private Long problemId;
-    /**
-     * 题目唯一标识
-     */
-    private String displayId;
-    /**
-     * 用户id
-     */
-    private Long userId;
-    /**
-     * 用户名
-     */
-    private String username;
     /**
      * 用户输入
      */

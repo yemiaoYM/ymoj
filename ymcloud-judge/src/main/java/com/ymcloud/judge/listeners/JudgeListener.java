@@ -1,11 +1,18 @@
 package com.ymcloud.judge.listeners;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
 import com.ymcloud.common.constant.RabbitMQConstants;
 import com.ymcloud.common.utils.FileUtils;
+import com.ymcloud.core.web.dao.JudgeCaseEntityService;
+import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
-import com.ymcloud.judge.domain.JudgeMessage;
+import com.ymcloud.judge.bo.JudgeResult;
+import com.ymcloud.judge.bo.TestCaseResult;
 import com.ymcloud.judge.strategy.JudgeRun;
+import com.ymcloud.pojo.bo.JudgeTask;
+import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.entity.JudgeCase;
 import com.ymcloud.pojo.entity.UserAcproblem;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
@@ -15,6 +22,8 @@ import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.judge.listeners
@@ -34,9 +43,14 @@ public class JudgeListener {
     @Autowired
     private UserAcproblemEntityService userAcproblemEntityService;
 
+    @Autowired
+    private JudgeEntityService judgeEntityService;
+    @Autowired
+    private JudgeCaseEntityService judgeCaseEntityService;
+
     /**
      * 评测消息队列
-     * @param msg 评测消息
+     * @param task 评测任务
      */
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(name = RabbitMQConstants.JUDGE_QUEUE,
@@ -46,33 +60,54 @@ public class JudgeListener {
                     type = ExchangeTypes.TOPIC),
             key = RabbitMQConstants.JUDGE_ROUTING_KEY
     ))
-    public void listenJudge(JudgeMessage msg) {
-        log.info("[评测消息队列]=>评测机收到评测消息：{}",msg.getSubmissionId());
-        judgeRun.execute(msg);
+    public void listenJudge(JudgeTask task) {
+        log.info("[评测消息队列]=>评测机收到评测消息：{}",task.getSubmissionId());
+        judgeRun.execute(task);
     }
 
     /**
      * 评测结束更新用户ac表队列
-     * @param msg 评测消息
+     * @param result 评测结果
      */
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = RabbitMQConstants.JUDGE_AC_UPDATE_QUEUE,
+            value = @Queue(name = RabbitMQConstants.JUDGE_RESULT_QUEUE,
                     durable = "true"),
             exchange = @Exchange(value = RabbitMQConstants.JUDGE_EXCHANGE,
                     delayed = "true",
                     type = ExchangeTypes.TOPIC),
-            key = RabbitMQConstants.JUDGE_AC_UPDATE_ROUTING_KEY
+            key = RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY
     ))
-    public void listenJudgeAcUpdate(JudgeMessage msg) {
-        log.info("[评测结束更新用户ac表队列]=>收到提交id为:{}的消息",msg.getSubmissionId());
+    public void listenJudgeResultUpdate(JudgeResult result) {
+        log.info("[评测结束更新状态队列]=>收到提交id为:{}的消息",result.getSubmissionId());
+        //先查再更新
+        Judge judge = judgeEntityService.getById(result.getSubmissionId());
+        judge.setStatus(result.getStatus());
+        judge.setTime(result.getTime());
+        judge.setMemory(result.getMemory());
+        judge.setErrorMessage(result.getErrorMessage());
+        judgeEntityService.updateById(judge);
+
+        //插入评测样例结果
+        List<TestCaseResult> testCaseResults = result.getTestCaseResults();
+        if(!CollUtil.isEmpty(testCaseResults)){
+            List<JudgeCase> judgeCases = BeanUtil.copyToList(testCaseResults, JudgeCase.class);
+            judgeCaseEntityService.saveBatch(judgeCases);
+        }
+
         //查询是否已经通过了改题目
         boolean exists = userAcproblemEntityService.lambdaQuery()
-                .eq(UserAcproblem::getUserId, msg.getUserId())
-                .eq(UserAcproblem::getProblemId, msg.getProblemId())
+                .eq(UserAcproblem::getUserId, judge.getUserId())
+                .eq(UserAcproblem::getProblemId, judge.getProblemId())
                 .exists();
         if(!exists){
             //首次通过则插入信息
-            UserAcproblem userAcproblem = BeanUtil.copyProperties(msg,UserAcproblem.class);
+            UserAcproblem userAcproblem = UserAcproblem.builder()
+                    .submissionId(judge.getId())
+                    .userId(judge.getUserId())
+                    .username(judge.getUsername())
+                    .problemId(judge.getProblemId())
+                    .displayId(judge.getDisplayId())
+                    .build();
             userAcproblemEntityService.save(userAcproblem);
         }
     }

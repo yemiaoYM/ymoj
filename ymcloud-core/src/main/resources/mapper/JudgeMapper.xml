@@ -27,7 +27,7 @@
         GROUP BY display_id
     </select>
 
-    <select id="getContestSubmissionRecordList" resultType="com.ymcloud.pojo.vo.ContestSubmissionRecord">
+    <select id="getContestSubmissionRecordList" resultType="com.ymcloud.pojo.bo.ContestSubmissionRecord">
         SELECT
         u.username,
         u.school,

@@ -20,7 +20,7 @@ public class RabbitMQConstants {
     /**
      * 评测结束更新用户ac表队列
      */
-    public static final String JUDGE_AC_UPDATE_QUEUE = "judge.ac.update.queue";
+    public static final String JUDGE_RESULT_QUEUE = "judge.result.queue";
 
 
     /**
@@ -40,7 +40,7 @@ public class RabbitMQConstants {
     /**
      * 评测ac表更新路由key
      */
-    public static final String JUDGE_AC_UPDATE_ROUTING_KEY = "judge.ac.update";
+    public static final String JUDGE_RESULT_ROUTING_KEY = "judge.result";
     /**
      * 文件路由key
      */

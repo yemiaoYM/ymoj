@@ -12,7 +12,7 @@ import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.ContestProblemMapper;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
 import com.ymcloud.pojo.vo.ContestProblemTableVO;
-import com.ymcloud.pojo.vo.ContestSubmissionRecord;
+import com.ymcloud.pojo.bo.ContestSubmissionRecord;
 import com.ymcloud.pojo.vo.UserAcRankVO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,4 +1,4 @@
-package com.ymcloud.pojo.vo;
+package com.ymcloud.pojo.bo;
 
 import com.ymcloud.pojo.enums.JudgeStatus;
 import lombok.Data;

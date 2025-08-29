@@ -32,8 +32,7 @@ public interface JudgeService extends IService<Judge> {
     /**
      * 定时评测轮询查询
      * @param submissionId 提交id
-     * @param isTest 是否为自测提交
      * @return 评测结果
      */
-    JudgeResultVO getStatus(Long submissionId,Boolean isTest);
+    JudgeResultVO getStatus(Long submissionId);
 }

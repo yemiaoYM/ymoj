@@ -1,4 +1,4 @@
-package com.ymcloud.judge.utils;
+package com.ymcloud.judge.bo;
 
 import java.io.InputStream;
 

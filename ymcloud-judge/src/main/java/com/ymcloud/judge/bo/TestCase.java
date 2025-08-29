@@ -1,4 +1,4 @@
-package com.ymcloud.judge.domain;
+package com.ymcloud.judge.bo;
 
 import lombok.Data;
 

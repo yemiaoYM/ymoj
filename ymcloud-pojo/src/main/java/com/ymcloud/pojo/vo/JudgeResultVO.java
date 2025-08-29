@@ -1,7 +1,10 @@
 package com.ymcloud.pojo.vo;
 
 import com.ymcloud.pojo.enums.JudgeStatus;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 
@@ -13,6 +16,9 @@ import java.io.Serializable;
  * @Description: 评测结果
  */
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
 public class JudgeResultVO implements Serializable {
     private static final long serialVersionUID = 1L;
     /**

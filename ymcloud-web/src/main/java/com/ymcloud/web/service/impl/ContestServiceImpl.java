@@ -12,6 +12,7 @@ import com.ymcloud.common.exception.contest.*;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.*;
 import com.ymcloud.core.web.mapper.LanguageMapper;
+import com.ymcloud.pojo.bo.ContestSubmissionRecord;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;

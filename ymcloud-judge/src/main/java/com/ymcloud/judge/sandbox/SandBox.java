@@ -3,10 +3,9 @@ package com.ymcloud.judge.sandbox;
 import com.ymcloud.common.exception.judge.*;
 import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
-import com.ymcloud.judge.domain.CmdExecResult;
-import com.ymcloud.judge.domain.CodeRunResult;
+import com.ymcloud.judge.bo.CmdExecResult;
+import com.ymcloud.judge.bo.CodeRunResult;
 
-import java.io.InputStream;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -33,7 +32,7 @@ public abstract class SandBox {
         CmdExecResult res = null;
         try {
             res = container.execCmd(compileCommand, 10, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
             throw new SandBoxException("编译代码时被中断", e);
         }
         if (!res.getStderr().isEmpty()) {
@@ -47,6 +46,10 @@ public abstract class SandBox {
      */
     abstract String[] buildCompileCommand();
 
+    /**
+     * 构建时间内存获取命令
+     * @return 时间内存获取命令数组
+     */
     private String[] buildTimeCommand() {
         return new String[]{"time", "-f", "__TIME__:%U %S %E %M"};
     }
