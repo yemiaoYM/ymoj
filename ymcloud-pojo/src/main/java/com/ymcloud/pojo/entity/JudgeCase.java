@@ -27,6 +27,8 @@ public class JudgeCase {
     private Long memory;
     @Schema(description="该样例得分（OI模式下有效）")
     private Integer score;
+    @Schema(description = "用户程序输出（部分信息）")
+    private String output;
     @Schema(description="运行错误信息（CE、RE、WA等时可能会有）")
     private String errorMessage;
     @Schema(description="记录创建时间")

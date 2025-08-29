@@ -1,6 +1,8 @@
 package com.ymcloud.judge.bo;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * @PackageName: com.ymcloud.judge.domain
@@ -10,11 +12,13 @@ import lombok.Data;
  * @Description: 测试用例
  */
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class TestCase {
     /**
      * 测试用例编号
      */
-    private Long id;
+    private Integer id;
     /**
      * 输入
      */

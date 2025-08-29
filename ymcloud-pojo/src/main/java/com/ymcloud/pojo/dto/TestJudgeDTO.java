@@ -32,4 +32,10 @@ public class TestJudgeDTO {
     @Size(max = 500, message = "用户输入最大为500长度")
     private String input;
 
+    /**
+     * 期望输出
+     */
+    @Size(max = 500, message = "期望输出最大为500长度")
+    private String expectedOutput;
+
 }

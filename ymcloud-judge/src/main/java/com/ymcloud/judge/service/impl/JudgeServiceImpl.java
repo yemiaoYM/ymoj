@@ -10,6 +10,7 @@ import com.ymcloud.common.exception.problem.ProblemPermissionException;
 import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.MessageQueueUtils;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.common.utils.ShortSnowflake;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.*;
 import com.ymcloud.core.web.mapper.JudgeMapper;
@@ -157,7 +158,49 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
      */
     @Override
     public Long testJudge(TestJudgeDTO testJudgeDTO) {
-        return null;
+        //再查询可用语言
+        Language language = languageEntityService.lambdaQuery()
+                .eq(Language::getName, testJudgeDTO.getLanguage())
+                .eq(Language::getOj, "myy")
+                .eq(Language::getStatus, LanguageConstants.ABLE)
+                .one();
+        if(language == null){
+            throw new JudgeException("暂不支持此编程语言");
+        }
+
+        ShortSnowflake snowflake = new ShortSnowflake(1, 1);
+        Long submissionId = snowflake.nextId();
+
+        //向redis中保存临时轮询查询结果，默认5分钟
+        JudgeResultVO judgeResult=new JudgeResultVO();
+        judgeResult.setStatus(JudgeStatus.STATUS_PENDING);
+        redisCache.setCacheObject(
+                CacheConstants.JUDGE_KEY+testJudgeDTO,
+                judgeResult,
+                5, TimeUnit.MINUTES);
+
+        //构造评测实体，将实体交给评测队列，等待评测
+        JudgeTask task =JudgeTask.builder()
+                .submissionId(submissionId)
+                .code(testJudgeDTO.getCode())
+                .input(testJudgeDTO.getInput())
+                .expectedOutput(testJudgeDTO.getExpectedOutput())
+                .languageConfig(language)
+                .timeLimit(1000L)
+                .memoryLimit(64L)
+                .mode(JudgeConstants.ACM)
+                .strategy(JudgeConstants.TEST_JUDGE)
+                .build();
+
+        //发送消息
+        messageQueueUtils.sendWithDelay(
+                RabbitMQConstants.JUDGE_EXCHANGE,
+                RabbitMQConstants.JUDGE_ROUTING_KEY,
+                task,
+                5000L);
+
+        //当前的评测id，用于前端请求当前评测状态
+        return submissionId;
     }
 
     /**

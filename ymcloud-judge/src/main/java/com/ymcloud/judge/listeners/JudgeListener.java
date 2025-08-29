@@ -14,6 +14,7 @@ import com.ymcloud.pojo.bo.JudgeTask;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeCase;
 import com.ymcloud.pojo.entity.UserAcproblem;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
@@ -94,22 +95,25 @@ public class JudgeListener {
             judgeCaseEntityService.saveBatch(judgeCases);
         }
 
-        //查询是否已经通过了改题目
-        boolean exists = userAcproblemEntityService.lambdaQuery()
-                .eq(UserAcproblem::getUserId, judge.getUserId())
-                .eq(UserAcproblem::getProblemId, judge.getProblemId())
-                .exists();
-        if(!exists){
-            //首次通过则插入信息
-            UserAcproblem userAcproblem = UserAcproblem.builder()
-                    .submissionId(judge.getId())
-                    .userId(judge.getUserId())
-                    .username(judge.getUsername())
-                    .problemId(judge.getProblemId())
-                    .displayId(judge.getDisplayId())
-                    .build();
-            userAcproblemEntityService.save(userAcproblem);
+        if(judge.getStatus() == JudgeStatus.STATUS_ACCEPTED){
+            //查询是否已经通过了改题目
+            boolean exists = userAcproblemEntityService.lambdaQuery()
+                    .eq(UserAcproblem::getUserId, judge.getUserId())
+                    .eq(UserAcproblem::getProblemId, judge.getProblemId())
+                    .exists();
+            if(!exists){
+                //首次通过则插入信息
+                UserAcproblem userAcproblem = UserAcproblem.builder()
+                        .submissionId(judge.getId())
+                        .userId(judge.getUserId())
+                        .username(judge.getUsername())
+                        .problemId(judge.getProblemId())
+                        .displayId(judge.getDisplayId())
+                        .build();
+                userAcproblemEntityService.save(userAcproblem);
+            }
         }
+
     }
 
     /**

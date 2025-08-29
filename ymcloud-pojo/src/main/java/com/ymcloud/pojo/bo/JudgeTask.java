@@ -31,6 +31,10 @@ public class JudgeTask {
      */
     private String input;
     /**
+     * 期望输出
+     */
+    private String expectedOutput;
+    /**
      * 用户代码
      */
     private String code;
