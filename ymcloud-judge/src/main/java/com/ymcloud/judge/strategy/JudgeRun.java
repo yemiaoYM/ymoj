@@ -3,6 +3,7 @@ package com.ymcloud.judge.strategy;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSON;
 import com.github.dockerjava.api.DockerClient;
 import com.ymcloud.common.constant.*;
 import com.ymcloud.common.exception.MqException;
@@ -17,6 +18,7 @@ import com.ymcloud.judge.bo.*;
 import com.ymcloud.judge.sandbox.SandBox;
 import com.ymcloud.judge.sandbox.SandBoxFactory;
 import com.ymcloud.pojo.bo.JudgeTask;
+import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.JudgeResultVO;
@@ -255,21 +257,26 @@ public class JudgeRun {
         redisCache.setCacheObject(key, nowStatus, 5, TimeUnit.MINUTES);
     }
 
-    private List<TestCase> getAllTestCases(Long problemId){
+    /**
+     * 获取题目所有测试用例
+     * @param problemId 题目id
+     * @return 所有测试用例
+     */
+    private List<TestCase> getAllTestCases(Long problemId) {
         String problemCaseDir = baseDir + "/"
                 + FileConstants.DIR_PRIVATE + "/"
-                + FileConstants.SUB_DIR_PROBLEM + "/"
-                + "problem_" + problemId;
-        //计算一下样例的个数in,out是成对的
-        long caseCount = FileUtils.countFileBySuffix(problemCaseDir, ".in");
+                + FileConstants.SUB_DIR_PROBLEM + "/" + problemId;
+
+        //获取到测试样例的基本信息
+        String infoFile = problemCaseDir + "/info.json";
+        List<ProblemCaseInfo> caseInfos = JSON.parseArray(FileUtils.readFileString(infoFile), ProblemCaseInfo.class);
+        //获取测试点信息
         List<TestCase> testCases = new ArrayList<>();
-        for(int i=1; i<=caseCount; i++){
-            TestCase testCase = new TestCase();
-            testCase.setId(i);
-            String inputFile = problemCaseDir + "/" + i + ".in";
-            String outFile = problemCaseDir + "/" + i + ".out";
-            testCase.setInput(FileUtils.readFileString(inputFile));
-            testCase.setOutput(FileUtils.readFileString(outFile));
+        for (ProblemCaseInfo caseInfo : caseInfos) {
+            TestCase testCase = new TestCase(
+                    caseInfo.getId(),
+                    FileUtils.readFileString(problemCaseDir + caseInfo.getInput()),
+                    FileUtils.readFileString(problemCaseDir + caseInfo.getOutput()));
             testCases.add(testCase);
         }
         return testCases;

@@ -1,6 +1,8 @@
 package com.ymcloud.web;
 
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSON;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
@@ -12,12 +14,13 @@ import com.ymcloud.judge.docker.factory.CodeExecContainerFactory;
 import com.ymcloud.judge.bo.CodeRunResult;
 import com.ymcloud.judge.sandbox.SandBox;
 import com.ymcloud.judge.sandbox.SandBoxFactory;
+import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.*;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -147,14 +150,31 @@ public class DockerTest {
                 __TIME__:1.64 3116""";
         System.out.println(str);
 
-//        String s = StrUtil.split(str, "__TIME__:").get(1);
-//        String[] time = s.split(" ");
-//        System.out.println(Arrays.toString(time));
-
         String timeInfo = StrUtil.subAfter(str, "__TIME__:", true);
         List<String> strings = StrUtil.splitTrim(timeInfo, " ");
 
         System.out.println(strings);
+    }
+
+    @Test
+    public void caseToJson(){
+        String baseDir="E:/Java/ymcloud/files/private/problem/";
+        for(int k=1;k<=2;k++){
+            String dir=baseDir+k;
+            int countFile = FileUtils.countFile(dir + "/in");
+
+            List<ProblemCaseInfo> list=new ArrayList<>();
+            for(int i=1;i<=countFile;i++){
+                ProblemCaseInfo caseInfo = new ProblemCaseInfo(i,"/in/"+i+".in","/out/"+i+".out");
+                list.add(caseInfo);
+            }
+
+            String jsonString = JSON.toJSONString(list);
+            System.out.println(jsonString);
+
+
+            FileUtil.writeUtf8String(jsonString,dir+"/info.json");
+        }
     }
 
 }

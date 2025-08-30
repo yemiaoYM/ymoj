@@ -29,13 +29,13 @@ public class TestJudgeDTO {
     /**
      * 用户输入
      */
-    @Size(max = 500, message = "用户输入最大为500长度")
+    @Size(max = 1000, message = "用户输入最大为500长度")
     private String input;
 
     /**
      * 期望输出
      */
-    @Size(max = 500, message = "期望输出最大为500长度")
+    @Size(max = 1000, message = "期望输出最大为500长度")
     private String expectedOutput;
 
 }
