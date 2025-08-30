@@ -33,6 +33,10 @@ public class JudgeResult {
      */
     private Long memory;
     /**
+     * 得分
+     */
+    private Integer score;
+    /**
      * 错误信息
      */
     private String errorMessage;

@@ -85,6 +85,7 @@ public class JudgeListener {
         judge.setStatus(result.getStatus());
         judge.setTime(result.getTime());
         judge.setMemory(result.getMemory());
+        judge.setScore(result.getScore());
         judge.setErrorMessage(result.getErrorMessage());
         judgeEntityService.updateById(judge);
 

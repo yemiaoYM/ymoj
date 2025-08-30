@@ -185,14 +185,10 @@ public class JudgeRun {
 
             result.setTime(maxTimeUsed);
             result.setMemory(maxMemoryUsed);
-            result.setStatus(JudgeStatus.STATUS_ACCEPTED);
-            //只有全部测试点正确，评测才算正确
-            for (TestCaseResult caseResult : testCaseResults) {
-                if (!caseResult.getStatus().equals(JudgeStatus.STATUS_ACCEPTED)) {
-                    result.setStatus(caseResult.getStatus());
-                    break;
-                }
-            }
+
+            //根据评测模式设置评测结果
+            getStatusByMode(result, task.getMode());
+
             //通知评测结束
             notifyStatus(result,result.getStatus(),null,task.getStrategy());
 
@@ -221,6 +217,42 @@ public class JudgeRun {
             }
         }
         return result;
+    }
+
+    /**
+     * 根据评测模式设置评测状态和分数
+     * @param result 当前评测结果
+     * @param mode 评测模式
+     */
+    private void getStatusByMode(JudgeResult result, Integer mode) {
+        //获取所有测试用例结果
+        List<TestCaseResult> caseResults = result.getTestCaseResults();
+        //根据评测模式判断如何计算状态和分数
+        if (mode.equals(JudgeConstants.OI)) {
+            long total = caseResults.size();
+            long ac = caseResults.stream().filter(o -> o.getStatus() == JudgeStatus.STATUS_ACCEPTED).count();
+
+            result.setScore((int) Math.ceil((double) ac / total * 100));
+
+            if (ac == total) {
+                result.setStatus(JudgeStatus.STATUS_ACCEPTED);
+            } else if (ac == 0) {
+                result.setStatus(JudgeStatus.STATUS_WRONG_ANSWER);
+            } else {
+                result.setStatus(JudgeStatus.STATUS_PARTIAL_ACCEPTED);
+            }
+        } else if (mode.equals(JudgeConstants.ACM)) {
+            result.setStatus(JudgeStatus.STATUS_ACCEPTED);
+            result.setScore(100);
+            for (TestCaseResult o : caseResults) {
+                //查找第一个不为AC的测试用例，更新状态
+                if (o.getStatus() != JudgeStatus.STATUS_ACCEPTED) {
+                    result.setStatus(o.getStatus());
+                    result.setScore(0);
+                    break;
+                }
+            }
+        }
     }
 
     /**
