@@ -1,5 +1,6 @@
 package com.ymcloud.common.utils;
 
+import com.ymcloud.common.exception.MqException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -26,7 +27,11 @@ public class MessageQueueUtils {
      * @param message    消息内容
      */
     public <T> void send(String exchange, String routingKey, T message) {
-        rabbitTemplate.convertAndSend(exchange, routingKey, message);
+        try {
+            rabbitTemplate.convertAndSend(exchange, routingKey, message);
+        } catch (Exception e) {
+            throw new MqException("消息队列发送消息异常", e);
+        }
     }
 
     /**
@@ -37,10 +42,14 @@ public class MessageQueueUtils {
      * @param delayMs    延迟时间（毫秒）
      */
     public <T> void sendWithDelay(String exchange, String routingKey, T message, long delayMs) {
-        rabbitTemplate.convertAndSend(exchange, routingKey, message, msg -> {
-            msg.getMessageProperties().setDelayLong(delayMs);
-            return msg;
-        });
+        try {
+            rabbitTemplate.convertAndSend(exchange, routingKey, message, msg -> {
+                msg.getMessageProperties().setDelayLong(delayMs);
+                return msg;
+            });
+        } catch (Exception e) {
+            throw new MqException("消息队列发送延迟消息异常", e);
+        }
     }
 
     /**
@@ -50,8 +59,12 @@ public class MessageQueueUtils {
      * @param messages   消息数组
      */
     public <T> void sendBatch(String exchange, String routingKey, List<T> messages) {
-        for (T message : messages) {
-            send(exchange, routingKey, message);
+        try {
+            for (T message : messages) {
+                send(exchange, routingKey, message);
+            }
+        } catch (Exception e) {
+            throw new MqException("消息队列批量发送消息异常", e);
         }
     }
 

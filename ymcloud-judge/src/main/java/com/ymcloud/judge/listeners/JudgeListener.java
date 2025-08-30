@@ -3,7 +3,6 @@ package com.ymcloud.judge.listeners;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import com.ymcloud.common.constant.RabbitMQConstants;
-import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.core.web.dao.JudgeCaseEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
@@ -46,6 +45,7 @@ public class JudgeListener {
 
     @Autowired
     private JudgeEntityService judgeEntityService;
+
     @Autowired
     private JudgeCaseEntityService judgeCaseEntityService;
 
@@ -114,26 +114,6 @@ public class JudgeListener {
             }
         }
 
-    }
-
-    /**
-     * 文件清理队列
-     * @param filename 文件名
-     */
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = RabbitMQConstants.FILE_CLEAN_QUEUE,
-                    durable = "true"),
-            exchange = @Exchange(value = RabbitMQConstants.FILE_EXCHANGE,
-                    delayed = "true",
-                    type = ExchangeTypes.TOPIC),
-            key = RabbitMQConstants.FILE_CLEAN_ROUTING_KEY
-    ))
-    public void listenJudgeFileClean(String filename) {
-        log.info("[文件清理队列]=>收到文件:{}",filename);
-        if(FileUtils.exists(filename)) {
-            FileUtils.deleteFile(filename);
-        }
-        log.info("[文件清理队列]=>文件清理成功");
     }
 
 }

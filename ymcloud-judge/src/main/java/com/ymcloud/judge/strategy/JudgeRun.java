@@ -5,6 +5,8 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.ymcloud.common.constant.*;
+import com.ymcloud.common.exception.MqException;
+import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.exception.judge.*;
 import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.common.utils.MessageQueueUtils;
@@ -60,18 +62,25 @@ public class JudgeRun {
      */
     public void execute(JudgeTask task){
         log.info("JudgeRun评测逻辑处理...");
-        //判断评测策略
-        if(task.getStrategy().equals(JudgeConstants.DEFAULT_JUDGE)){
-            List<TestCase> testCases=getAllTestCases(task.getProblemId());
-            JudgeResult result = judge(task, testCases);
-            //更新评测结果
-            messageQueueUtils.send(
-                    RabbitMQConstants.JUDGE_EXCHANGE,
-                    RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY,
-                    result);
-        } else if (task.getStrategy().equals(JudgeConstants.TEST_JUDGE)){
-            List<TestCase> testCases=List.of(new TestCase(1,task.getInput(),task.getExpectedOutput()));
-            judge(task, testCases);
+        try {
+            if (task.getStrategy().equals(JudgeConstants.DEFAULT_JUDGE)) {
+                //默认评测
+                List<TestCase> testCases = getAllTestCases(task.getProblemId());
+                JudgeResult result = judge(task, testCases);
+                //更新评测结果
+                messageQueueUtils.send(
+                        RabbitMQConstants.JUDGE_EXCHANGE,
+                        RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY,
+                        result);
+            } else if (task.getStrategy().equals(JudgeConstants.TEST_JUDGE)) {
+                //自测
+                List<TestCase> testCases = List.of(new TestCase(1, task.getInput(), task.getExpectedOutput()));
+                judge(task, testCases);
+            }
+        }catch (MqException e){
+            log.warn(e.getMessage(),e);
+        }catch (Exception e){
+            log.error("评测逻辑出现异常",e);
         }
     }
 
@@ -196,25 +205,28 @@ public class JudgeRun {
             String errMsg = "对不起，系统评测失败，请联系管理员";
             notifyStatus(result, JudgeStatus.STATUS_COMPILE_ERROR, errMsg, task.getStrategy());
         } finally {
-            //删除容器
-            if (container != null) {
-                container.remove(true);
+            try {
+                //删除容器
+                if (container != null) {
+                    container.remove(true);
+                }
+                //评测结束删除提交文件
+                if(!FileUtils.deleteFile(hostFilePath)){
+                    throw new FileException("删除提交文件异常");
+                }
+            }catch (Exception e){
+                log.error(e.getMessage(),e);
             }
-            //评测结束删除提交文件
-            messageQueueUtils.send(
-                    RabbitMQConstants.FILE_EXCHANGE,
-                    RabbitMQConstants.FILE_CLEAN_ROUTING_KEY,
-                    hostFilePath);
         }
         return result;
     }
 
     /**
      * 更新评测状态
-     * @param result 评测结果
-     * @param status 评测状态
-     * @param errMsg 错误信息
-     * @param strategy   评测策略
+     * @param result   评测结果
+     * @param status   评测状态
+     * @param errMsg   错误信息
+     * @param strategy 评测策略
      */
     private void notifyStatus(JudgeResult result, JudgeStatus status, String errMsg, Integer strategy) {
         //先更新当前状态
