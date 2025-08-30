@@ -3,6 +3,7 @@ package com.ymcloud.judge.docker.container;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.command.InspectExecResponse;
 import com.ymcloud.judge.bo.CmdExecResult;
 import com.ymcloud.judge.bo.DockerFrameCallback;
 import com.ymcloud.judge.bo.StringInputStream;
@@ -61,6 +62,13 @@ public abstract class DockerContainer {
     }
 
     /**
+     * 查看进程信息
+     */
+    public InspectExecResponse inspectExec(String execId){
+        return dockerClient.inspectExecCmd(execId).exec();
+    }
+
+    /**
      * 查看容器信息
      */
     public InspectContainerResponse inspectContainer() {
@@ -99,26 +107,24 @@ public abstract class DockerContainer {
     /**
      * 执行命令
      * @param cmd 命令
-     * @param timeout 超时时间
-     * @param unit 时间格式
      * @return 执行结果
      */
-    public CmdExecResult execCmd(String[] cmd, int timeout, TimeUnit unit) throws Exception {
+    public CmdExecResult execCmd(String[] cmd) throws Exception {
 
         String execID = this.createCmd(cmd).getId();
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
 
-        boolean awaited = dockerClient
-                .execStartCmd(execID)
-                .exec(new DockerFrameCallback(out,err))
-                .awaitCompletion(timeout, unit);
+        dockerClient.execStartCmd(execID)
+                .exec(new DockerFrameCallback(out, err))
+                .awaitCompletion()
+                .close();
 
         return CmdExecResult.builder()
                 .stdout(out.toString(StandardCharsets.UTF_8))
                 .stderr(err.toString(StandardCharsets.UTF_8))
-                .isTimeout(!awaited)
+                .exitCode(inspectExec(execID).getExitCodeLong())
                 .build();
     }
 
@@ -126,11 +132,9 @@ public abstract class DockerContainer {
      * 执行命令带输入流
      * @param cmd 命令
      * @param stdin 输入
-     * @param timeout 超时时间
-     * @param unit 时间格式
      * @return 执行结果
      */
-    public CmdExecResult execCmd(String[] cmd, String stdin, int timeout, TimeUnit unit) throws Exception {
+    public CmdExecResult execCmd(String[] cmd, String stdin) throws Exception {
 
         String execID = this.createCmd(cmd).getId();
 
@@ -139,16 +143,16 @@ public abstract class DockerContainer {
 
         InputStream in = new StringInputStream(stdin);
 
-        boolean awaited = dockerClient
-                .execStartCmd(execID)
+        dockerClient.execStartCmd(execID)
                 .withStdIn(in)
                 .exec(new DockerFrameCallback(out,err))
-                .awaitCompletion(timeout, unit);
+                .awaitCompletion()
+                .close();
 
         return CmdExecResult.builder()
                 .stdout(out.toString())
                 .stderr(err.toString())
-                .isTimeout(!awaited)
+                .exitCode(inspectExec(execID).getExitCodeLong())
                 .build();
     }
 

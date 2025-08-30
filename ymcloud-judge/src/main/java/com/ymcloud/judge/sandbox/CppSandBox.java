@@ -22,7 +22,7 @@ public class CppSandBox extends SandBox {
 
     @Override
     String[] buildRunCommand() {
-        return new String[] { "./main" };
+        return new String[]{ "./main" };
     }
 
     @Override

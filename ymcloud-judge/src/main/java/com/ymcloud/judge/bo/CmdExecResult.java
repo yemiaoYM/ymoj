@@ -22,11 +22,7 @@ public class CmdExecResult {
      */
     private String stderr;
     /**
-     * 是否超时
-     */
-    private boolean isTimeout;
-    /**
      * 退出码
      */
-    private int exitCode;
+    private long exitCode;
 }

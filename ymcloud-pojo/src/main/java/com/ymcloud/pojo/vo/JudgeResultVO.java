@@ -42,6 +42,10 @@ public class JudgeResultVO implements Serializable {
      */
     private String output;
     /**
+     * 期望输出（只在自测模式下生效）
+     */
+    private String expectedOutput;
+    /**
      * 错误内容
      */
     private String errorMessage;

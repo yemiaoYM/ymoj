@@ -172,10 +172,13 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         Long submissionId = snowflake.nextId();
 
         //向redis中保存临时轮询查询结果，默认5分钟
-        JudgeResultVO judgeResult=new JudgeResultVO();
-        judgeResult.setStatus(JudgeStatus.STATUS_PENDING);
+        JudgeResultVO judgeResult=JudgeResultVO.builder()
+                .status(JudgeStatus.STATUS_PENDING)
+                .input(testJudgeDTO.getInput())
+                .expectedOutput(testJudgeDTO.getExpectedOutput())
+                .build();
         redisCache.setCacheObject(
-                CacheConstants.JUDGE_KEY+testJudgeDTO,
+                CacheConstants.JUDGE_KEY+submissionId,
                 judgeResult,
                 5, TimeUnit.MINUTES);
 
@@ -187,7 +190,7 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
                 .expectedOutput(testJudgeDTO.getExpectedOutput())
                 .languageConfig(language)
                 .timeLimit(1000L)
-                .memoryLimit(64L)
+                .memoryLimit(64 * 1024L)
                 .mode(JudgeConstants.ACM)
                 .strategy(JudgeConstants.TEST_JUDGE)
                 .build();

@@ -1,5 +1,6 @@
 package com.ymcloud.web;
 
+import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
@@ -16,6 +17,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.*;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -33,19 +36,17 @@ public class DockerTest {
 
     @Test
     public void testCreateContainer() {
-        String hostWorkingDir="E:/Java/ymcloud/files/tmp/submission_10075";
+        String hostWorkingDir="E:/Java/ymcloud/files/tmp/submission_10011";
         String containerWorkingDir="/app";
-        String hostTestCaseDir="E:/Java/ymcloud/files/private/problem/problem_7/in";
-        String containerTestCaseDir="/app/in";
 
-        long memoryLimitMb=128;
+        long memoryLimitKb = 128*1024L;
         String imageName="oj-cpp-env";
 
         CodeExecContainerFactory factory=new CodeExecContainerFactory(
                 dockerClient,
                 hostWorkingDir,
                 containerWorkingDir,
-                memoryLimitMb,
+                memoryLimitKb,
                 imageName);
         CodeExecContainer container = factory.createDockerContainer();
 
@@ -59,20 +60,25 @@ public class DockerTest {
 
         sandBox.compile(container);
 
-        int countFile = FileUtils.countFile(hostTestCaseDir);
-        System.out.println(countFile);
+        String in=" ";
+        CodeRunResult execute = sandBox.execute(container, in+"\n", 1000L);
 
-        for (int i = 1; i <= countFile; i++) {
-            String inputFile = hostTestCaseDir+"/"+i+".in";
-            try{
-                String in=FileUtils.readFileString(inputFile);
-                System.out.println("[第"+i+"个]测试样例开始评测...");
-                CodeRunResult execute = sandBox.execute(container, in);
-                System.out.println("[第"+i+"个]测试样例的结果为："+execute);
-            } catch (Exception e){
-                System.out.println("评测出现问题"+e);
-            }
-        }
+        System.out.println(execute);
+
+//        int countFile = FileUtils.countFile(hostTestCaseDir);
+//        System.out.println(countFile);
+//
+//        for (int i = 1; i <= countFile; i++) {
+//            String inputFile = hostTestCaseDir+"/"+i+".in";
+//            try{
+//                String in=FileUtils.readFileString(inputFile);
+//                System.out.println("[第"+i+"个]测试样例开始评测...");
+//                CodeRunResult execute = sandBox.execute(container, in);
+//                System.out.println("[第"+i+"个]测试样例的结果为："+execute);
+//            } catch (Exception e){
+//                System.out.println("评测出现问题"+e);
+//            }
+//        }
 
 //        container.remove(true);
     }
@@ -130,6 +136,25 @@ public class DockerTest {
         }
 
         System.out.println(err);
+    }
+
+
+    @Test
+    public void parseTimeAndMemory(){
+        String str= """
+                1 2
+                3
+                __TIME__:1.64 3116""";
+        System.out.println(str);
+
+//        String s = StrUtil.split(str, "__TIME__:").get(1);
+//        String[] time = s.split(" ");
+//        System.out.println(Arrays.toString(time));
+
+        String timeInfo = StrUtil.subAfter(str, "__TIME__:", true);
+        List<String> strings = StrUtil.splitTrim(timeInfo, " ");
+
+        System.out.println(strings);
     }
 
 }

@@ -82,6 +82,8 @@ public class JudgeRun {
         //评测结果
         JudgeResult result=new JudgeResult();
         result.setSubmissionId(task.getSubmissionId());
+        //本地文件路径
+        String hostFilePath = hostWorkingDir + "/" + task.getSubmissionId();
         //docker容器
         CodeExecContainer container = null;
         try {
@@ -89,8 +91,6 @@ public class JudgeRun {
             notifyStatus(result,JudgeStatus.STATUS_COMPILING,null,task.getStrategy());
             //获取语言配置
             Language language = task.getLanguageConfig();
-            //本地文件路径
-            String hostFilePath = hostWorkingDir + "/" + task.getSubmissionId();
             //从工厂中创建容器
             CodeExecContainerFactory factory = new CodeExecContainerFactory(
                     dockerClient,
@@ -123,7 +123,10 @@ public class JudgeRun {
 
                 CodeRunResult codeRunResult = new CodeRunResult();
                 try {
-                    codeRunResult = sandBox.execute(container, testCase.getInput().trim() + "\n");
+                    codeRunResult = sandBox.execute(container,
+                            testCase.getInput().trim() + "\n",
+                            //增加200ms是消除容器启动等时间
+                            task.getTimeLimit()+200L);
                 } catch (TimeLimitExceededException e) {
                     caseResult.setStatus(JudgeStatus.STATUS_TIME_LIMIT_EXCEEDED);
                 } catch (MemoryLimitExceededException e){
@@ -182,11 +185,6 @@ public class JudgeRun {
             //通知评测结束
             notifyStatus(result,result.getStatus(),null,task.getStrategy());
 
-            //评测结束删除提交文件
-            messageQueueUtils.send(
-                    RabbitMQConstants.FILE_EXCHANGE,
-                    RabbitMQConstants.FILE_CLEAN_ROUTING_KEY,
-                    hostFilePath);
         } catch (CompileException e) {
             notifyStatus(result, JudgeStatus.STATUS_COMPILE_ERROR, e.getMessage(), task.getStrategy());
         } catch (SandBoxException e) {
@@ -202,6 +200,11 @@ public class JudgeRun {
             if (container != null) {
                 container.remove(true);
             }
+            //评测结束删除提交文件
+            messageQueueUtils.send(
+                    RabbitMQConstants.FILE_EXCHANGE,
+                    RabbitMQConstants.FILE_CLEAN_ROUTING_KEY,
+                    hostFilePath);
         }
         return result;
     }
@@ -214,17 +217,29 @@ public class JudgeRun {
      * @param strategy   评测策略
      */
     private void notifyStatus(JudgeResult result, JudgeStatus status, String errMsg, Integer strategy) {
+        //先更新当前状态
         result.setStatus(status);
         result.setErrorMessage(errMsg);
 
-        JudgeResultVO nowStatus = BeanUtil.copyProperties(result, JudgeResultVO.class);
-        if(JudgeConstants.TEST_JUDGE.equals(strategy)&&CollUtil.isNotEmpty(result.getTestCaseResults())){
-            //如果是自测模式则填充输出信息
-            String output = result.getTestCaseResults().get(0).getOutput();
-            nowStatus.setOutput(output);
+        String key = CacheConstants.JUDGE_KEY + result.getSubmissionId();
+        //先尝试从缓存获取已有对象
+        JudgeResultVO nowStatus = redisCache.getCacheObject(key);
+        if (nowStatus == null) {
+            //缓存不存在则新建
+            nowStatus = BeanUtil.copyProperties(result, JudgeResultVO.class);
+        }else {
+            nowStatus.setStatus(status);
+            nowStatus.setErrorMessage(errMsg);
+            nowStatus.setTime(result.getTime());
+            nowStatus.setMemory(result.getMemory());
         }
-
-        String key=CacheConstants.JUDGE_KEY + result.getSubmissionId();
+        //自测模式下填充输出信息
+        if (JudgeConstants.TEST_JUDGE.equals(strategy) && CollUtil.isNotEmpty(result.getTestCaseResults())) {
+            TestCaseResult caseResult = result.getTestCaseResults().get(0);
+            nowStatus.setOutput(caseResult.getOutput());
+            nowStatus.setErrorMessage(caseResult.getErrorMessage());
+        }
+        //写回缓存，设置过期
         redisCache.setCacheObject(key, nowStatus, 5, TimeUnit.MINUTES);
     }
 

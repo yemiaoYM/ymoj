@@ -92,7 +92,7 @@ public class ProblemAddOrUpdateDTO {
      * 时间限制（ms）
      */
     @NotNull(message = "请设定时间限制")
-    @Min(value = 100, message = "时间限制不能少于100ms")
+    @Min(value = 1000, message = "时间限制不能少于1000ms(1秒)")
     @Max(value = 10000, message = "时间限制不能超过10000ms(10秒)")
     private Long timeLimit;
 
