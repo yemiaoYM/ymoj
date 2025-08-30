@@ -50,7 +50,7 @@ public class JudgeRun {
     private MessageQueueUtils messageQueueUtils;
 
     @Value("${ymcloud.file.base-dir}")
-    private String BASE_DIR;
+    private String baseDir;
     @Value("${ymcloud.docker.host-working-dir}")
     private String hostWorkingDir;
     @Value("${ymcloud.docker.container-working-dir}")
@@ -128,7 +128,7 @@ public class JudgeRun {
                 //设置单个用例基本信息
                 TestCaseResult caseResult = new TestCaseResult();
                 caseResult.setJudgeId(result.getSubmissionId());
-                caseResult.setIndex(testCase.getId());
+                caseResult.setCaseIndex(testCase.getId());
 
                 CodeRunResult codeRunResult = new CodeRunResult();
                 try {
@@ -256,7 +256,7 @@ public class JudgeRun {
     }
 
     private List<TestCase> getAllTestCases(Long problemId){
-        String problemCaseDir = BASE_DIR + "/"
+        String problemCaseDir = baseDir + "/"
                 + FileConstants.DIR_PRIVATE + "/"
                 + FileConstants.SUB_DIR_PROBLEM + "/"
                 + "problem_" + problemId;

@@ -95,7 +95,8 @@ public class JudgeListener {
             judgeCaseEntityService.saveBatch(judgeCases);
         }
 
-        if(judge.getStatus() == JudgeStatus.STATUS_ACCEPTED){
+        //非比赛提交才会计入
+        if(judge.getStatus() == JudgeStatus.STATUS_ACCEPTED && judge.getContestId() == 0){
             //查询是否已经通过了改题目
             boolean exists = userAcproblemEntityService.lambdaQuery()
                     .eq(UserAcproblem::getUserId, judge.getUserId())

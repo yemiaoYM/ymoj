@@ -19,7 +19,7 @@ public class TestCaseResult {
     /**
      * 样例在评测中的顺序编号（从0或1开始）
      */
-    private Integer Index;
+    private Integer caseIndex;
     /**
      * 评测结果
      */
