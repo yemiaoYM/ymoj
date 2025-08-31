@@ -19,4 +19,12 @@ public class SubmissionException extends ServiceException {
         super(message);
     }
 
+    public SubmissionException(String message, Integer code) {
+        super(message, code);
+    }
+
+    public SubmissionException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
 }

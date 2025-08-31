@@ -67,9 +67,9 @@ public class SubmissionVO implements Serializable {
      */
     private String errorMessage;
     /**
-     * 是否公开代码：0=私有，1=公开
+     * 是否公开代码
      */
-    private Integer share;
+    private Boolean share;
     /**
      * 执行判题的机器标识
      */

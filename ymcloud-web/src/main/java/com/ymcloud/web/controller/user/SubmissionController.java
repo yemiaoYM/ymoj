@@ -5,10 +5,7 @@ import com.ymcloud.pojo.vo.SubmissionVO;
 import com.ymcloud.web.service.SubmissionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @PackageName: com.ymcloud.web.controller.user
@@ -37,6 +34,15 @@ public class SubmissionController {
         return Result.ok(submission);
     }
 
-
+    /**
+     * 修改分享权限
+     * @param submissionId 提交id
+     */
+    @PutMapping("/{id}/share")
+    public Result<?> share(@PathVariable("id") Long submissionId) {
+        log.info("修改分享权限:{}", submissionId);
+        submissionService.updateShare(submissionId);
+        return Result.ok();
+    }
 
 }

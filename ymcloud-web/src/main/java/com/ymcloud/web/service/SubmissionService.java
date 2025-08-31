@@ -14,7 +14,7 @@ import com.ymcloud.pojo.vo.SubmissionVO;
  * @CreateTime: 2025-07-25  16:02
  * @Description: SubmissionService
  */
-public interface SubmissionService extends IService<Judge> {
+public interface SubmissionService {
 
     /**
      * 获取评测结果列表 分页查询
@@ -29,4 +29,10 @@ public interface SubmissionService extends IService<Judge> {
      * @return 提交详情信息
      */
     SubmissionVO getSubmissionDetail(Long submissionId);
+
+    /**
+     * 修改分享权限
+     * @param submissionId 提交id
+     */
+    void updateShare(Long submissionId);
 }

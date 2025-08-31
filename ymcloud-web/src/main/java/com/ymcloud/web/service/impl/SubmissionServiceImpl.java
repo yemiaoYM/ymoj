@@ -5,9 +5,11 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.contest.ContestNotAccessException;
 import com.ymcloud.common.exception.contest.ContestNotExistException;
 import com.ymcloud.common.exception.submission.SubmissionException;
+import com.ymcloud.common.exception.submission.SubmissionNotExistException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
@@ -35,7 +37,7 @@ import java.util.List;
  * @Description: SubmissionServiceImpl
  */
 @Service
-public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements SubmissionService {
+public class SubmissionServiceImpl implements SubmissionService {
 
     @Autowired
     private JudgeEntityService judgeEntityService;
@@ -99,8 +101,14 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
         //查询提交记录
         Judge submission = judgeEntityService.getById(submissionId);
         if(submission==null){
-            throw new SubmissionException("提交记录不存在");
+            throw new SubmissionNotExistException();
         }
+
+        // 清空vj信息
+        submission.setVjudgeUsername(null);
+        submission.setVjudgeSubmitId(null);
+        submission.setVjudgePassword(null);
+
         //获取当前用户
         Long userId = SecurityUtils.getUserId();
         //处理比赛提交
@@ -120,12 +128,13 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
                     throw new ContestNotAccessException();
                 }
             }
-            //如果比赛为结束允许查看他人提交详情
+            //比赛未结束不允许查看他人提交详情
             LocalDateTime now = LocalDateTime.now();
             if(!userId.equals(submission.getUserId())&&now.isBefore(contest.getEndTime())){
                 throw new SubmissionException("比赛结束前禁止查看他人提交详情");
             }
         }
+
         //个人提交和公开分享才支持查看代码
         if(!submission.getUserId().equals(userId) && !submission.getShare()){
             //不为本人且不公开分享
@@ -143,5 +152,31 @@ public class SubmissionServiceImpl extends ServiceImpl<JudgeMapper, Judge> imple
         return submissionVO;
     }
 
+    /**
+     * 修改分享权限
+     * @param submissionId 提交id
+     */
+    @Override
+    public void updateShare(Long submissionId) {
+        Judge judge = judgeEntityService.getById(submissionId);
+        if(judge==null){
+            throw new SubmissionNotExistException();
+        }
+        //判断该提交是否为当前用户的
+        Long userId = SecurityUtils.getUserId();
+        if(!judge.getUserId().equals(userId)){
+            throw new SubmissionException("对不起，您不能修改他人的代码分享权限！", HttpStatus.FORBIDDEN);
+        }
+        //如果是比赛提交,不可分享
+        if (judge.getContestId() != 0) {
+            throw new SubmissionException("对不起，您不能分享比赛题目的提交代码！", HttpStatus.FORBIDDEN);
+        }
+        //修改分享权限
+        judge.setShare(!judge.getShare());
+        boolean isOk = judgeEntityService.updateById(judge);
+        if(!isOk){
+            throw new SubmissionException("修改代码权限失败！");
+        }
+    }
 
 }
