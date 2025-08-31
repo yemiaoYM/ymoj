@@ -17,7 +17,7 @@ public class JavaSandBox extends SandBox {
 
     @Override
     String[] buildCompileCommand() {
-        return new String[]{"javac", "Main.java"};
+        return new String[]{"javac", "-encoding", "UTF8", "Main.java"};
     }
 
     @Override

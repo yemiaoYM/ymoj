@@ -17,7 +17,7 @@ public class CSandBox extends SandBox {
 
     @Override
     String[] buildCompileCommand() {
-        return new String[] { "gcc", "-O2", "-std=c11", "main.c", "-lm", "-o", "main" };
+        return new String[] { "gcc", "-O2", "-w", "-fmax-errors=3", "-std=c11", "main.c", "-lm", "-o", "main" };
     }
 
     @Override

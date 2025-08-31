@@ -3,8 +3,10 @@ package com.ymcloud.web.controller.common;
 import cn.hutool.core.bean.BeanUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
+import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
 import com.ymcloud.pojo.entity.Announcement;
+import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Tag;
 import com.ymcloud.pojo.query.ContestPageQuery;
 import com.ymcloud.pojo.query.ProblemPageQuery;
@@ -55,6 +57,9 @@ public class PublicController {
 
     @Autowired
     private SubmissionService submissionService;
+
+    @Autowired
+    private LanguageEntityService languageEntityService;
 
     /**
      * 查询用户信息
@@ -150,6 +155,20 @@ public class PublicController {
     public Result<PageVO<SubmissionTableVO>> listSubmissions(@Validated SubmissionPageQuery query) {
         log.info("获取评测列表表单:{}",query);
         PageVO<SubmissionTableVO> list=submissionService.getPublicSubmissionList(query);
+        return Result.ok(list);
+    }
+
+    /**
+     * 获取本地编程语言列表
+     * @return 编程语言列表
+     */
+    @Cacheable(cacheNames = CacheConstants.CACHE_NAME,key = "'language_list'")
+    @GetMapping("/languages")
+    public Result<List<Language>> listLanguages(){
+        log.info("获取本地编程语言列表");
+        List<Language> list = languageEntityService.lambdaQuery()
+                .eq(Language::getOj, "myy")
+                .list();
         return Result.ok(list);
     }
 

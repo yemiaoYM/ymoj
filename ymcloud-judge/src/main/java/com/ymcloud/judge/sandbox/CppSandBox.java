@@ -17,7 +17,7 @@ public class CppSandBox extends SandBox {
 
     @Override
     String[] buildCompileCommand() {
-        return new String[] { "g++", "-O2", "-std=c++17", "main.cpp", "-lm", "-o", "main" };
+        return new String[] { "g++", "-O2", "-w", "-fmax-errors=3", "-std=c++17", "main.cpp", "-lm", "-o", "main" };
     }
 
     @Override

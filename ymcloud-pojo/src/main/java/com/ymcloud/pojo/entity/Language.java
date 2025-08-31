@@ -41,7 +41,7 @@ public class Language {
     private Integer type;
     @Schema(description="启用状态：1=启用，0=停用")
     private Integer status;
-    @Schema(description="归属OJ标识，自身平台填myy")
+    @Schema(description="归属OJ标识，自身平台填Local")
     private String oj;
     @Schema(description="创建时间")
     private LocalDateTime createdTime;

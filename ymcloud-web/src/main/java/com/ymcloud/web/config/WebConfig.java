@@ -19,7 +19,7 @@ public class WebConfig implements WebMvcConfigurer {
      * 文件路径
      */
     @Value("${ymcloud.file.base-dir}")
-    private String FILE_DIR;
+    private String baseDir;
 
     /**
      * 配置资源的访问
@@ -28,7 +28,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         //只向外透露public文件
         registry.addResourceHandler("/files/public/**")
-                .addResourceLocations("file:" + FILE_DIR + "/public/")
+                .addResourceLocations("file:" + baseDir + "/public/")
                 .setCachePeriod(1800);//缓存半小时
     }
 
