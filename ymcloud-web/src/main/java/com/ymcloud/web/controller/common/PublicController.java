@@ -85,8 +85,8 @@ public class PublicController {
      * @return 标签列表
      */
     @Cacheable(cacheNames = CacheConstants.CACHE_NAME,key = "'tag_list'")
-    @GetMapping("/tag-list")
-    public Result<List<Tag>> tagList() {
+    @GetMapping("/tags")
+    public Result<List<Tag>> listTags() {
         log.info("获取标签列表");
         //基于注解方式拉取redis缓存
         List<Tag> list = tagService.list();
@@ -98,8 +98,8 @@ public class PublicController {
      * @param query 查询实体
      * @return 分页实体
      */
-    @GetMapping("/problem-list")
-    public Result<PageVO<ProblemTableVO>> problemList(@Validated ProblemPageQuery query) {
+    @GetMapping("/problems")
+    public Result<PageVO<ProblemTableVO>> listProblems(@Validated ProblemPageQuery query) {
         log.info("获取题目列表表单，{}",query);
         PageVO<ProblemTableVO> pageResult=problemService.pageQuery(query);
         return Result.ok(pageResult);
@@ -110,8 +110,8 @@ public class PublicController {
      * @param query 查询实体
      * @return 分页实体
      */
-    @GetMapping("/contest-list")
-    public Result<PageVO<ContestTableVO>> contestList(@Validated ContestPageQuery query) {
+    @GetMapping("/contests")
+    public Result<PageVO<ContestTableVO>> listContests(@Validated ContestPageQuery query) {
         log.info("获取比赛列表表单，{}",query);
         PageVO<ContestTableVO> pageResult=contestService.pageQuery(query);
         return Result.ok(pageResult);
@@ -121,8 +121,8 @@ public class PublicController {
      * 获取公告列表
      * @return 公告列表
      */
-    @GetMapping("/announcement-list")
-    public Result<List<AnnouncementVO>> announcementList() {
+    @GetMapping("/announcements")
+    public Result<List<AnnouncementVO>> listAnnouncements() {
         log.info("获取公告列表");
         //查询未过期的可见系统公告
         List<Announcement> list = announcementService.lambdaQuery()
@@ -146,8 +146,8 @@ public class PublicController {
      * @param query 查询实体
      * @return 分页实体
      */
-    @GetMapping("/submission-list")
-    public Result<PageVO<SubmissionTableVO>> submissionList(@Validated SubmissionPageQuery query) {
+    @GetMapping("/submissions")
+    public Result<PageVO<SubmissionTableVO>> listSubmissions(@Validated SubmissionPageQuery query) {
         log.info("获取评测列表表单:{}",query);
         PageVO<SubmissionTableVO> list=submissionService.getPublicSubmissionList(query);
         return Result.ok(list);

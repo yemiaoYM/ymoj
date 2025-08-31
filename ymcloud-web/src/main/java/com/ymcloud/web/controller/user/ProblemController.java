@@ -30,11 +30,11 @@ public class ProblemController {
 
     /**
      * 获取题目信息
-     * @param problemId 题目id
+     * @param problemId 题目唯一标识
      * @return 题目信息
      */
-    @GetMapping
-    public Result<ProblemVO> getProblemInfo(@RequestParam(value = "problemId") String problemId) {
+    @GetMapping("/{id}")
+    public Result<ProblemVO> getProblemDetail(@PathVariable(value = "id") String problemId) {
         log.info("获取题目信息:{}", problemId);
         ProblemVO problem=problemService.getProblemInfo(problemId);
         return Result.ok(problem);
@@ -45,8 +45,8 @@ public class ProblemController {
      * @param query 分页查询实体
      * @return 提交列表
      */
-    @GetMapping("/submission-list")
-    public Result<PageVO<SubmissionTableVO>> problemSubmissionList(@Validated ProblemSubmissionPageQuery query) {
+    @GetMapping("/submissions")
+    public Result<PageVO<SubmissionTableVO>> listProblemSubmissions(@Validated ProblemSubmissionPageQuery query) {
         log.info("查询当用当前题目提交列表：{}",query);
         PageVO<SubmissionTableVO> pageVO = problemService.problemSubmissionList(query);
         return Result.ok(pageVO);

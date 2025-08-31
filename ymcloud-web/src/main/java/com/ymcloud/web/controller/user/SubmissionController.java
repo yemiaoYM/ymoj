@@ -27,8 +27,8 @@ public class SubmissionController {
      * @param submissionId 提交id
      * @return 提交详情信息
      */
-    @GetMapping("/detail")
-    public Result<SubmissionVO> detail(@RequestParam("submissionId") Long submissionId) {
+    @GetMapping("/{id}")
+    public Result<SubmissionVO> getSubmissionDetail(@PathVariable(value = "id") Long submissionId) {
         log.info("查询提交详情:{}", submissionId);
         SubmissionVO submission=submissionService.getSubmissionDetail(submissionId);
         return Result.ok(submission);

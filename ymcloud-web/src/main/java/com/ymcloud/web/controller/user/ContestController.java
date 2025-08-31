@@ -34,8 +34,8 @@ public class ContestController {
      * @param contestId 比赛id
      * @return 比赛详情
      */
-    @GetMapping
-    public Result<ContestVO> getContestInfo(@RequestParam(value = "contestId") Long contestId) {
+    @GetMapping("/{id}")
+    public Result<ContestVO> getContestDetail(@PathVariable(value = "id") Long contestId) {
         log.info("获取比赛详情:{}", contestId);
         ContestVO contest=contestService.getContestInfo(contestId);
         return Result.ok(contest);
@@ -57,8 +57,8 @@ public class ContestController {
      * @param contestId 比赛id
      * @return 比赛题目列表
      */
-    @GetMapping("/problem-list")
-    public Result<List<ContestProblemTableVO>> getContestProblem(@RequestParam(value = "contestId") Long contestId) {
+    @GetMapping("/{id}/problems")
+    public Result<List<ContestProblemTableVO>> listContestProblems(@PathVariable(value = "id") Long contestId) {
         log.info("查询比赛题目列表：{}", contestId);
         List<ContestProblemTableVO> list=contestService.getContestProblemList(contestId);
         return Result.ok(list);
@@ -70,9 +70,9 @@ public class ContestController {
      * @param displayId 题目展示id
      * @return 比赛题目详情
      */
-    @GetMapping("/problem")
-    public Result<ProblemVO> getContestProblem(@RequestParam(value = "contestId") Long contestId,
-                                               @RequestParam(value = "displayId") String displayId) {
+    @GetMapping("/{contestId}/problem/{displayId}")
+    public Result<ProblemVO> getContestProblem(@PathVariable(value = "contestId") Long contestId,
+                                               @PathVariable(value = "displayId") String displayId) {
         log.info("查询比赛：{},题目：{}", contestId, displayId);
         ProblemVO problem=contestService.getContestProblem(contestId,displayId);
         return Result.ok(problem);
@@ -83,8 +83,8 @@ public class ContestController {
      * @param query 分页查询实体
      * @return 提交列表
      */
-    @GetMapping("/problem/submission-list")
-    public Result<PageVO<SubmissionTableVO>> problemSubmissionList(@Validated ContestProblemSubmissionPageQuery query) {
+    @GetMapping("/problem/submissions")
+    public Result<PageVO<SubmissionTableVO>> listProblemSubmissions(@Validated ContestProblemSubmissionPageQuery query) {
         log.info("查询当用当前比赛题目提交列表：{}",query);
         PageVO<SubmissionTableVO> pageVO = contestService.problemSubmissionList(query);
         return Result.ok(pageVO);
@@ -95,8 +95,8 @@ public class ContestController {
      * @param query 查询实体
      * @return 分页实体
      */
-    @GetMapping("/submission-list")
-    public Result<PageVO<SubmissionTableVO>> submissionList(@Validated ContestSubmissionPageQuery query) {
+    @GetMapping("/submissions")
+    public Result<PageVO<SubmissionTableVO>> listSubmissions(@Validated ContestSubmissionPageQuery query) {
         log.info("获取比赛评测列表表单:{}",query);
         PageVO<SubmissionTableVO> list=contestService.getSubmissionList(query);
         return Result.ok(list);
@@ -107,15 +107,12 @@ public class ContestController {
      * @param query 查询请求题
      * @return 比赛排名列表
      */
-    @GetMapping("/rank-list")
-    public Result<ContestRankTableVO> rankList(@Validated ContestRankPageQuery query) {
+    @GetMapping("/ranks")
+    public Result<ContestRankTableVO> listContestRanks(@Validated ContestRankPageQuery query) {
         log.info("查询比赛排名列表：{}",query);
         ContestRankTableVO tableVO=contestService.getContestRankList(query);
         return Result.ok(tableVO);
     }
-
-
-
 
 
 }
