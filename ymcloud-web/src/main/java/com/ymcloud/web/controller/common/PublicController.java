@@ -164,12 +164,13 @@ public class PublicController {
      */
     @Cacheable(cacheNames = CacheConstants.CACHE_NAME,key = "'language_list'")
     @GetMapping("/languages")
-    public Result<List<Language>> listLanguages(){
+    public Result<List<LanguageTableVO>> listLanguages(){
         log.info("获取本地编程语言列表");
         List<Language> list = languageEntityService.lambdaQuery()
                 .eq(Language::getOj, "myy")
                 .list();
-        return Result.ok(list);
+        List<LanguageTableVO> languages = BeanUtil.copyToList(list, LanguageTableVO.class);
+        return Result.ok(languages);
     }
 
     /**

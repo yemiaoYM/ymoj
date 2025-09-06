@@ -40,7 +40,7 @@ public class UserAcRankTask {
         //这里注意时构造结果信息，于基于注释方式返回的类型保持一致
         Result<List<UserAcRankVO>> result=Result.ok(userAcRankVOS);
         //向redis中写入
-        String key=CacheConstants.CACHE_NAME+"::"+CacheConstants.USER_AC_RANK_KEY;
+        String key=CacheConstants.CACHE_NAME+":"+CacheConstants.USER_AC_RANK_KEY;
         redisCache.setCacheObject(key, result);
     }
 

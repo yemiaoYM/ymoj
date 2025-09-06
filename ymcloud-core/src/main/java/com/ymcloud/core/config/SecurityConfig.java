@@ -4,7 +4,6 @@ import com.ymcloud.core.security.filter.AuthenticationEntryPointImpl;
 import com.ymcloud.core.security.filter.CustomAccessDeniedHandler;
 import com.ymcloud.core.security.filter.JwtAuthenticationTokenFilter;
 import com.ymcloud.core.security.filter.LogoutSuccessHandlerImpl;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,7 +14,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -74,12 +72,14 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         //配置关闭csrf攻击
+        //利用用户的登录状态，诱导用户发起恶意请求
         http.csrf(AbstractHttpConfigurer::disable);
         // 注解标记允许匿名访问的url
         http.authorizeHttpRequests(request->{
            request.requestMatchers("/login","/register","/captchaImage","/forget-code","/forget-password").permitAll()
                    .requestMatchers("/public/**").permitAll()
                    .requestMatchers("/files/public/**").permitAll()
+                   // 除上面外的所有请求全部需要鉴权认证
                    .anyRequest().authenticated();
         });
         //认证失败处理
