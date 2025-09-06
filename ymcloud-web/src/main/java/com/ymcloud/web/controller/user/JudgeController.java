@@ -1,6 +1,7 @@
 package com.ymcloud.web.controller.user;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.core.annotation.RepeatSubmit;
 import com.ymcloud.judge.service.JudgeService;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
@@ -30,6 +31,7 @@ public class JudgeController {
      * @param judgeDTO 评测请求
      * @return 提交编号ID
      */
+    @RepeatSubmit
     @PostMapping("/submit")
     public Result<Long> judge(@Validated @RequestBody JudgeDTO judgeDTO) {
         log.info("评测请求：{}", judgeDTO);
@@ -42,6 +44,7 @@ public class JudgeController {
      * @param testJudgeDTO 评测请求
      * @return 提交编号ID
      */
+    @RepeatSubmit
     @PostMapping("/test")
     public Result<Long> test(@Validated @RequestBody TestJudgeDTO testJudgeDTO) {
         log.info("自测请求：{}", testJudgeDTO);
