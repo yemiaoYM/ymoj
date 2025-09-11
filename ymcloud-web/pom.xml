@@ -29,6 +29,7 @@
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-captcha</artifactId>
         </dependency>
+
         <!--judge评测包-->
         <dependency>
             <groupId>com.ymcloud.judge</groupId>

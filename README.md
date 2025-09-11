@@ -4,6 +4,10 @@
 
 `ymcloud` 是一个基于 Spring Boot 构建的现代化在线判题系统（Online Judge）。项目采用模块化设计，实现了用户管理、题库、竞赛、代码提交与判题等核心功能。系统通过引入消息队列和代码沙箱等技术，保证了判题过程的高效性、异步性和安全性。
 
+> 后端：https://gitee.com/yemiaoo/ymcloud
+
+> 前端：https://gitee.com/yemiaoo/ymcloud-vue3
+
 ## ✨ 项目亮点
 
 *   **模块化设计**：项目结构清晰，分为通用、数据模型、核心、判题和Web接口等模块，便于团队协作、维护和二次开发。
