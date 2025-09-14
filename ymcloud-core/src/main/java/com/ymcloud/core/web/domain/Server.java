@@ -1,6 +1,5 @@
 package com.ymcloud.core.web.domain;
 
-
 import java.net.UnknownHostException;
 import java.util.LinkedList;
 import java.util.List;
@@ -57,8 +56,7 @@ public class Server
      */
     private List<SysFile> sysFiles = new LinkedList<SysFile>();
 
-    public void copyTo() throws Exception
-    {
+    public void copyTo() throws Exception {
         SystemInfo si = new SystemInfo();
         HardwareAbstractionLayer hal = si.getHardware();
 
@@ -76,8 +74,7 @@ public class Server
     /**
      * 设置CPU信息
      */
-    private void setCpuInfo(CentralProcessor processor)
-    {
+    private void setCpuInfo(CentralProcessor processor) {
         // CPU信息
         long[] prevTicks = processor.getSystemCpuLoadTicks();
         Util.sleep(OSHI_WAIT_SECOND);
@@ -102,8 +99,7 @@ public class Server
     /**
      * 设置内存信息
      */
-    private void setMemInfo(GlobalMemory memory)
-    {
+    private void setMemInfo(GlobalMemory memory) {
         mem.setTotal(memory.getTotal());
         mem.setUsed(memory.getTotal() - memory.getAvailable());
         mem.setFree(memory.getAvailable());
@@ -112,8 +108,7 @@ public class Server
     /**
      * 设置服务器信息
      */
-    private void setSysInfo()
-    {
+    private void setSysInfo() {
         Properties props = System.getProperties();
         sys.setComputerName(IpUtils.getHostName());
         sys.setComputerIp(IpUtils.getHostIp());
@@ -125,8 +120,7 @@ public class Server
     /**
      * 设置Java虚拟机
      */
-    private void setJvmInfo() throws UnknownHostException
-    {
+    private void setJvmInfo() throws UnknownHostException {
         Properties props = System.getProperties();
         jvm.setTotal(Runtime.getRuntime().totalMemory());
         jvm.setMax(Runtime.getRuntime().maxMemory());
@@ -138,8 +132,7 @@ public class Server
     /**
      * 设置磁盘信息
      */
-    private void setSysFiles(OperatingSystem os)
-    {
+    private void setSysFiles(OperatingSystem os) {
         FileSystem fileSystem = os.getFileSystem();
         List<OSFileStore> fsArray = fileSystem.getFileStores();
         for (OSFileStore fs : fsArray)

@@ -10,6 +10,7 @@ import org.springframework.http.converter.HttpMessageConversionException;
 import org.springframework.validation.BindException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -82,8 +83,8 @@ public class GlobalExceptionHandler {
     /**
      * 捕获SpringMVC在参数绑定无法获取参数名称异常 400
      */
-    @ExceptionHandler(IllegalArgumentException.class)
-    public Result<?> handleIllegalArgument(IllegalArgumentException e, HttpServletRequest request) {
+    @ExceptionHandler({IllegalArgumentException.class, ServletRequestBindingException.class})
+    public Result<?> handleIllegalArgument(Exception e, HttpServletRequest request) {
         log.error("参数绑定失败，请求URI：{}，异常信息：{}", request.getRequestURI(), e.getMessage());
         return Result.fail().code(HttpStatus.BAD_REQUEST).msg("参数格式错误");
     }

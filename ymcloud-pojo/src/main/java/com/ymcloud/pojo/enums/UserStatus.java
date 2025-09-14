@@ -13,18 +13,17 @@ import lombok.Getter;
  */
 @Getter
 public enum UserStatus {
-
-    OK(1, "正常"), DISABLE(0, "停用");
+    DISABLE(0, "停用"),
+    OK(1, "正常");
 
     @EnumValue
-    private final Integer code;
+    private final int code;
     @JsonValue
-    private final String info;
+    private final String description;
 
-    UserStatus(Integer code, String info)
-    {
+    UserStatus(int code, String description) {
         this.code = code;
-        this.info = info;
+        this.description = description;
     }
 
 }

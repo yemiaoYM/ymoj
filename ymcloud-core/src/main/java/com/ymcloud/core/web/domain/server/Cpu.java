@@ -1,7 +1,7 @@
 package com.ymcloud.core.web.domain.server;
 
 import com.ymcloud.common.utils.Arith;
-import lombok.Setter;
+import lombok.Data;
 
 /**
  * @PackageName: com.ymcloud.web.controller.admin.monitor
@@ -10,7 +10,7 @@ import lombok.Setter;
  * @CreateTime: 2025-09-11  23:29
  * @Description: CPU相关信息
  */
-@Setter
+@Data
 public class Cpu {
     /**
      * 核心数

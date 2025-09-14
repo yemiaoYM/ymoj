@@ -3,16 +3,18 @@ package com.ymcloud.web.controller.common;
 import cn.hutool.core.bean.BeanUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
+import com.ymcloud.core.web.dao.AnnouncementEntityService;
 import com.ymcloud.core.web.dao.LanguageEntityService;
+import com.ymcloud.core.web.dao.TagEntityService;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
 import com.ymcloud.pojo.entity.Announcement;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Tag;
-import com.ymcloud.pojo.query.ContestPageQuery;
-import com.ymcloud.pojo.query.ProblemPageQuery;
-import com.ymcloud.pojo.query.SubmissionPageQuery;
+import com.ymcloud.pojo.query.oj.ContestPageQuery;
+import com.ymcloud.pojo.query.oj.ProblemPageQuery;
+import com.ymcloud.pojo.query.oj.SubmissionPageQuery;
 import com.ymcloud.pojo.vo.*;
-import com.ymcloud.web.service.*;
+import com.ymcloud.web.service.oj.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
@@ -44,7 +46,7 @@ public class PublicController {
     private UserService userService;
 
     @Autowired
-    private TagService tagService;
+    private TagEntityService tagEntityService;
 
     @Autowired
     private ProblemService problemService;
@@ -53,7 +55,7 @@ public class PublicController {
     private ContestService contestService;
 
     @Autowired
-    private AnnouncementService announcementService;
+    private AnnouncementEntityService announcementEntityService;
 
     @Autowired
     private SubmissionService submissionService;
@@ -94,7 +96,7 @@ public class PublicController {
     public Result<List<Tag>> listTags() {
         log.info("获取标签列表");
         //基于注解方式拉取redis缓存
-        List<Tag> list = tagService.list();
+        List<Tag> list = tagEntityService.list();
         return Result.ok(list);
     }
 
@@ -130,7 +132,7 @@ public class PublicController {
     public Result<List<AnnouncementVO>> listAnnouncements() {
         log.info("获取公告列表");
         //查询未过期的可见系统公告
-        List<Announcement> list = announcementService.lambdaQuery()
+        List<Announcement> list = announcementEntityService.lambdaQuery()
                 .select(Announcement::getTitle, Announcement::getContent,
                         Announcement::getIsPinned, Announcement::getPublishTime,
                         Announcement::getExpireTime, Announcement::getLinkUrl, Announcement::getAuthorUsername)

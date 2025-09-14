@@ -4,8 +4,7 @@ import cn.hutool.core.date.BetweenFormatter;
 import cn.hutool.core.date.DateTime;
 import cn.hutool.core.date.DateUtil;
 import com.ymcloud.common.utils.Arith;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
 
 import java.lang.management.ManagementFactory;
 import java.util.Date;
@@ -17,7 +16,7 @@ import java.util.Date;
  * @CreateTime: 2025-09-11  23:29
  * @Description: JVM相关信息
  */
-@Setter
+@Data
 public class Jvm {
 
     /**
@@ -38,7 +37,6 @@ public class Jvm {
     /**
      * JDK版本
      */
-    @Getter
     private String version;
 
     /**

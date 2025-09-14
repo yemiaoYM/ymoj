@@ -5,7 +5,7 @@ import com.ymcloud.pojo.dto.ForgetPasswordDTO;
 import com.ymcloud.pojo.dto.LoginDTO;
 import com.ymcloud.pojo.dto.RegisterDTO;
 import com.ymcloud.pojo.dto.ResetPasswordDTO;
-import com.ymcloud.web.service.UserService;
+import com.ymcloud.web.service.oj.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;

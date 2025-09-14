@@ -1,7 +1,10 @@
 package com.ymcloud.core.web.dao;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.Problem;
+import com.ymcloud.pojo.vo.ProblemTableVO;
 
 /**
  * @PackageName: com.ymcloud.core.web.dao
@@ -11,4 +14,13 @@ import com.ymcloud.pojo.entity.Problem;
  * @Description: ProblemEntityService
  */
 public interface ProblemEntityService extends IService<Problem> {
+    /**
+     * 题单列表分页查询
+     * @param page   分页
+     * @param keyword  题目/题号 支持模糊查询
+     * @param difficulty 难度
+     * @param source     来源
+     * @return 题单列表
+     */
+    Page<ProblemTableVO> pageQuery(IPage<ProblemTableVO> page, String keyword, Integer difficulty, String source);
 }
