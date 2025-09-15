@@ -8,6 +8,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -24,6 +25,16 @@ import java.util.Set;
 public class LoginUser implements UserDetails {
 
     /**
+     * 用户信息缓存在redis中的唯一标识
+     */
+    private String token;
+
+    /**
+     * 登录时间
+     */
+    private LocalDateTime loginDateTime;
+
+    /**
      * 登录时间
      */
     private Long loginTime;
@@ -34,9 +45,24 @@ public class LoginUser implements UserDetails {
     private Long expireTime;
 
     /**
-     * 用户信息缓存在redis中的唯一标识
+     * IP地址
      */
-    private String token;
+    private String ipaddr;
+
+    /**
+     * 登录地点
+     */
+    private String loginLocation;
+
+    /**
+     * 浏览器类型
+     */
+    private String browser;
+
+    /**
+     * 操作系统
+     */
+    private String os;
 
     /**
      * 用户信息

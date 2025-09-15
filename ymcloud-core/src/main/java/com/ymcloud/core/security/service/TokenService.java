@@ -2,9 +2,14 @@ package com.ymcloud.core.security.service;
 
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.http.useragent.UserAgent;
+import cn.hutool.http.useragent.UserAgentUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.constant.Constants;
+import com.ymcloud.common.utils.AddressUtils;
+import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.common.utils.ServletUtils;
 import com.ymcloud.core.security.domain.LoginUser;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -26,7 +31,6 @@ import java.util.concurrent.TimeUnit;
  * @CreateTime: 2025-07-20  23:57
  * @Description: token验证处理
  */
-
 @Component
 @Slf4j
 public class TokenService {
@@ -104,6 +108,8 @@ public class TokenService {
     public String createToken(LoginUser loginUser) {
         //IdUtil.simpleUUID() 生成32位无连字符的小写UUID字符串 线程安全
         String token = IdUtil.simpleUUID();
+        //设置用户代理信息
+        setUserAgent(loginUser);
         //设置获取用户信息的redis唯一标识键
         loginUser.setToken(token);
         //刷新用户信息
@@ -141,6 +147,19 @@ public class TokenService {
         String userKey = getTokenKey(loginUser.getToken());
         //Redis会直接覆盖旧值并重新设置过期时间，Redis 的原生行为，不需要del再set，这样的效率更高
         redisCache.setCacheObject(userKey, loginUser, expireTime, TimeUnit.MINUTES);
+    }
+
+    /**
+     * 设置用户代理信息
+     * @param loginUser 登录信息
+     */
+    public void setUserAgent(LoginUser loginUser) {
+        UserAgent ua = UserAgentUtil.parse(ServletUtils.getRequest().getHeader("User-Agent"));
+        String ip = IpUtils.getIpAddr();
+        loginUser.setIpaddr(ip);
+        loginUser.setLoginLocation(AddressUtils.getRealAddressByIP(ip));
+        loginUser.setBrowser(ua.getBrowser().toString());
+        loginUser.setOs(ua.getOs().toString());
     }
 
     /**

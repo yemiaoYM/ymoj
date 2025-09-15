@@ -113,9 +113,11 @@ public class UserServiceImpl implements UserService {
         LoginUser loginUser=(LoginUser) authentication.getPrincipal();
         Long userId=loginUser.getUser().getId();
         //4.更新登录时间，登录IP等等
+        LocalDateTime now = LocalDateTime.now();
+        loginUser.setLoginDateTime(now);
         User user=new User();
         user.setId(userId);
-        user.setLoginDate(LocalDateTime.now());
+        user.setLoginDate(now);
         user.setLoginIp(IpUtils.getIpAddr());
         userEntityService.updateById(user);
         //5.根据用户信息生成token
