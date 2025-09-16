@@ -9,8 +9,10 @@ import com.ymcloud.common.utils.MailUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.common.utils.ShortSnowflake;
 import com.ymcloud.core.web.dao.JudgeEntityService;
+import com.ymcloud.core.web.mapper.AuthMapper;
 import com.ymcloud.core.web.mapper.ContestProblemMapper;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
+import com.ymcloud.pojo.entity.Auth;
 import com.ymcloud.pojo.vo.ContestProblemTableVO;
 import com.ymcloud.pojo.bo.ContestSubmissionRecord;
 import com.ymcloud.pojo.vo.UserAcRankVO;
@@ -51,6 +53,15 @@ public class WebTest {
 
     @Autowired
     private MailUtils mailUtils;
+
+    @Autowired
+    private AuthMapper authMapper;
+
+    @Test
+    public void testMenu(){
+        List<Auth> auths = authMapper.selectMenuTreeAll();
+        auths.forEach(System.out::println);
+    }
 
     @Test
     public void testCache(){

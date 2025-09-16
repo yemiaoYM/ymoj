@@ -18,6 +18,25 @@ import java.util.List;
 @Mapper
 public interface AuthMapper extends BaseMapper<Auth> {
 
+    /**
+     * 根据用户ID查询权限
+     * @param userId 用户ID
+     * @return 权限列表
+     */
     List<AuthVO> selectPermissionsByUserId(@Param("userId") Long userId);
+
+    /**
+     * 查询所有菜单
+     * @return 菜单列表
+     */
+    List<Auth> selectMenuTreeAll();
+
+    /**
+     * 根据用户ID查询菜单
+     * @param userId 用户ID
+     * @return 菜单列表
+     */
+    List<Auth> selectMenuTreeByUserId(Long userId);
+
 
 }

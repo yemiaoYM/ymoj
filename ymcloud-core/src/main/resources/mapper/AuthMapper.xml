@@ -10,7 +10,26 @@
              JOIN auth a ON ra.auth_id = a.id
         WHERE ur.user_id = #{userId}
           AND r.status = 1
-          AND a.status = 1;
+          AND a.status = 1
+          AND a.type IN ('C', 'F');
+    </select>
+
+    <select id="selectMenuTreeAll" resultType="com.ymcloud.pojo.entity.Auth">
+        SELECT * FROM auth
+        WHERE status = 1
+        AND type IN ('M', 'C');
+    </select>
+
+    <select id="selectMenuTreeByUserId" resultType="com.ymcloud.pojo.entity.Auth">
+        SELECT DISTINCT a.*
+        FROM user_role ur
+                 JOIN role r ON ur.role_id = r.id
+                 JOIN role_auth ra ON r.id = ra.role_id
+                 JOIN auth a ON ra.auth_id = a.id
+        WHERE ur.user_id = #{userId}
+          AND r.status = 1
+          AND a.status = 1
+          AND type IN ('M', 'C');
     </select>
 
 </mapper>
