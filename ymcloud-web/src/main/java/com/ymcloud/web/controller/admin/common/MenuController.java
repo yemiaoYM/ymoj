@@ -1,7 +1,7 @@
 package com.ymcloud.web.controller.admin.common;
 
 import com.ymcloud.common.result.Result;
-import com.ymcloud.pojo.vo.admin.Menu;
+import com.ymcloud.pojo.vo.admin.RouterVo;
 import com.ymcloud.web.service.admin.AdminMenuService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,11 +31,10 @@ public class MenuController {
      * @return 路由菜单
      */
     @GetMapping
-    public Result<List<Menu>> getMenus(){
+    public Result<List<RouterVo>> getMenus(){
         log.info("获取路由菜单");
-        List<Menu> menus = menuService.selectMenuTree();
-        return Result.ok(menus);
+        List<RouterVo> routers = menuService.selectMenuTree();
+        return Result.ok(routers);
     }
-    
 
 }

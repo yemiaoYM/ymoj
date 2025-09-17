@@ -1,6 +1,6 @@
 package com.ymcloud.web.service.admin;
 
-import com.ymcloud.pojo.vo.admin.Menu;
+import com.ymcloud.pojo.vo.admin.RouterVo;
 
 import java.util.List;
 
@@ -17,5 +17,5 @@ public interface AdminMenuService {
      * 获取菜单树
      * @return 菜单树
      */
-    List<Menu> selectMenuTree();
+    List<RouterVo> selectMenuTree();
 }
