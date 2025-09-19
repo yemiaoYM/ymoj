@@ -57,5 +57,5 @@ public class UserProfileVO implements Serializable {
     /**
      * 用户权限信息
      */
-    private List<AuthVO> permissions;
+    private List<String> permissions;
 }

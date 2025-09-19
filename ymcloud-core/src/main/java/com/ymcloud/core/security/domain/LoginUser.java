@@ -77,13 +77,13 @@ public class LoginUser implements UserDetails {
     /**
      * 用户权限信息
      */
-    private List<AuthVO> permissions;
+    private List<String> permissions;
 
     public LoginUser(User user) {
         this.user = user;
     }
 
-    public LoginUser(User user, List<String> roles, List<AuthVO> permissions) {
+    public LoginUser(User user, List<String> roles, List<String> permissions) {
         this.user = user;
         this.roles = roles;
         this.permissions = permissions;
@@ -98,8 +98,8 @@ public class LoginUser implements UserDetails {
         for (String role : roles) {
             authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
         }
-        for (AuthVO perm : permissions) {
-            authorities.add(new SimpleGrantedAuthority(perm.getCode()));
+        for (String perm : permissions) {
+            authorities.add(new SimpleGrantedAuthority(perm));
         }
         return authorities;
     }

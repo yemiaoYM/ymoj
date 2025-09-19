@@ -23,7 +23,13 @@ public interface AuthMapper extends BaseMapper<Auth> {
      * @param userId 用户ID
      * @return 权限列表
      */
-    List<AuthVO> selectPermissionsByUserId(@Param("userId") Long userId);
+    List<String> selectPermsByUserId(@Param("userId") Long userId);
+
+    /**
+     * 查询所有权限
+     * @return 权限列表
+     */
+    List<String> selectAllPerms();
 
     /**
      * 查询所有菜单

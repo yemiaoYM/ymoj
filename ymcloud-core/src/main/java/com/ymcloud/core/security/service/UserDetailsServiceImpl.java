@@ -14,6 +14,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -56,7 +57,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         passwordService.validate(user);
         //4.查询角色和权限信息
         List<String> roles = roleMapper.selectRolesByUserId(user.getId());
-        List<AuthVO> permissions = authMapper.selectPermissionsByUserId(user.getId());
+        List<String> permissions = new ArrayList<>();
+        if (user.getId() == 1L){
+            permissions = authMapper.selectAllPerms();
+        } else {
+            permissions = authMapper.selectPermsByUserId(user.getId());
+        }
         //5.返回UserDetails对象
         return new LoginUser(user,roles,permissions);
     }
