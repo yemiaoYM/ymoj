@@ -1,0 +1,175 @@
+<template>
+  <div class="login-container">
+    <n-flex justify="center" align="center" style="height: 100%">
+      <el-card>
+        <template #header>
+          <h2 style="text-align: center;">YMOJ 管理后台登录</h2>
+        </template>
+        <el-form
+          ref="formRef"
+          :model="form"
+          :rules="rules"
+          :hide-required-asterisk="true"
+          style="width: 100%;height: 100%;"
+        >
+          <el-form-item prop="username">
+            <el-input
+              v-model="form.username"
+              placeholder="请输入用户名"
+              :prefix-icon="User"
+              autocomplete="on"
+              size="large"
+            />
+          </el-form-item>
+
+          <el-form-item prop="password">
+            <el-input
+              type="password"
+              v-model="form.password"
+              placeholder="请输入密码"
+              show-password
+              autocomplete="on"
+              :prefix-icon="Lock"
+              size="large"
+            />
+          </el-form-item>
+
+          <el-form-item prop="code">
+            <n-flex :wrap="false" style="width: 100%;">
+              <el-input
+                v-model="form.code"
+                placeholder="请输入验证码"
+                :prefix-icon="Key"
+                size="large"
+                style="flex: 1"
+              />
+              <el-image
+                lazy
+                :src="captchaImage"
+                @click="refreshCaptcha"
+                style="width: 100px; cursor: pointer; margin-left: 10px"
+              />
+            </n-flex>
+          </el-form-item>
+
+          <el-form-item>
+            <el-button style="width: 100%;" size="large" type="primary" @click="handleLogin" :loading="loading">
+              登录
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </el-card>
+    </n-flex>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref,onMounted } from 'vue'
+import { User, Lock, Key } from '@element-plus/icons-vue'
+import type { LoginDTO } from '@/type/types';
+import { getCaptcha } from '@/api/api';
+import { ElMessage } from 'element-plus';
+import { useUserStore } from '@/stores/user';
+
+const userStore=useUserStore();
+const formRef = ref();
+const loading = ref<boolean>(false);
+const form = ref<LoginDTO>({} as LoginDTO);
+const rules = {
+  username: [
+    { required: true, message: '请输入账号', trigger: 'blur' },
+    { min: 2, max: 20, message: '账号长度应在2到20个字符之间', trigger: 'blur' },
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 5, max: 20, message: '密码长度应在5到20个字符之间', trigger: 'blur' },
+  ],
+  code: [
+    { required: true, message: '请输入验证码', trigger: 'blur' },
+  ],
+};
+const captchaImage = ref<string>('');
+
+onMounted(() => {
+  loadCaptcha();
+});
+
+//登录
+const handleLogin = async () => {
+  loading.value = true;
+  try {
+    const valid = await formRef.value.validate();
+    //检查表单是否填写正确
+    if (!valid) {
+      ElMessage.warning('请填写正确信息');
+      return;
+    }
+    //登录
+    await userStore.doLogin(form.value.username,
+                            form.value.password, 
+                            form.value.code, 
+                            form.value.uuid);
+  } catch (e) {
+    //登录失败
+    refreshCaptcha();
+    console.log(e);
+  } finally {
+    loading.value = false;
+  }
+};
+//获取验证码
+const loadCaptcha = () => {
+  getCaptcha().then(res => {
+    form.value.uuid = res.data.data.uuid;
+    captchaImage.value = res.data.data.image;
+  }).catch(error => {
+    //获取验证码失败
+    console.error(error);
+  });
+};
+//刷新验证码
+const refreshCaptcha = () => {
+  loadCaptcha();
+};
+</script>
+
+<style scoped lang="css">
+.login-container {
+  height: 100vh;
+  background-image: url('https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=2069');
+  background-size: cover;
+  background-position: center;
+}
+.login-form {
+  border-radius: 6px;
+  background: #ffffff;
+  width: 400px;
+  padding: 25px 25px 5px 25px;
+}
+.title {
+  margin: 0 auto 30px auto;
+  text-align: center;
+  color: #707070;
+}
+.captcha-img {
+  width: 33%;
+  height: 40px;
+}
+.captcha-img img {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.footer {
+  height: 40px;
+  line-height: 40px;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  text-align: center;
+  color: #fff;
+  font-family: Arial, serif;
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+</style>

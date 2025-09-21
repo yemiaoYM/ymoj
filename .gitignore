@@ -1,4 +1,4 @@
-### ¹¹½¨¹¤¾ß ###
+### Java æ„å»ºäº§ç‰© ###
 # Maven
 target/
 **/target/
@@ -7,6 +7,7 @@ target/
 *.ear
 *.zip
 *.tar.gz
+**/dependency-reduced-pom.xml
 
 # Gradle
 .gradle/
@@ -15,16 +16,34 @@ build/
 **/build/
 out/
 
-# ÒÀÀµ»º´æ£¨Èç npm¡¢pip£©
-**/dependency-reduced-pom.xml
+### å‰ç«¯æ„å»ºäº§ç‰© ###
+# Node.js
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-### ¿ª·¢¹¤¾ß ###
-# IDE
+# Vue/Vite æ„å»ºäº§ç‰©
+dist/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+
+# æµ‹è¯•ç›¸å…³
+/cypress/videos/
+/cypress/screenshots/
+
+### å¼€å‘ç¯å¢ƒ ###
+# IDE é…ç½®
 .idea/
 *.iml
 *.ipr
 *.iws
 .vscode/
+!.vscode/extensions.json
 .settings/
 .classpath
 .project
@@ -37,35 +56,39 @@ out/
 /nbdist/
 /.nb-gradle/
 
-# ²Ù×÷ÏµÍ³ÎÄ¼ş
+# ç¼–è¾‘å™¨ç›¸å…³
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# æ“ä½œç³»ç»Ÿæ–‡ä»¶
 .DS_Store
 Thumbs.db
 
-### Spring Boot ###
-# ±¾µØ¿ª·¢ÅäÖÃ£¨±ÜÃâÌá½»Ãô¸ĞĞÅÏ¢£©
+### åº”ç”¨é…ç½® ###
+# æ•æ„Ÿé…ç½®æ–‡ä»¶ï¼ˆä¸è¦æäº¤ç”Ÿäº§ä¿¡æ¯ï¼‰
 application-dev.yml
 application-prod.yml
+.env
+.env.local
+*.local
 
+# åº”ç”¨æ–‡ä»¶å­˜å‚¨
 /files/*
 !/files/private
 !/files/private/**
 
-# ÈÕÖ¾ÎÄ¼ş
+### æ—¥å¿—æ–‡ä»¶ ###
 *.log
 logs/
 **/logs/
 
-# ²âÊÔÉú³ÉµÄÁÙÊ±ÎÄ¼ş
+### ä¸´æ—¶æ–‡ä»¶ ###
+# æµ‹è¯•ç”Ÿæˆçš„ä¸´æ—¶æ–‡ä»¶
 **/test-output/
 **/tmp/
 
-### ÆäËû ###
-# ±¾µØ¿ª·¢»·¾³ÎÄ¼ş
-.env
-.env.local
-
-# ´ò°üºöÂÔ
-dist/
+# å…¶ä»–ä¸´æ—¶æ–‡ä»¶
 release/
-
-

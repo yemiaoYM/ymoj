@@ -1,0 +1,273 @@
+<template>
+  <div class="login-form-container">
+    <div class="form-header">
+      <h2>登录你的账户</h2>
+      <p class="form-subtitle">欢迎回来！请输入您的详细信息</p>
+    </div>
+
+    <el-form ref="formRef" :model="form" :rules="rules" :hide-required-asterisk="true" class="auth-form" size="large">
+      <el-form-item prop="username">
+        <el-input v-model="form.username" placeholder="请输入用户名" :prefix-icon="User" autocomplete="on" />
+      </el-form-item>
+
+      <el-form-item prop="password">
+        <el-input v-model="form.password" type="password" placeholder="请输入密码" :prefix-icon="Lock" show-password
+          autocomplete="on" />
+      </el-form-item>
+
+      <el-form-item prop="code" class="captcha-item">
+        <el-input v-model="form.code" placeholder="请输入验证码" :prefix-icon="Key" style="flex: 1; margin-right: 12px;" />
+        <el-image :src="captchaImage" @click="refreshCaptcha" class="captcha-image" alt="验证码" />
+      </el-form-item>
+
+      <div class="form-options">
+        <el-checkbox v-model="agree" :class="{ shake: !agree && shakeCheckbox }">
+          同意用户协议、隐私政策
+        </el-checkbox>
+        <el-link type="primary" :underline="false" @click="$emit('switchTo', 'forget')">
+          忘记密码？
+        </el-link>
+      </div>
+
+      <div class="form-buttons">
+        <el-button type="primary" class="auth-button" :loading="loading" @click="handleLogin">
+          登录
+        </el-button>
+        <el-button class="auth-button secondary" @click="resetForm">
+          重置
+        </el-button>
+      </div>
+    </el-form>
+
+    <div class="form-footer">
+      <p>还没有账户？</p>
+      <el-link type="primary" @click="$emit('switchTo', 'register')">
+        立即注册
+      </el-link>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, ref } from 'vue';
+import { User, Lock, Key } from '@element-plus/icons-vue';
+import { ElMessage, ElNotification } from 'element-plus';
+import { useUserStore } from '@/stores/user';
+import { getCaptcha } from '@/api/api';
+import type { LoginDTO } from '@/type/types';
+
+//定义事件
+const emit = defineEmits<{
+  switchTo: [view: 'login' | 'register' | 'forget']
+}>();
+
+//数据
+const userStore = useUserStore();
+const formRef = ref();
+const loading = ref(false);
+const shakeCheckbox = ref(false);
+const captchaImage = ref('');
+const form = ref({} as LoginDTO);
+const agree = ref(false);
+
+const rules = {
+  username: [
+    { required: true, message: '请输入账号', trigger: 'blur' },
+    { min: 2, max: 20, message: '账号长度应在2到20个字符之间', trigger: 'blur' },
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 5, max: 20, message: '密码长度应在5到20个字符之间', trigger: 'blur' },
+  ],
+  code: [
+    { required: true, message: '请输入验证码', trigger: 'blur' },
+  ],
+};
+
+//生命周期
+onMounted(() => {
+  loadCaptcha();
+});
+//方法
+const resetForm = () => {
+  form.value = {} as LoginDTO;
+  agree.value = false;
+  shakeCheckbox.value = false;
+  loading.value = false;
+};
+
+const handleLogin = async () => {
+  loading.value = true;
+  try {
+    const valid = await formRef.value.validate();
+    if (!valid) {
+      ElMessage.warning('请填写正确信息');
+      return;
+    }
+    if (!agree.value) {
+      shakeCheckbox.value = true;
+      setTimeout(() => (shakeCheckbox.value = false), 500);
+      ElMessage.warning('请同意用户协议');
+      return;
+    }
+
+    await userStore.doLogin(
+      form.value.username,
+      form.value.password,
+      form.value.code,
+      form.value.uuid
+    );
+
+    ElNotification({
+      title: '登录成功',
+      message: '欢迎来到喵语云OJ',
+      type: 'success',
+    });
+  } catch (e) {
+    refreshCaptcha();
+    console.log(e);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const loadCaptcha = () => {
+  getCaptcha().then(res => {
+    form.value.uuid = res.data.data.uuid;
+    captchaImage.value = res.data.data.image;
+  }).catch(e => {
+    console.log(e);
+  });
+};
+
+const refreshCaptcha = () => {
+  loadCaptcha();
+};
+</script>
+
+<style scoped>
+.login-form-container {
+  width: 100%;
+  max-width: 400px;
+}
+
+.form-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.form-header h2 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0 0 8px 0;
+}
+
+.form-subtitle {
+  color: #718096;
+  font-size: 16px;
+  margin: 0;
+}
+
+.auth-form {
+  margin-bottom: 24px;
+}
+
+.auth-form .el-form-item {
+  margin-bottom: 24px;
+}
+
+.auth-form :deep(.el-input__inner) {
+  font-size: 16px;
+}
+
+.auth-form :deep(.el-checkbox__label) {
+  font-size: 15px;
+}
+
+.auth-form :deep(.el-input__wrapper) {
+  border-radius: 10px;
+}
+
+.captcha-item :deep(.el-form-item__content) {
+  display: flex;
+  align-items: center;
+}
+
+.captcha-image {
+  width: 100px;
+  height: 40px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  object-fit: cover;
+}
+
+.captcha-image:hover {
+  border-color: #409EFF;
+}
+
+.form-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.form-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.auth-button {
+  flex: 1;
+  height: 40px;
+  font-size: 16px;
+  border-radius: 10px;
+}
+
+.auth-button.secondary {
+  background: #f5f5f5;
+  border-color: #d9d9d9;
+  color: #666;
+}
+
+.form-footer {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.form-footer p {
+  color: #718096;
+  font-size: 14px;
+  margin: 0 0 8px 0;
+}
+
+@keyframes shake {
+  0% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-5px);
+  }
+
+  50% {
+    transform: translateX(5px);
+  }
+
+  75% {
+    transform: translateX(-5px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.shake {
+  animation: shake 0.5s ease;
+}
+</style>

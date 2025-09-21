@@ -1,0 +1,604 @@
+import request from "./request";
+import type { LoginDTO, RegisterDTO, UserDTO } from "@/type/types";
+
+
+//================= OJ =====================
+
+/**
+ * 获取比赛列表
+ * @param keyword 关键字
+ * @param pageNo 页码
+ * @param pageSize 每页条数
+ * @returns 比赛列表
+ */
+export function getContestTableList(keyword: string | null, pageNo: number, pageSize: number) {
+  let params = {
+    keyword,
+    pageNo,
+    pageSize
+  }
+  return request({
+    url: "/public/contests",
+    method: "GET",
+    params
+  })
+}
+/**
+ * 获取标签列表
+ * @returns 标签列表
+ */
+export function getTagsList() {
+  return request({
+    url: "/public/tags",
+    method: "GET",
+  })
+}
+/**
+ * 获取题目列表
+ * @param params 题目列表信息
+ * @returns 题目列表
+ */
+export function getProblemTableList(params: any) {
+  return request({
+    url: "/public/problems",
+    method: "GET",
+    params
+  })
+}
+/**
+ * 获取题目详情
+ * @param id 题目ID
+ * @returns 题目详情
+ */
+export function getProblemDetail(id: string) {
+  return request({
+    url: `/problem/${id}`,
+    method: "GET",
+  })
+}
+/**
+ * 获取验证码
+ * @returns 验证码
+ */
+export function getCaptcha() {
+  return request({
+    url: "/captchaImage",
+    method: "GET",
+  })
+}
+/**
+ * 登录
+ * @param data 登录信息
+ * @returns token
+ */
+export function login(data: LoginDTO) {
+  return request({
+    url: "/login",
+    method: "POST",
+    data
+  })
+}
+/**
+ * 注册
+ * @param data 注册信息
+ */
+export function register(data: RegisterDTO) {
+  return request({
+    url: "/register",
+    method: "POST",
+    data
+  })
+}
+/**
+ * 忘记密码-发送验证码
+ * @param data 忘记密码信息
+ */
+export function forgetPasswordSendCode(data: any) {
+  return request({
+    url: "/forget-code",
+    method: "POST",
+    data
+  })
+}
+/**
+ * 忘记密码-重置密码
+ * @param data 忘记密码信息
+ */
+export function forgetPasswordResetPassword(data: any) {
+  return request({
+    url: "/forget-password",
+    method: "PUT",
+    data
+  })
+}
+/**
+ * 获取当前用户基本信息
+ * @returns 当前用户基本信息
+ */
+export function getUserProfile() {
+  return request({
+    url: "/user/profile",
+    method: "GET",
+  })
+}
+/**
+ * 登出
+ */
+export function logout() {
+  return request({
+    url: "/logout",
+    method: "GET",
+  })
+}
+/**
+ * 获取提交列表
+ * @param isMine 个人还是所有
+ * @param status 状态
+ * @param problemKey 题目/题号
+ * @param username 用户名
+ * @param pageNo 页码
+ * @param pageSize 每页条数
+ * @returns 提交列表
+ */
+export function getSubmissionTableList(params: any) {
+  return request({
+    url: "/public/submissions",
+    method: "GET",
+    params
+  });
+}
+/**
+ * 获取用户信息
+ * @param username 用户名
+ * @returns 用户信息
+ */
+export function getUserInfoByUsername(username: string) {
+  return request({
+    url: "/public/user-info",
+    method: "GET",
+    params: { username }
+  })
+}
+/**
+ * 获取用户日历热力图
+ * @param username 用户名
+ * @returns 用户日历热力图
+ */
+export function getUserCalendarHeatmap(username: string) {
+  return request({
+    url: "/public/user-calendar-heatmap",
+    method: "GET",
+    params: {
+      username
+    }
+  })
+}
+/**
+ * 更新用户资料
+ * @param data 用户资料
+ */
+export function updateUserProfile(data: any) {
+  return request({
+    url: "/user/update-profile",
+    method: "PUT",
+    data
+  })
+}
+/**
+ * 更新用户密码
+ * @param data 用户密码
+ */
+export function updateUserPassword(data: any) {
+  return request({
+    url: "/user/update-password",
+    method: "PUT",
+    data
+  })
+}
+/**
+ * 更新用户邮箱
+ * @param data 用户邮箱
+ */
+export function updateUserEmail(data: any) {
+  return request({
+    url: "/user/update-email",
+    method: "PUT",
+    data
+  })
+}
+/**
+ * 获取提交详情
+ * @param id 提交ID
+ * @returns 提交详情
+ */
+export function getSubmissionDetail(id: number) {
+  return request({
+    url: `/submission/${id}`,
+    method: "GET",
+  })
+}
+/**
+ * 更新分享代码状态
+ * @param id 提交ID
+ */
+export function updateShareCode(id: number) {
+  return request({
+    url: `/submission/${id}/share`,
+    method: "PUT",
+  })
+}
+/**
+ * 提交题目评测
+ * @param data 提交评测信息
+ * @returns 评测结果
+ */
+export function submitJudge(data: any) {
+  return request({
+    url: "/judge/submit",
+    method: "POST",
+    data
+  })
+}
+/**
+ * 测试评测
+ * @param data 测试评测信息
+ * @returns 评测结果
+ */
+export function testJudge(data: any) {
+  return request({
+    url: "/judge/test",
+    method: "POST",
+    data
+  })
+}
+/**
+ * 定时轮询获取评测状态
+ * @param params 评测状态信息
+ * @returns 评测状态
+ */
+export function getJudgeStatus(params: any) {
+  return request({
+    url: "/judge/status",
+    method: "GET",
+    params
+  })
+}
+/**
+ * 获取题目提交列表
+ * @param params 题目提交列表信息
+ * @returns 题目提交列表
+ */
+export function getProblemSubmissionList(params: any) {
+  return request({
+    url: "/problem/submissions",
+    method: "GET",
+    params
+  })
+}
+/**
+ * 获取用户AC排名
+ * @returns 用户AC排名
+ */
+export function getUserAcRank() {
+  return request({
+    url: "/public/user-ac-rank",
+    method: "GET"
+  })
+}
+/**
+ * 获取随机题目
+ * @returns 随机题目的唯一标识
+ */
+export function getRandomProblem() {
+  return request({
+    url: "/problem/random",
+    method: "GET",
+  })
+}
+/**
+ * 获取比赛详情
+ * @param id 比赛ID
+ * @returns 比赛详情
+ */
+export function getContestInfo(id: number) {
+  return request({
+    url: `/contest/${id}`,
+    method: "GET"
+  })
+}
+/**
+ * 注册比赛
+ * @param data 比赛ID和密码
+ */
+export function registerContest(data: any) {
+  return request({
+    url: "/contest/register",
+    method: "POST",
+    data
+  })
+}
+/**
+ * 获取比赛题目列表
+ * @param id 比赛ID
+ * @returns 比赛题目列表
+ */
+export function getContestProblemList(id: number) {
+  return request({
+    url: `/contest/${id}/problems`,
+    method: "GET",
+  })
+}
+/**
+ * 获取比赛题目详情
+ * @param contestId 比赛ID
+ * @param displayId 题目ID
+ * @returns 比赛题目详情
+ */
+export function getContestProblemInfo(contestId: number, displayId: string) {
+  return request({
+    url: `/contest/${contestId}/problem/${displayId}`,
+    method: "GET",
+  })
+}
+/**
+ * 获取比赛题目提交记录
+ * @param params 比赛ID和题目ID
+ * @returns 比赛题目提交记录
+ */
+export function getContestProblemSubmissionList(params: any) {
+  return request({
+    url: "/contest/problem/submissions",
+    method: "GET",
+    params
+  })
+}
+/**
+ * 获取比赛提交记录
+ * @param params 比赛ID
+ * @returns 比赛提交记录
+ */
+export function getContestSubmissionList(params: any) {
+  return request({
+    url: "/contest/submissions",
+    method: "GET",
+    params
+  })
+}
+/**
+ * 获取比赛排名列表
+ * @param params 请求参数
+ * @returns 比赛排名列表
+ */
+export function getContestRankList(params: any) {
+  return request({
+    url: "/contest/ranks",
+    method: "GET",
+    params
+  })
+}
+/**
+ * 获取公告列表
+ * @returns 公告列表
+ */
+export function getAnnouncementTableList() {
+  return request({
+    url: "/public/announcements",
+    method: "GET",
+  })
+}
+/**
+ * 添加题目
+ * @param data 题目信息
+ */
+export function addProblem(data: any) {
+  return request({
+    url: "/problem/add",
+    method: "POST",
+    data
+  })
+}
+/**
+ * 更新题目
+ * @param data 题目信息
+ */
+export function updateProblem(data: any) {
+  return request({
+    url: "/problem/update",
+    method: "PUT",
+    data
+  })
+}
+/**
+ * 获取语言列表
+ * @returns 语言列表
+ */
+export function getLanguageTableList() {
+  return request({
+    url: "/public/languages",
+    method: "GET",
+  })
+}
+
+/**
+ * 获取管理员题目列表
+ * @param params 查询参数
+ * @returns 管理员题目列表
+ */
+export function getAdminProblemList(params: any) {
+  return request({
+    url: "/admin/problems",
+    method: "GET",
+    params
+  })
+}
+
+/**
+ * 根据ID获取题目详情（管理员）
+ * @param id 题目ID
+ * @returns 题目详情
+ */
+export function getAdminProblemById(id: number) {
+  return request({
+    url: `/admin/problem/${id}`,
+    method: "GET",
+  })
+}
+
+/**
+ * 删除题目
+ * @param ids 题目ID或ID数组
+ */
+export function deleteProblemByIds(ids: number | number[]) {
+  return request({
+    url: `/admin/problem/${ids}`,
+    method: "DELETE",
+  })
+}
+
+/**
+ * 更新题目状态
+ * @param id 题目ID
+ * @param visibility 可见性
+ */
+export function changeProblemVisibility(id: number, visibility: number) {
+  const data = {
+    id,
+    visibility
+  }
+  return request({
+    url: '/admin/problem/visibility',
+    method: "PUT",
+    data: data
+  })
+}
+
+//================= Admin =====================
+
+/**
+ * 获取菜单列表
+ * @returns 菜单列表
+ */
+export function getMenus(){
+  return request({
+    url: "/admin/menu",
+    method: "GET",
+  })
+}
+/**
+ * 获取服务器配置
+ * @returns 服务器配置
+ */
+export function getServerConfig() {
+  return request({
+    url: "/monitor/server",
+    method: "GET",
+  })
+}
+/**
+ * 获取在线用户列表
+ * @returns 在线用户列表
+ */
+export function getUserOnlineList() {
+  return request({ 
+    url: "/monitor/online/list", 
+    method: "GET" 
+  })
+}
+/**
+ * 强制下线
+ * @param token 会话编号
+ */
+export function forceOffline(token: string) {
+  return request({ 
+    url: "/monitor/online/" + token, 
+    method: "DELETE", 
+  })
+}
+/**
+ * 获取用户列表
+ * @param params 请求参数
+ * @returns 用户列表
+ */
+export function getUserTableList(params: any) {
+  return request({
+    url: "/admin/user/list",
+    method: "GET",
+    params
+  })
+}
+/**
+ * 获取用户信息
+ * @param id 用户ID
+ * @returns 用户信息
+ */
+export function getUserById(id: number) {
+  return request({
+    url: `/admin/user/${id}`,
+    method: "GET",
+  })
+}
+/**
+ * 添加用户
+ * @param data 用户信息
+ */
+export function addUser(data: UserDTO) {
+  return request({ 
+    url: "/admin/user", 
+    method: "POST", 
+    data 
+  })
+}
+/**
+ * 更新用户
+ * @param data 用户信息
+ */
+export function updateUser(data: UserDTO) {
+  return request({ 
+    url: "/admin/user", 
+    method: "PUT", 
+    data 
+  })
+}
+/**
+ * 更新用户状态
+ * @param id 用户ID
+ * @param status 状态
+ */
+export function changeUserStatus(id: number, status: string) {
+  const data = {
+    id,
+    status
+  }
+  return request({
+    url: '/admin/user/status',
+    method: "PUT",
+    data: data
+  })
+}
+/**
+ * 删除用户
+ * @param id 用户ID
+ */
+export function deleteUserByIds(id: number | number[]) {
+  return request({
+    url: `/admin/user/${id}`,
+    method: "DELETE",
+  })
+}
+/**
+ * 重置用户密码
+ * @param id 用户ID
+ * @param password 新密码
+ */
+export function resetUserPassword(id: number, password: string) {
+  const data = {
+    id,
+    password
+  }
+  return request({
+    url: '/admin/user/reset-password',
+    method: "PUT",
+    data: data
+  })
+}
+
