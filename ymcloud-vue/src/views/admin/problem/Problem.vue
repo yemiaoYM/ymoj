@@ -4,7 +4,7 @@
       <!-- 标题和操作按钮 -->
       <template #header>
         <span style="font-size: 22px; font-weight: 600; color: #409eff">
-          {{ isEditMode ? '编辑题目' : '增加题目' }}
+          {{ mode ==='edit' ? '编辑题目' : '增加题目' }}
         </span>
       </template>
       <n-flex vertical :size="[12, 12]" style="width: 100%; padding: 15px">
@@ -81,7 +81,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-model:content="problem.content" />
+            <MarkdownEidt v-if="problem.content" v-model:content="problem.content" />
           </el-form-item>
           <!-- 输入描述（Markdown） -->
           <el-form-item
@@ -90,7 +90,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-model:content="problem.input" />
+            <MarkdownEidt v-if="problem.input" v-model:content="problem.input" />
           </el-form-item>
           <!-- 输出描述（Markdown） -->
           <el-form-item
@@ -99,7 +99,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-model:content="problem.output" />
+            <MarkdownEidt v-if="problem.output" v-model:content="problem.output" />
           </el-form-item>
           <!-- 测试用例 -->
           <el-form-item
@@ -166,14 +166,7 @@
           :loading="loading"
           @click="handleSubmitProblem"
         >
-          {{ isEditMode ? '更新' : '保存' }}
-        </el-button>
-        <el-button
-          size="large"
-          @click="handleCancel"
-          style="margin-left: 10px;"
-        >
-          取消
+          {{ mode ==='edit' ? '更新' : '保存' }}
         </el-button>
       </template>
     </el-card>
@@ -182,7 +175,7 @@
 
 <script setup lang="ts">
 //import
-import { ref, defineAsyncComponent, onMounted } from "vue";
+import { ref, defineAsyncComponent, onMounted, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { addProblem, updateProblem, getAdminProblemById } from "@/api/api";
@@ -196,7 +189,7 @@ const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
 const formRef = ref();
-const isEditMode = ref(false);
+const mode = ref('add');
 const problemId = ref<number | null>(null);
 
 // 验证题目展示id格式
@@ -299,9 +292,9 @@ const rules = {
     { required: true, message: "请设定时间限制", trigger: "blur" },
     {
       type: "number",
-      min: 100,
+      min: 1000,
       max: 10000,
-      message: "时间限制必须在100ms到10000ms之间",
+      message: "时间限制必须在1000ms到10000ms之间",
       trigger: "blur",
     },
   ],
@@ -309,9 +302,9 @@ const rules = {
     { required: true, message: "请设定内存限制", trigger: "blur" },
     {
       type: "number",
-      min: 16,
-      max: 128,
-      message: "内存限制必须在16MB到128MB之间",
+      min: 128,
+      max: 512,
+      message: "内存限制必须在128MB到512MB之间",
       trigger: "blur",
     },
   ],
@@ -325,12 +318,10 @@ const problem = ref({
   content: "",
   input: "",
   output: "",
-  examples: "",
-  isRemote: false,
-  visibility: 1,
   source: "myy",
   difficulty: 0,
   mode: 0,
+  visibility: 1,
   openCaseResult: false,
   timeLimit: 1000,
   memoryLimit: 256,
@@ -341,6 +332,7 @@ const problem = ref({
       note: "测试用例1备注",
     },
   ],
+  tagList: [], // 标签列表
 });
 
 //methods
@@ -356,80 +348,46 @@ const addCase = () => {
 const removeCase = (index: number) => {
   problem.value.problemCaseList.splice(index, 1);
 };
-//生命周期
-onMounted(() => {
-  // 检查是否为编辑模式
-  if (route.params.id) {
-    isEditMode.value = true;
-    problemId.value = Number(route.params.id);
-    loadProblemData();
-  }
-});
-
-//加载题目数据
-const loadProblemData = async () => {
-  if (!problemId.value) return;
-  
-  try {
-    loading.value = true;
-    const res = await getAdminProblemById(problemId.value);
-    const data = res.data.data;
-    
-    // 将获取到的数据赋值给表单
-    Object.assign(problem.value, {
-      id: data.id,
-      problemId: data.problemId,
-      title: data.title,
-      content: data.content,
-      input: data.input,
-      output: data.output,
-      examples: data.examples || "",
-      isRemote: data.isRemote || false,
-      visibility: data.visibility,
-      source: data.source,
-      difficulty: data.difficulty,
-      mode: data.mode,
-      openCaseResult: data.openCaseResult,
-      timeLimit: data.timeLimit,
-      memoryLimit: data.memoryLimit,
-      problemCaseList: data.problemCaseList || [
-        {
-          input: "测试用例1输入(记得删掉)",
-          output: "测试用例1输出",
-          note: "测试用例1备注",
-        },
-      ],
-    });
-  } catch (error) {
-    console.error('加载题目数据失败:', error);
-    ElMessage.error('加载题目数据失败');
-  } finally {
-    loading.value = false;
-  }
-};
-
-//提交题目（新建或更新）
+//提交题目（新增或编辑）
 const handleSubmitProblem = () => {
   if (!formRef.value) return;
   formRef.value.validate((valid: boolean) => {
     if (valid) {
       loading.value = true;
       
-      const apiCall = isEditMode.value 
-        ? updateProblem(problem.value)
-        : addProblem(problem.value);
+      //构造符合后端DTO的数据结构
+      const submitData = {
+        problemId: problem.value.problemId,
+        title: problem.value.title,
+        content: problem.value.content,
+        input: problem.value.input,
+        output: problem.value.output,
+        source: problem.value.source,
+        difficulty: problem.value.difficulty,
+        mode: problem.value.mode,
+        visibility: problem.value.visibility,
+        openCaseResult: problem.value.openCaseResult,
+        timeLimit: problem.value.timeLimit,
+        memoryLimit: problem.value.memoryLimit,
+        problemCaseList: problem.value.problemCaseList,
+        tagList: problem.value.tagList || []
+      };
       
-      apiCall
-        .then((res) => {
+      const api = mode.value ==='edit' && problem.value.id
+        ? updateProblem(problem.value.id, submitData)
+        : addProblem(submitData);
+      
+      api.then((res) => {
           ElMessage.success(res.data.msg);
-          // 成功后返回列表页面
-          router.push('/admin/problem/list');
-        })
-        .catch((e) => {
+          if (mode.value ==='edit') {
+            router.push('/admin/problem/list');
+          } else {
+            //新增模式成功后重置表单
+            resetForm();
+          }
+        }).catch((e) => {
           console.error(e);
-          ElMessage.error(isEditMode.value ? '更新题目失败' : '添加题目失败');
-        })
-        .finally(() => {
+        }).finally(() => {
           loading.value = false;
         });
     } else {
@@ -438,9 +396,79 @@ const handleSubmitProblem = () => {
   });
 };
 
-//取消操作
-const handleCancel = () => {
-  router.push('/admin/problem/list');
+//重置表单
+const resetForm = () => {
+  Object.assign(problem.value, {
+    id: null,
+    problemId: "",
+    title: "",
+    content: "",
+    input: "",
+    output: "",
+    source: "myy",
+    difficulty: 0,
+    mode: 0,
+    visibility: 1,
+    openCaseResult: false,
+    timeLimit: 1000,
+    memoryLimit: 256,
+    problemCaseList: [
+      {
+        input: "测试用例1输入(记得删掉)",
+        output: "测试用例1输出",
+        note: "测试用例1备注",
+      },
+    ],
+    tagList: [],
+  });
+  if (formRef.value) {
+    formRef.value.resetFields();
+  }
+};
+
+//监听路由参数变化
+watch(() => route.params.id, (newVal) => {
+  if (newVal && route.name === 'AdminProblemEdit') {
+    mode.value = 'edit';
+    problemId.value = Number(newVal);
+    loadProblemData();
+  } else {
+    mode.value = 'add';
+    resetForm();
+  }
+});
+
+//加载题目数据
+const loadProblemData = async () => {
+  if (!problemId.value) return;
+  try {
+    loading.value = true;
+    const res = await getAdminProblemById(problemId.value);
+    const data = res.data.data;
+    
+    //获取到的数据赋值给表单
+    Object.assign(problem.value, {
+      id: data.id,
+      problemId: data.problemId,
+      title: data.title,
+      content: data.content,
+      input: data.input,
+      output: data.output,
+      visibility: data.visibility,
+      source: data.source,
+      difficulty: data.difficulty,
+      mode: data.mode,
+      openCaseResult: data.openCaseResult,
+      timeLimit: data.timeLimit,
+      memoryLimit: data.memoryLimit,
+      problemCaseList: JSON.parse(data.examples) || [],
+      tagList: data.tagList || [],
+    });
+  } catch (e) {
+    console.log(e);
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 

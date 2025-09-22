@@ -387,28 +387,6 @@ export function getAnnouncementTableList() {
   })
 }
 /**
- * 添加题目
- * @param data 题目信息
- */
-export function addProblem(data: any) {
-  return request({
-    url: "/problem/add",
-    method: "POST",
-    data
-  })
-}
-/**
- * 更新题目
- * @param data 题目信息
- */
-export function updateProblem(data: any) {
-  return request({
-    url: "/problem/update",
-    method: "PUT",
-    data
-  })
-}
-/**
  * 获取语言列表
  * @returns 语言列表
  */
@@ -416,59 +394,6 @@ export function getLanguageTableList() {
   return request({
     url: "/public/languages",
     method: "GET",
-  })
-}
-
-/**
- * 获取管理员题目列表
- * @param params 查询参数
- * @returns 管理员题目列表
- */
-export function getAdminProblemList(params: any) {
-  return request({
-    url: "/admin/problems",
-    method: "GET",
-    params
-  })
-}
-
-/**
- * 根据ID获取题目详情（管理员）
- * @param id 题目ID
- * @returns 题目详情
- */
-export function getAdminProblemById(id: number) {
-  return request({
-    url: `/admin/problem/${id}`,
-    method: "GET",
-  })
-}
-
-/**
- * 删除题目
- * @param ids 题目ID或ID数组
- */
-export function deleteProblemByIds(ids: number | number[]) {
-  return request({
-    url: `/admin/problem/${ids}`,
-    method: "DELETE",
-  })
-}
-
-/**
- * 更新题目状态
- * @param id 题目ID
- * @param visibility 可见性
- */
-export function changeProblemVisibility(id: number, visibility: number) {
-  const data = {
-    id,
-    visibility
-  }
-  return request({
-    url: '/admin/problem/visibility',
-    method: "PUT",
-    data: data
   })
 }
 
@@ -602,3 +527,75 @@ export function resetUserPassword(id: number, password: string) {
   })
 }
 
+/**
+ * 获取管理员题目列表
+ * @param params 查询参数
+ * @returns 管理员题目列表
+ */
+export function getAdminProblemList(params: any) {
+  return request({
+    url: "/admin/problem/list",
+    method: "GET",
+    params
+  })
+}
+
+/**
+ * 根据ID获取题目详情（管理员）
+ * @param id 题目ID
+ * @returns 题目详情
+ */
+export function getAdminProblemById(id: number) {
+  return request({
+    url: `/admin/problem/${id}`,
+    method: "GET",
+  })
+}
+
+/**
+ * 删除题目
+ * @param ids 题目ID或ID数组
+ */
+export function deleteProblemByIds(ids: number | number[]) {
+  return request({
+    url: `/admin/problem/${ids}`,
+    method: "DELETE",
+  })
+}
+
+/**
+ * 修改题目可见性
+ * @param id 题目ID
+ * @param visibility 可见性：1=公开，2=私有，3=比赛专用
+ */
+export function updateProblemVisibility(id: number, visibility: number) {
+  return request({
+    url: `/admin/problem/${id}/visibility`,
+    method: "PUT",
+    params: { visibility }
+  })
+}
+
+/**
+ * 添加题目
+ * @param problem 题目数据
+ */
+export function addProblem(problem: any) {
+  return request({
+    url: "/admin/problem",
+    method: "POST",
+    data: problem
+  })
+}
+
+/**
+ * 更新题目
+ * @param problem 题目数据
+ */
+export function updateProblem(problemId: number, problem: any) {
+  return request({
+    url: `/admin/problem/${problemId}`,
+    method: "PUT",
+    data: problem
+  })
+}

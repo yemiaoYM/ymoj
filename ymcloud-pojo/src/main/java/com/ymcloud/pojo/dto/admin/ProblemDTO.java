@@ -1,4 +1,4 @@
-package com.ymcloud.pojo.dto;
+package com.ymcloud.pojo.dto.admin;
 
 import com.ymcloud.pojo.vo.ProblemCaseVO;
 import jakarta.validation.constraints.*;
@@ -14,7 +14,7 @@ import java.util.List;
  * @Description: 添加题目请求体
  */
 @Data
-public class ProblemAddOrUpdateDTO {
+public class ProblemDTO {
 
     /**
      * 题目展示id
@@ -100,8 +100,8 @@ public class ProblemAddOrUpdateDTO {
      * 内存限制（MB）
      */
     @NotNull(message = "请设定内存限制")
-    @Min(value = 256, message = "内存限制不能少于16MB")
-    @Max(value = 512, message = "内存限制不能超过128MB")
+    @Min(value = 256, message = "内存限制不能少于256MB")
+    @Max(value = 512, message = "内存限制不能超过512MB")
     private Long memoryLimit;
 
     /**

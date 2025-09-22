@@ -316,18 +316,38 @@ export type AdminProblemVO = {
   problemId: string;
   /** 题目标题 */
   title: string;
+  /** 题目描述内容（题干） */
+  content?: string;
+  /** 是否为vj判题 */
+  isRemote?: boolean;
+  /** 时间限制（ms） */
+  timeLimit?: number;
+  /** 内存限制（KB） */
+  memoryLimit?: number;
+  /** 输入描述 */
+  input?: string;
+  /** 输出描述 */
+  output?: string;
+  /** 题面样例 */
+  examples?: string;
+  /** 题目来源 */
+  source?: string;
+  /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
+  difficulty: number;
+  /** 评测模式：0=ACM，1=OI */
+  mode?: number;
+  /** 权限：1=公开，2=私有，3=比赛专用 */
+  visibility: number;
+  /** 是否允许查看测试样例结果（0=否，1=是） */
+  openCaseResult?: boolean;
+  /** 出题人ID（user.id） */
+  authorId?: number;
   /** 出题人用户名 */
   authorUsername: string;
   /** 创建时间 */
   createdTime: string;
-  /** 最近修改者 */
-  updatedBy: string;
-  /** 权限：1=公开，2=私有，3=比赛专用 */
-  visibility: number;
-  /** 是否为远程OJ题目 */
-  isRemote: boolean;
-  /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
-  difficulty: number;
+  /** 更新时间 */
+  updatedTime?: string;
 }
 
 /**

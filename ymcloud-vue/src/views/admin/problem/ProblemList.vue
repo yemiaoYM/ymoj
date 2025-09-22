@@ -5,11 +5,8 @@
         <!-- 搜索区域 -->
         <el-form :model="queryParams" label-width="auto">
           <n-flex :size="10">
-            <el-form-item label="题目标题" prop="title">
-              <el-input v-model="queryParams.title" placeholder="请输入题目标题" clearable />
-            </el-form-item>
-            <el-form-item label="作者" prop="authorUsername">
-              <el-input v-model="queryParams.authorUsername" placeholder="请输入作者" clearable />
+            <el-form-item label="关键词" prop="keyword">
+              <el-input v-model="queryParams.keyword" placeholder="请输入题目标题或题号" clearable />
             </el-form-item>
             <el-form-item label="权限" prop="visibility">
               <el-select v-model="queryParams.visibility" placeholder="全部题目" clearable style="width: 120px;">
@@ -53,7 +50,7 @@
           <el-table-column label="标题" prop="title" min-width="200" show-overflow-tooltip align="center"/>
           <el-table-column label="作者" prop="authorUsername" width="120" align="center" />
           <el-table-column label="创建时间" prop="createdTime" width="160" align="center" />
-          <el-table-column label="最近修改者" prop="updatedBy" width="120" align="center" />
+          <el-table-column label="更新时间" prop="updatedTime" width="160" align="center" />
           <el-table-column label="权限" width="100" align="center">
             <template #default="scope">
               <el-tag 
@@ -132,8 +129,7 @@ const loading = ref<boolean>(false);
 
 //查询参数
 const queryParams = ref({
-  title: null,
-  authorUsername: null,
+  keyword: null,
   visibility: null,
   difficulty: null,
   pageNo: 1,
@@ -151,138 +147,22 @@ onMounted(() => {
 const handleQuery = () => {
   loading.value = true;
   
-  // 临时模拟数据，匹配图片中的数据
-  setTimeout(() => {
-    problemList.value = [
-      {
-        id: 20189,
-        problemId: 'GYM-103388K',
-        title: 'Kathmandu',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:21',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20190,
-        problemId: 'GYM-103388I',
-        title: 'Inverting Everything',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:21',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20188,
-        problemId: 'GYM-103388G',
-        title: 'Getting in Shape',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:20',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20187,
-        problemId: 'GYM-103388F',
-        title: 'Freedom from Prison',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:20',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20186,
-        problemId: 'GYM-103388E',
-        title: 'Escalator',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:19',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20185,
-        problemId: 'GYM-103388D',
-        title: 'Dividing the Kingdom',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:17',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20183,
-        problemId: 'GYM-103388B',
-        title: 'Beautiful Words',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:16',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20184,
-        problemId: 'GYM-103388C',
-        title: 'Creating Multiples',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:16',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20182,
-        problemId: 'GYM-103388A',
-        title: 'Assigning Prizes',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 16:42:14',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      },
-      {
-        id: 20181,
-        problemId: 'GYM-103389I',
-        title: '雪球卡丁车',
-        authorUsername: 'zsh',
-        createdTime: '2021-11-08 10:51:48',
-        updatedBy: 'zsh',
-        visibility: 1,
-        isRemote: false,
-        difficulty: 0
-      }
-    ];
-    total.value = 10;
+  // 调用真实API
+  getAdminProblemList(queryParams.value).then(res => {
+    problemList.value = res.data.data.records;
+    total.value = res.data.data.total;
+  }).catch(err => {
+    console.error('获取题目列表失败:', err);
+    ElMessage.error('获取题目列表失败，请稍后重试');
+  }).finally(() => {
     loading.value = false;
-  }, 500);
-  
-  // 实际API调用（注释掉以使用模拟数据）
-  // getAdminProblemList(queryParams.value).then(res => {
-  //   problemList.value = res.data.data.records;
-  //   total.value = res.data.data.total;
-  // }).finally(() => {
-  //   loading.value = false;
-  // });
+  });
 };
 
 //重置查询
 const resetQuery = () => {
   queryParams.value = {
-    title: null,
-    authorUsername: null,
+    keyword: null,
     visibility: null,
     difficulty: null,
     pageNo: 1,
@@ -355,9 +235,9 @@ const handleDownload = (row: AdminProblemVO) => {
 };
 
 //删除题目
-const handleDelete = (row?: AdminProblemVO) => {
-  const ids = row ? row.id : problemIds.value;
-  if (!ids || (Array.isArray(ids) && ids.length === 0)) {
+const handleDelete = (row: AdminProblemVO) => {
+  const ids = row.id || problemIds.value;
+  if (!ids) {
     ElMessage.warning('请选择要删除的题目');
     return;
   }

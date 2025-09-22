@@ -1,9 +1,7 @@
 package com.ymcloud.pojo.query.admin;
 
-import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.pojo.query.PageQuery;
 import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.EqualsAndHashCode;

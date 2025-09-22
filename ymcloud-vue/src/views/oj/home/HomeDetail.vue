@@ -195,10 +195,10 @@
   <!-- 底部 -->
   <footer>
     <div class="mundb-footer">
-      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=" rel="noreferrer" target="_blank" style="margin-right:10px">
+      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=13072602000080" rel="noreferrer" target="_blank" style="margin-right:10px">
         <img src="https://beian.mps.gov.cn/img/logo01.dd7ff50e.png" alt="公安备案"
               style="vertical-align: middle; width: 20px;">
-        公安备案中...
+        冀公安备13072602000080号
       </a>
       <a href="https://beian.miit.gov.cn" rel="noreferrer" target="_blank">冀ICP备2024086612号</a>
     </div>

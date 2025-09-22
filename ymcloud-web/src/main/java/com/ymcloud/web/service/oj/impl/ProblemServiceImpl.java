@@ -19,7 +19,6 @@ import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
 import com.ymcloud.core.web.dao.TagEntityService;
 import com.ymcloud.core.web.mapper.LanguageMapper;
-import com.ymcloud.pojo.dto.ProblemAddOrUpdateDTO;
 import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
@@ -28,9 +27,7 @@ import com.ymcloud.pojo.vo.*;
 import com.ymcloud.web.service.oj.ProblemService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -183,60 +180,6 @@ public class ProblemServiceImpl implements ProblemService {
             vo.setSubmissionId(judge.getId());
             return vo;
         });
-    }
-
-    /**
-     * 添加题目
-     * @param problemAddOrUpdateDTO 题目信息
-     */
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void addProblem(ProblemAddOrUpdateDTO problemAddOrUpdateDTO) {
-        //题目展示id需保证唯一
-        String problemId = problemAddOrUpdateDTO.getProblemId();
-        boolean exists = problemEntityService.lambdaQuery().eq(Problem::getProblemId, problemId).exists();
-        if(exists){
-            throw new ProblemException("该题目展示id已被使用");
-        }
-        //构造实体
-        Problem problem = BeanUtil.copyProperties(problemAddOrUpdateDTO, Problem.class);
-        //题目创建者信息
-        User user = SecurityUtils.getUser();
-        problem.setAuthorId(user.getId());
-        problem.setAuthorUsername(user.getUsername());
-        //题目测试用例
-        List<ProblemCaseVO> problemCaseList = problemAddOrUpdateDTO.getProblemCaseList();
-        if(CollectionUtil.isNotEmpty(problemCaseList)){
-            String examples = JSON.toJSONString(problemCaseList);
-            problem.setExamples(examples);
-        }
-        //暂不支持远程题目
-        problem.setIsRemote(false);
-        boolean save = problemEntityService.save(problem);
-        if (!save) {
-            throw new ProblemException("添加题目失败，请稍后再试");
-        }
-        //题目标签
-        List<Long> tagList = problemAddOrUpdateDTO.getTagList();
-        if(CollectionUtil.isNotEmpty(tagList)){
-            //先查询可用标签
-            List<Tag> tags = tagEntityService.listByIds(problemAddOrUpdateDTO.getTagList());
-            List<ProblemTag> list= new ArrayList<>();
-            if(CollectionUtil.isNotEmpty(tags)){
-                //进行插入
-                tags.forEach(tag -> {
-                    ProblemTag pt=new ProblemTag();
-                    pt.setProblemId(problem.getId());
-                    pt.setTagId(tag.getId());
-                    list.add(pt);
-                });
-                boolean b = problemTagEntityService.saveBatch(list);
-                if(!b){
-                    throw new ProblemException("题目标签保存失败，请稍后再试");
-                }
-            }
-        }
-        //题目测试用例
     }
 
     /**

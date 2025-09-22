@@ -1,6 +1,5 @@
 package com.ymcloud.web.service.oj;
 
-import com.ymcloud.pojo.dto.ProblemAddOrUpdateDTO;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
 import com.ymcloud.pojo.query.oj.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.PageVO;
@@ -44,9 +43,4 @@ public interface ProblemService {
      */
     PageVO<SubmissionTableVO> problemSubmissionList(ProblemSubmissionPageQuery query);
 
-    /**
-     * 添加题目
-     * @param problemAddOrUpdateDTO 题目信息
-     */
-    void addProblem(ProblemAddOrUpdateDTO problemAddOrUpdateDTO);
 }
