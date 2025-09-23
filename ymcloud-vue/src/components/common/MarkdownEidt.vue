@@ -67,6 +67,13 @@ export default defineComponent({
       emit("update:content", val);
     });
 
+    //监听props变化->更新内部状态
+    watch(() => props.content, (newContent) => {
+      if (newContent !== modelValue.value) {
+        modelValue.value = newContent;
+      }
+    });
+
     return {
       modelValue,
       toolbars

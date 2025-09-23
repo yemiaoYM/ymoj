@@ -81,7 +81,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-if="problem.content" v-model:content="problem.content" />
+            <MarkdownEidt v-model:content="problem.content" :key="`content-${mode}-${problemId}`" />
           </el-form-item>
           <!-- 输入描述（Markdown） -->
           <el-form-item
@@ -90,7 +90,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-if="problem.input" v-model:content="problem.input" />
+            <MarkdownEidt v-model:content="problem.input" :key="`input-${mode}-${problemId}`" />
           </el-form-item>
           <!-- 输出描述（Markdown） -->
           <el-form-item
@@ -99,7 +99,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-if="problem.output" v-model:content="problem.output" />
+            <MarkdownEidt v-model:content="problem.output" :key="`output-${mode}-${problemId}`" />
           </el-form-item>
           <!-- 测试用例 -->
           <el-form-item
@@ -175,7 +175,7 @@
 
 <script setup lang="ts">
 //import
-import { ref, defineAsyncComponent, onMounted, watch } from "vue";
+import { ref, defineAsyncComponent, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { addProblem, updateProblem, getAdminProblemById } from "@/api/api";
@@ -315,9 +315,9 @@ const problem = ref({
   id: null,
   problemId: "",
   title: "",
-  content: "",
-  input: "",
-  output: "",
+  content: "请输入题干",
+  input: "请输入输入描述",
+  output: "请输入输出描述",
   source: "myy",
   difficulty: 0,
   mode: 0,
@@ -398,13 +398,13 @@ const handleSubmitProblem = () => {
 
 //重置表单
 const resetForm = () => {
-  Object.assign(problem.value, {
+  problem.value= {
     id: null,
     problemId: "",
     title: "",
-    content: "",
-    input: "",
-    output: "",
+    content: "请输入题干",
+    input: "请输入输入描述",
+    output: "请输入输出描述",
     source: "myy",
     difficulty: 0,
     mode: 0,
@@ -420,23 +420,11 @@ const resetForm = () => {
       },
     ],
     tagList: [],
-  });
+  };
   if (formRef.value) {
     formRef.value.resetFields();
   }
 };
-
-//监听路由参数变化
-watch(() => route.params.id, (newVal) => {
-  if (newVal && route.name === 'AdminProblemEdit') {
-    mode.value = 'edit';
-    problemId.value = Number(newVal);
-    loadProblemData();
-  } else {
-    mode.value = 'add';
-    resetForm();
-  }
-});
 
 //加载题目数据
 const loadProblemData = async () => {
@@ -470,6 +458,18 @@ const loadProblemData = async () => {
     loading.value = false;
   }
 };
+
+//监听路由参数变化
+watch(() => route.name, () => {
+  if (route.name === 'AdminProblemEdit' && route.params.id) {
+    mode.value = 'edit';
+    problemId.value = Number(route.params.id);
+    loadProblemData();
+  } else {
+    mode.value = 'add';
+    resetForm();
+  }
+}, { immediate: true });
 </script>
 
 <style scoped>

@@ -2,12 +2,17 @@ import { defineStore } from 'pinia';
 import { ref, markRaw } from 'vue';
 import { getMenus } from '@/api/api';
 import Layout from '@/components/admin/AdminLayout.vue';
+import router from '@/router';
+import { dynamicRoutes } from '@/router/modules/admin';
+import { useUserStore } from '@/stores/user';
 
 //导入views目录admin下的所有vue文件
 const modules = import.meta.glob('../views/admin/**/*.vue')
 
 export const usePermissionStore = defineStore('permission', () => {
 
+  const userStore = useUserStore();
+  
   const sidebarRouters = ref<any[]>([]);
 
   const isRoutesLoaded = ref<boolean>(false);
@@ -21,9 +26,29 @@ export const usePermissionStore = defineStore('permission', () => {
     await getMenus().then(res=>{
       const menus = res.data.data;
       sidebarRouters.value = filterAsyncRouter(menus);
+      //动态路由动态添加
+      const asyncRoutes = filterDynamicRoutes(dynamicRoutes);
+      asyncRoutes.forEach(route => { router.addRoute(route); });
       setRoutesLoaded(true);
     })
     return sidebarRouters.value;
+  }
+
+  //动态路由遍历，验证是否具备权限
+  const filterDynamicRoutes = (routes:any[]) => {
+    const res:any[] = [];
+    routes.forEach(route => {
+      if (route.permissions) {
+        if (userStore.hasEveryPermission(route.permissions)) {
+          res.push(route);
+        }
+      } else if (route.roles) {
+        if (userStore.hasAnyRole(route.roles)) {
+          res.push(route);
+        }
+      }
+    })
+    return res;
   }
 
   const filterAsyncRouter = (asyncRouterMap:any[]) => {

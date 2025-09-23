@@ -51,14 +51,17 @@
           <el-table-column label="作者" prop="authorUsername" width="120" align="center" />
           <el-table-column label="创建时间" prop="createdTime" width="160" align="center" />
           <el-table-column label="更新时间" prop="updatedTime" width="160" align="center" />
-          <el-table-column label="权限" width="100" align="center">
+          <el-table-column label="权限" width="150" align="center">
             <template #default="scope">
-              <el-tag 
-                :type="getVisibilityTagType(scope.row.visibility)"
-                size="small"
+              <el-select
+                :model-value="scope.row.visibility"
+                @change="(value: number) => handleVisibilityChange(scope.row, value)"
+                style="width: 100px;"
               >
-                {{ getVisibilityText(scope.row.visibility) }}
-              </el-tag>
+                <el-option :value="1" label="公开" />
+                <el-option :value="2" label="私有" />
+                <el-option :value="3" label="比赛专用" />
+              </el-select>
             </template>
           </el-table-column>
           <el-table-column label="Option" width="200" align="center">
@@ -117,7 +120,8 @@ import { useRouter } from 'vue-router';
 import type { AdminProblemVO } from '@/type/types';
 import {
   getAdminProblemList,
-  deleteProblemByIds
+  deleteProblemByIds,
+  updateProblemVisibility
 } from '@/api/api';
 
 //data
@@ -188,16 +192,6 @@ const handleSelectionChange = (selection: AdminProblemVO[]) => {
   problemIds.value = selection.map(item => item.id);
 };
 
-//获取权限标签类型
-const getVisibilityTagType = (visibility: number) => {
-  switch (visibility) {
-    case 1: return 'success';
-    case 2: return 'warning';
-    case 3: return 'info';
-    default: return '';
-  }
-};
-
 //获取权限文本
 const getVisibilityText = (visibility: number) => {
   switch (visibility) {
@@ -228,12 +222,6 @@ const handleUpdate = (row: AdminProblemVO) => {
   // 跳转到编辑页面，传递题目ID
   router.push(`/admin/problem/edit/${id}`);
 };
-
-//下载题目
-const handleDownload = (row: AdminProblemVO) => {
-  ElMessage.info('题目下载功能待开发');
-};
-
 //删除题目
 const handleDelete = (row: AdminProblemVO) => {
   const ids = row.id || problemIds.value;
@@ -257,6 +245,32 @@ const handleDelete = (row: AdminProblemVO) => {
       console.log(e);
     });
   }).catch(() => { });
+};
+//权限变更处理
+const handleVisibilityChange = (row: AdminProblemVO, newVisibility: number) => {
+  //如果值没有变化，直接返回
+  if (row.visibility === newVisibility) {
+    return;
+  }
+  const visibilityText = getVisibilityText(newVisibility);
+  const currentText = getVisibilityText(row.visibility);
+  
+  ElMessageBox.confirm(
+    `确认将题目 "${row.title}" 的权限从 "${currentText}" 修改为 "${visibilityText}" 吗？`,
+    '权限修改确认',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  ).then(() => {
+    updateProblemVisibility(row.id, newVisibility).then(res => {
+      ElMessage.success(res.data.msg);
+      row.visibility = newVisibility;
+    }).catch(e => {
+      console.log(e);
+    });
+  }).catch(() => {  });
 };
 
 </script>
