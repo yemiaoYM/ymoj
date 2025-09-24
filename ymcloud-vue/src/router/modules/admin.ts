@@ -47,6 +47,20 @@ export const dynamicRoutes = [
       }
     ]
   },
+  //编辑比赛路由
+  {
+    path: '/admin/contest',
+    component: Layout,
+    permissions: ['contest:contest:edit'],
+    children: [
+      {
+        path: 'edit/:id(\\d+)',
+        name: 'AdminContestEdit',
+        component: () => import('@/views/admin/contest/Contest.vue'),
+        meta: { title: 'Admin Contest Edit', requireLogin: true },
+      }
+    ]
+  }
 ]
 
 

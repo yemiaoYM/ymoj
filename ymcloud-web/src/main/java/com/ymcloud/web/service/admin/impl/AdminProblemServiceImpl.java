@@ -48,9 +48,9 @@ public class AdminProblemServiceImpl implements AdminProblemService {
      */
     @Override
     public PageVO<Problem> queryList(AdminProblemPageQuery pageQuery) {
-        // 创建分页实体
+        //创建分页实体
         Page<Problem> page = Page.of(pageQuery.getPageNo(), pageQuery.getPageSize());
-        // 条件分页查询题目列表（管理端可以查看所有可见性的题目）
+        //条件分页查询题目列表（管理端可以查看所有可见性的题目）
         Page<Problem> record = problemEntityService.lambdaQuery()
                 .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Problem::getTitle, pageQuery.getKeyword())
                 .or(StrUtil.isNotBlank(pageQuery.getKeyword()))
@@ -84,42 +84,35 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addProblem(ProblemDTO problemDTO) {
-        // 题目展示id需保证唯一
+        //题目展示id需保证唯一
         String problemId = problemDTO.getProblemId();
         boolean exists = problemEntityService.lambdaQuery().eq(Problem::getProblemId, problemId).exists();
         if (exists) {
             throw new ProblemException("该题目展示id已被使用");
         }
-
-        // 构造实体
+        //构造实体
         Problem problem = BeanUtil.copyProperties(problemDTO, Problem.class);
-        
-        // 题目创建者信息
+        //题目创建者信息
         User user = SecurityUtils.getUser();
         problem.setAuthorId(user.getId());
         problem.setAuthorUsername(user.getUsername());
-        
-        // 题目测试用例
+        //题目测试用例
         List<ProblemCaseVO> problemCaseList = problemDTO.getProblemCaseList();
         if (CollUtil.isNotEmpty(problemCaseList)) {
             String examples = JSON.toJSONString(problemCaseList);
             problem.setExamples(examples);
         }
-        
-        // 暂不支持远程题目
+        //暂不支持远程题目
         problem.setIsRemote(false);
-        
-        // 如果没有设置可见性，默认为私有
+        //如果没有设置可见性，默认为私有
         if (problem.getVisibility() == null) {
-            problem.setVisibility(2); // 2=私有
+            problem.setVisibility(2);
         }
-        
         boolean save = problemEntityService.save(problem);
         if (!save) {
             throw new ProblemException("添加题目失败，请稍后再试");
         }
-        
-        // 题目标签
+        //题目标签
         List<Long> tagList = problemDTO.getTagList();
         if (CollUtil.isNotEmpty(tagList)) {
             List<ProblemTag> problemTags = tagList.stream()
@@ -203,19 +196,16 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         if (CollUtil.isEmpty(ids)) {
             throw new ProblemException("题目id不能为空");
         }
-        
-        // 检查题目是否存在
+        //检查题目是否存在
         List<Problem> problems = problemEntityService.listByIds(ids);
         if (problems.size() != ids.size()) {
             throw new ProblemException("部分题目不存在或已被删除");
         }
-        
-        // 删除题目标签关联
+        //删除题目标签关联
         problemTagEntityService.lambdaUpdate()
                 .in(ProblemTag::getProblemId, ids)
                 .remove();
-        
-        // 删除题目
+        //删除题目
         boolean remove = problemEntityService.removeByIds(ids);
         if (!remove) {
             throw new ProblemException("删除题目失败，请稍后再试");
@@ -229,23 +219,20 @@ public class AdminProblemServiceImpl implements AdminProblemService {
      */
     @Override
     public void updateProblemVisibility(Long id, Integer visibility) {
-        // 检查可见性参数
+        //检查可见性参数
         if (visibility == null || (visibility < 1 || visibility > 3)) {
             throw new ProblemException("可见性参数错误", HttpStatus.BAD_REQUEST);
         }
-        
-        // 检查题目是否存在
+        //检查题目是否存在
         Problem problem = problemEntityService.getById(id);
         if (problem == null) {
             throw new ProblemNotExistException();
         }
-        
-        // 更新可见性
+        //更新可见性
         boolean update = problemEntityService.lambdaUpdate()
                 .eq(Problem::getId, id)
                 .set(Problem::getVisibility, visibility)
                 .update();
-        
         if (!update) {
             throw new ProblemException("修改题目可见性失败，请稍后再试");
         }

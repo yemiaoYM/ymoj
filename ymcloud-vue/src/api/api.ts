@@ -599,3 +599,207 @@ export function updateProblem(problemId: number, problem: any) {
     data: problem
   })
 }
+
+/**
+ * 获取标签和分类列表（管理员）
+ * @returns 标签和分类列表
+ */
+export function getAdminTagsAndClassifications() {
+  return request({
+    url: "/admin/tag/list",
+    method: "GET"
+  })
+}
+
+/**
+ * 添加标签（管理员）
+ * @param tag 标签信息
+ * @returns 操作结果
+ */
+export function addAdminTag(tag: any) {
+  return request({
+    url: "/admin/tag",
+    method: "POST",
+    data: tag
+  })
+}
+
+/**
+ * 更新标签（管理员）
+ * @param id 标签ID
+ * @param tag 标签信息
+ * @returns 操作结果
+ */
+export function updateAdminTag(id: number, tag: any) {
+  return request({
+    url: `/admin/tag/${id}`,
+    method: "PUT",
+    data: tag
+  })
+}
+
+/**
+ * 删除标签（管理员）
+ * @param id 标签ID
+ * @returns 操作结果
+ */
+export function deleteAdminTag(id: number) {
+  return request({
+    url: `/admin/tag/${id}`,
+    method: "DELETE"
+  })
+}
+
+/**
+ * 获取标签分类列表（管理员）
+ * @returns 标签分类列表
+ */
+export function getAdminTagClassifications() {
+  return request({
+    url: "/admin/tag/classification/list",
+    method: "GET"
+  })
+}
+
+/**
+ * 添加标签分类（管理员）
+ * @param classification 标签分类信息
+ * @returns 操作结果
+ */
+export function addAdminTagClassification(classification: any) {
+  return request({
+    url: "/admin/tag/classification",
+    method: "POST",
+    data: classification
+  })
+}
+
+/**
+ * 更新标签分类（管理员）
+ * @param id 标签分类ID
+ * @param classification 标签分类信息
+ * @returns 操作结果
+ */
+export function updateAdminTagClassification(id: number, classification: any) {
+  return request({
+    url: `/admin/tag/classification/${id}`,
+    method: "PUT",
+    data: classification
+  })
+}
+
+/**
+ * 删除标签分类（管理员）
+ * @param id 标签分类ID
+ * @returns 操作结果
+ */
+export function deleteAdminTagClassification(id: number) {
+  return request({
+    url: `/admin/tag/classification/${id}`,
+    method: "DELETE"
+  })
+}
+
+/**
+ * 获取管理员比赛列表
+ * @param params 查询参数
+ * @returns 管理员比赛列表
+ */
+export function getAdminContestList(params: any) {
+  return request({
+    url: "/admin/contest/list",
+    method: "GET",
+    params
+  })
+}
+
+/**
+ * 根据ID获取比赛详情（管理员）
+ * @param id 比赛ID
+ * @returns 比赛详情
+ */
+export function getAdminContestById(id: number) {
+  return request({
+    url: `/admin/contest/${id}`,
+    method: "GET",
+  })
+}
+
+/**
+ * 删除比赛（管理员）
+ * @param ids 比赛ID
+ * @returns 操作结果
+ */
+export function deleteContestByIds(ids: string | number) {
+  return request({
+    url: `/admin/contest/${ids}`,
+    method: "DELETE",
+  })
+}
+
+/**
+ * 更新比赛可见性（管理员）
+ * @param id 比赛ID
+ * @param visibility 可见性
+ * @param password 密码（私有比赛时必填）
+ * @returns 操作结果
+ */
+export function updateContestVisibility(id: number, visibility: number, password?: string | null) {
+  const params: any = { visibility };
+  if (password !== undefined && password !== null) {
+    params.password = password;
+  }
+  return request({
+    url: `/admin/contest/${id}/visibility`,
+    method: "PUT",
+    params
+  })
+}
+
+
+/**
+ * 添加比赛（管理员）
+ * @param contest 比赛信息
+ * @returns 操作结果
+ */
+export function addAdminContest(contest: any) {
+  return request({
+    url: "/admin/contest",
+    method: "POST",
+    data: contest
+  })
+}
+
+/**
+ * 更新比赛（管理员）
+ * @param id 比赛ID
+ * @param contest 比赛信息
+ * @returns 操作结果
+ */
+export function updateAdminContest(id: number, contest: any) {
+  return request({
+    url: `/admin/contest/${id}`,
+    method: "PUT",
+    data: contest
+  })
+}
+
+/**
+ * 克隆比赛（管理员）
+ * @param id 比赛ID
+ * @param title 新比赛标题
+ * @param visibility 访问权限
+ * @param password 密码（私有比赛时必填）
+ * @returns 操作结果
+ */
+export function cloneAdminContest(id: number, title: string, visibility: number, password?: string | null) {
+  const params: any = { title, visibility };
+  if (password !== undefined && password !== null) {
+    params.password = password;
+  }
+  return request({
+    url: `/admin/contest/${id}/clone`,
+    method: "POST",
+    params
+  })
+}
