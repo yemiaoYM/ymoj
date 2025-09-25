@@ -47,7 +47,7 @@
 | Spring Boot | 3.5.3 | 应用框架 |
 | Spring Security | 6.5.1 | 安全框架 |
 | MyBatis-Plus | 3.5.10.1 | ORM框架 |
-| MySQL | 9.2.0 | 主数据库 |
+| MySQL | 8.0.39 | 主数据库 |
 | Redis | 3.5.3 | 缓存数据库 |
 | RabbitMQ | 4.1.0 | 消息队列 |
 | Docker API | 3.4.0 | 容器管理 |
@@ -280,7 +280,7 @@ Web层接收请求
    CREATE DATABASE ymcloud DEFAULT CHARACTER SET utf8mb4;
    
    # 导入表结构
-   mysql -u root -p ymcloud < sql/基本建表语句.sql
+   mysql -u root -p ymcloud < sql/ymcloud.sql
    ```
 
 3. **配置环境**
