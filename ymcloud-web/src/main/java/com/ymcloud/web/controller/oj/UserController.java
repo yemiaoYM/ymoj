@@ -7,7 +7,7 @@ import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.pojo.dto.UpdateUserEmailDTO;
 import com.ymcloud.pojo.dto.UpdateUserPasswordDTO;
 import com.ymcloud.pojo.dto.UpdateUserProfileDTO;
-import com.ymcloud.pojo.vo.UserProfileVO;
+import com.ymcloud.pojo.vo.oj.UserProfileVO;
 import com.ymcloud.web.service.oj.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

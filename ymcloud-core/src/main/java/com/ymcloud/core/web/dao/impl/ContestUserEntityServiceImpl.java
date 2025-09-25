@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.mapper.ContestUserMapper;
 import com.ymcloud.pojo.entity.ContestUser;
-import com.ymcloud.pojo.vo.ContestCountVO;
+import com.ymcloud.pojo.vo.oj.ContestCountVO;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

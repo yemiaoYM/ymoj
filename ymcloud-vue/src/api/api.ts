@@ -803,3 +803,73 @@ export function cloneAdminContest(id: number, title: string, visibility: number,
     params
   })
 }
+
+/**
+ * 获取比赛题目列表（管理员）
+ * @param contestId 比赛ID
+ * @returns 比赛题目列表
+ */
+export function getAdminContestProblems(contestId: number) {
+  return request({
+    url: `/admin/contest/${contestId}/problems`,
+    method: "GET"
+  })
+}
+
+/**
+ * 获取可添加到比赛的题目列表（管理员）
+ * @param contestId 比赛ID
+ * @param params 查询参数
+ * @returns 可添加的题目列表
+ */
+export function getAvailableProblemsForContest(contestId: number, params: any) {
+  return request({
+    url: `/admin/contest/${contestId}/available-problems`,
+    method: "GET",
+    params
+  })
+}
+
+/**
+ * 批量添加题目到比赛（管理员）
+ * @param contestId 比赛ID
+ * @param problemIds 题目ID列表
+ * @returns 操作结果
+ */
+export function addProblemsToContest(contestId: number, problemIds: number | number[]) {
+  return request({
+    url: `/admin/contest/${contestId}/problems/${problemIds}`,
+    method: "POST"
+  })
+}
+
+/**
+ * 更新比赛题目信息（管理员）
+ * @param contestId 比赛ID
+ * @param problemId 题目ID
+ * @param displayId 展示ID
+ * @param displayTitle 在比赛中显示的题目标题
+ * @param color 气球颜色
+ * @returns 操作结果
+ */
+export function updateContestProblem(contestId: number, problemId: number, displayId: string, displayTitle: string, color: string) {
+  const params = { displayId, displayTitle, color };
+  return request({
+    url: `/admin/contest/${contestId}/problems/${problemId}`,
+    method: "PUT",
+    params
+  })
+}
+
+/**
+ * 从比赛中移除题目（管理员）
+ * @param contestId 比赛ID
+ * @param problemIds 题目ID列表
+ * @returns 操作结果
+ */
+export function removeContestProblems(contestId: number, problemIds: number | number[]) {
+  return request({
+    url: `/admin/contest/${contestId}/problems/${problemIds}`,
+    method: "DELETE"
+  })
+}

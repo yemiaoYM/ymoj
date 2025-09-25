@@ -1,10 +1,8 @@
 package com.ymcloud.web.service.oj;
 
-import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.dto.*;
-import com.ymcloud.pojo.entity.User;
-import com.ymcloud.pojo.vo.UserCalendarHeatmapVO;
-import com.ymcloud.pojo.vo.UserInfoVO;
+import com.ymcloud.pojo.vo.oj.UserCalendarHeatmapVO;
+import com.ymcloud.pojo.vo.oj.UserInfoVO;
 import org.springframework.web.multipart.MultipartFile;
 
 /**

@@ -1,4 +1,4 @@
-package com.ymcloud.pojo.vo;
+package com.ymcloud.pojo.vo.oj;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -7,16 +7,14 @@ import java.io.Serializable;
 
 /**
  * @PackageName: com.ymcloud.pojo.vo
- * @ClassName: LanguageTableVO
+ * @ClassName: LanguageVO
  * @Author: Yemiao
- * @CreateTime: 2025-09-04  20:12
- * @Description: 展示语言实体
+ * @CreateTime: 2025-07-24  20:19
+ * @Description: 前端编程语言选项实体
  */
 @Data
-public class LanguageTableVO implements Serializable {
-
+public class LanguageVO implements Serializable {
     private static final long serialVersionUID = 1L;
-
     /**
      * 语言名称，如 C++ 17
      */
@@ -30,11 +28,11 @@ public class LanguageTableVO implements Serializable {
      */
     private String contentType;
     /**
-     * 编译指令，编译型语言需要，如 g++ main.cpp -o main
-     */
-    private String compileCmd;
-    /**
      * 语言默认代码模板，显示在编辑器中
      */
     private String templateCode;
+    /**
+     * 题面中用于填空题的嵌套模板
+     */
+    private String codeTemplate;
 }

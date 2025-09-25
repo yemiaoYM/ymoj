@@ -2,7 +2,6 @@ package com.ymcloud.core.security.domain;
 
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.UserStatus;
-import com.ymcloud.pojo.vo.AuthVO;
 import lombok.Data;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;

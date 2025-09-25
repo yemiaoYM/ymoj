@@ -2,9 +2,7 @@ package com.ymcloud.core.web.dao;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.ContestProblem;
-import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.vo.ContestProblemTableVO;
-import org.apache.ibatis.annotations.Param;
+import com.ymcloud.pojo.vo.oj.ContestProblemTableVO;
 
 import java.time.LocalDateTime;
 import java.util.List;

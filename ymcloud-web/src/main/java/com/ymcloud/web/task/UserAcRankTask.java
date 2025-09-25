@@ -4,7 +4,7 @@ import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
-import com.ymcloud.pojo.vo.UserAcRankVO;
+import com.ymcloud.pojo.vo.oj.UserAcRankVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;

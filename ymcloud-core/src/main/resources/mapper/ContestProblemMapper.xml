@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.ymcloud.core.web.mapper.ContestProblemMapper">
 
-    <select id="getContestProblemList" resultType="com.ymcloud.pojo.vo.ContestProblemTableVO">
+    <select id="getContestProblemList" resultType="com.ymcloud.pojo.vo.oj.ContestProblemTableVO">
         SELECT
             cp.id,
             cp.display_id,

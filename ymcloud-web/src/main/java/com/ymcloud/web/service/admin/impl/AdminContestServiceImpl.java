@@ -12,13 +12,17 @@ import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.ContestUser;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.query.admin.AdminContestPageQuery;
-import com.ymcloud.pojo.vo.PageVO;
+import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
+import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
+import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminContestService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,6 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * @PackageName: com.ymcloud.web.service.admin.impl
@@ -45,6 +51,9 @@ public class AdminContestServiceImpl implements AdminContestService {
 
     @Autowired
     private ContestProblemEntityService contestProblemEntityService;
+
+    @Autowired
+    private ProblemEntityService problemEntityService;
 
     /**
      * 分页查询比赛列表
@@ -308,6 +317,288 @@ public class AdminContestServiceImpl implements AdminContestService {
     }
 
     /**
+     * 获取比赛题目列表
+     * @param contestId 比赛ID
+     * @return 比赛题目列表
+     */
+    @Override
+    public List<ContestProblemTableVO> getContestProblems(Long contestId) {
+        //检查比赛是否存在
+        Contest contest = contestEntityService.getById(contestId);
+        if (contest == null) {
+            throw new ContestNotExistException();
+        }
+        //查询比赛题目关联表
+        List<ContestProblem> contestProblems = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .orderByAsc(ContestProblem::getDisplayId)
+                .list();
+        if (CollUtil.isEmpty(contestProblems)) {
+            return CollUtil.newArrayList();
+        }
+        //获取题目ID列表
+        List<Long> problemIds = contestProblems.stream()
+                .map(ContestProblem::getProblemId)
+                .toList();
+        //批量查询题目信息
+        List<Problem> problems = problemEntityService.listByIds(problemIds);
+        if (CollUtil.isEmpty(problems)) {
+            return CollUtil.newArrayList();
+        }
+        //构建题目ID到题目信息的映射
+        Map<Long, Problem> problemMap = problems.stream()
+                .collect(Collectors.toMap(Problem::getId, problem -> problem));
+        //构建返回结果
+        return contestProblems.stream()
+                .map(contestProblem -> {
+                    ContestProblemTableVO vo = new ContestProblemTableVO();
+                    vo.setId(contestProblem.getId());
+                    vo.setDisplayId(contestProblem.getDisplayId());
+                    vo.setDisplayTitle(contestProblem.getDisplayTitle());
+                    vo.setColor(contestProblem.getColor());
+                    vo.setProblemId(contestProblem.getProblemId());
+                    
+                    Problem problem = problemMap.get(contestProblem.getProblemId());
+                    if (problem != null) {
+                        vo.setProblemDisplayId(problem.getProblemId());
+                        vo.setProblemDisplayTitle(problem.getTitle());
+                        vo.setAuthorUsername(problem.getAuthorUsername());
+                    }
+                    return vo;
+                }).toList();
+    }
+
+    /**
+     * 获取可添加到比赛的题目列表（包括公开和私有题目）
+     * @param contestId 比赛ID
+     * @param pageQuery 查询条件
+     * @return 可添加的题目列表
+     */
+    @Override
+    public PageVO<Problem> getAvailableProblems(Long contestId, AdminProblemPageQuery pageQuery) {
+        //检查比赛是否存在
+        Contest contest = contestEntityService.getById(contestId);
+        if (contest == null) {
+            throw new ContestNotExistException();
+        }
+        //获取比赛中已有的题目ID列表
+        List<Long> existingProblemIds = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .list()
+                .stream()
+                .map(ContestProblem::getProblemId)
+                .toList();
+        //创建分页查询
+        Page<Problem> page = Page.of(pageQuery.getPageNo(), pageQuery.getPageSize());
+        //构建查询条件
+        Page<Problem> result = problemEntityService.lambdaQuery()
+                .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Problem::getTitle, pageQuery.getKeyword())
+                .or(StrUtil.isNotBlank(pageQuery.getKeyword()))
+                .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Problem::getProblemId, pageQuery.getKeyword())
+                .eq(pageQuery.getDifficulty() != null, Problem::getDifficulty, pageQuery.getDifficulty())
+                .notIn(CollUtil.isNotEmpty(existingProblemIds), Problem::getId, existingProblemIds) //排除已添加的题目
+                .orderByDesc(Problem::getCreatedTime)
+                .page(page);
+        return PageVO.of(result, Problem.class);
+    }
+
+    /**
+     * 批量添加题目到比赛（会将题目权限设置为比赛专用）
+     * @param contestId 比赛ID
+     * @param problemIds 题目ID列表
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void addProblemsToContest(Long contestId, List<Long> problemIds) {
+        //参数验证
+        if (CollUtil.isEmpty(problemIds)) {
+            throw new ContestException("题目ID列表不能为空", HttpStatus.BAD_REQUEST);
+        }
+        if (problemIds.size() > 20) {
+            throw new ContestException("一次最多只能添加20道题目", HttpStatus.BAD_REQUEST);
+        }
+        //检查比赛是否存在
+        Contest contest = contestEntityService.getById(contestId);
+        if (contest == null) {
+            throw new ContestNotExistException();
+        }
+        //检查题目是否存在
+        List<Problem> problems = problemEntityService.listByIds(problemIds);
+        if (problems.size() != problemIds.size()) {
+            throw new ContestException("部分题目不存在或已被删除");
+        }
+        //检查题目是否已经在比赛中
+        List<Long> existingProblemIds = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .in(ContestProblem::getProblemId, problemIds)
+                .list()
+                .stream()
+                .map(ContestProblem::getProblemId)
+                .toList();
+        if (CollUtil.isNotEmpty(existingProblemIds)) {
+            throw new ContestException("部分题目已经在比赛中，请勿重复添加");
+        }
+        //将题目权限设置为比赛专用
+        boolean updateVisibility = problemEntityService.lambdaUpdate()
+                .in(Problem::getId, problemIds)
+                .set(Problem::getVisibility, 3) //3=比赛专用
+                .update();
+        if (!updateVisibility) {
+            throw new ContestException("更新题目权限失败，请稍后再试");
+        }
+        //获取当前比赛题目的最大展示ID
+        ContestProblem maxContestProblem = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .orderByDesc(ContestProblem::getDisplayId)
+                .last("LIMIT 1")
+                .one();
+        String maxDisplayId = maxContestProblem != null ? maxContestProblem.getDisplayId() : null;
+        //生成新的展示ID起始值
+        int startIndex = 0;
+        if (StrUtil.isNotBlank(maxDisplayId)) {
+            //如果最大展示ID是字母，转换为数字
+            if (maxDisplayId.length() == 1 && Character.isLetter(maxDisplayId.charAt(0))) {
+                startIndex = maxDisplayId.charAt(0) - 'A' + 1;
+            }
+        }
+        //构建比赛题目关联记录
+        List<ContestProblem> contestProblems = new java.util.ArrayList<>();
+        Map<Long, Problem> problemMap = problems.stream()
+                .collect(Collectors.toMap(Problem::getId, problem -> problem));
+        
+        for (int i = 0; i < problemIds.size(); i++) {
+            Long problemId = problemIds.get(i);
+            Problem problem = problemMap.get(problemId);
+            
+            ContestProblem contestProblem = new ContestProblem();
+            contestProblem.setContestId(contestId);
+            contestProblem.setProblemId(problemId);
+            //生成展示ID（A, B, C...）
+            contestProblem.setDisplayId(String.valueOf((char) ('A' + startIndex + i)));
+            contestProblem.setDisplayTitle(problem.getTitle()); //默认使用原题目标题
+            contestProblem.setColor(generateRandomColor()); //生成随机颜色
+            
+            contestProblems.add(contestProblem);
+        }
+        
+        //批量保存
+        boolean save = contestProblemEntityService.saveBatch(contestProblems);
+        if (!save) {
+            throw new ContestException("添加题目到比赛失败，请稍后再试");
+        }
+    }
+
+    /**
+     * 更新比赛题目信息
+     * @param contestId 比赛ID
+     * @param problemId 题目ID
+     * @param displayId 展示ID（如：A, B, C）
+     * @param displayTitle 在比赛中显示的题目标题
+     * @param color 气球颜色
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateContestProblem(Long contestId, Long problemId, String displayId, String displayTitle, String color) {
+        //参数验证
+        if (StrUtil.isBlank(displayId)) {
+            throw new ContestException("展示ID不能为空", HttpStatus.BAD_REQUEST);
+        }
+        if (displayId.length() > 5) {
+            throw new ContestException("展示ID长度不能超过5个字符", HttpStatus.BAD_REQUEST);
+        }
+        if (StrUtil.isBlank(displayTitle)) {
+            throw new ContestException("题目标题不能为空", HttpStatus.BAD_REQUEST);
+        }
+        if (displayTitle.length() > 100) {
+            throw new ContestException("题目标题长度不能超过100个字符", HttpStatus.BAD_REQUEST);
+        }
+        if (StrUtil.isBlank(color)) {
+            throw new ContestException("气球颜色不能为空", HttpStatus.BAD_REQUEST);
+        }
+        if (!color.matches("^#[0-9a-fA-F]{6}$")) {
+            throw new ContestException("气球颜色格式不正确，请使用十六进制颜色代码", HttpStatus.BAD_REQUEST);
+        }
+        //检查比赛是否存在
+        Contest contest = contestEntityService.getById(contestId);
+        if (contest == null) {
+            throw new ContestNotExistException();
+        }
+        //检查比赛题目关联是否存在
+        ContestProblem contestProblem = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .eq(ContestProblem::getId, problemId)
+                .one();
+        if (contestProblem == null) {
+            throw new ContestException("该题目不在比赛中");
+        }
+        //检查展示ID是否与其他题目冲突
+        ContestProblem existingProblem = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .eq(ContestProblem::getDisplayId, displayId)
+                .ne(ContestProblem::getId, contestProblem.getId())
+                .one();
+        if (existingProblem != null) {
+            throw new ContestException("展示ID已被其他题目使用，请选择其他ID");
+        }
+        //更新题目信息
+        boolean update = contestProblemEntityService.lambdaUpdate()
+                .eq(ContestProblem::getId, contestProblem.getId())
+                .set(ContestProblem::getDisplayId, displayId)
+                .set(ContestProblem::getDisplayTitle, displayTitle)
+                .set(ContestProblem::getColor, color)
+                .update();
+        if (!update) {
+            throw new ContestException("更新题目信息失败，请稍后再试");
+        }
+    }
+
+    /**
+     * 从比赛中移除题目（会将题目权限设置为私有）
+     * @param contestId 比赛ID
+     * @param contestProblemIds 题目ID列表
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeContestProblem(Long contestId, List<Long> contestProblemIds) {
+        //参数验证
+        if (CollUtil.isEmpty(contestProblemIds)) {
+            throw new ContestException("题目ID列表不能为空", HttpStatus.BAD_REQUEST);
+        }
+        //检查比赛是否存在
+        Contest contest = contestEntityService.getById(contestId);
+        if (contest == null) {
+            throw new ContestNotExistException();
+        }
+        //检查题目是否在比赛中
+        List<ContestProblem> contestProblems = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .in(ContestProblem::getId, contestProblemIds)
+                .list();
+        if (contestProblems.size() != contestProblemIds.size()) {
+            throw new ContestException("部分题目不在比赛中");
+        }
+        //删除比赛题目关联
+        List<Long> ids = contestProblems.stream()
+                .map(ContestProblem::getId)
+                .toList();
+        boolean remove = contestProblemEntityService.removeByIds(ids);
+        if (!remove) {
+            throw new ContestException("移除题目失败，请稍后再试");
+        }
+        //将题目权限设置为私有，等待管理员手动公开
+        List<Long> problemIds = contestProblems.stream()
+                .map(ContestProblem::getProblemId)
+                .toList();
+        boolean updateVisibility = problemEntityService.lambdaUpdate()
+                .in(Problem::getId, problemIds)
+                .set(Problem::getVisibility, 2) //2=私有
+                .update();
+        if (!updateVisibility) {
+            throw new ContestException("更新题目权限失败，请稍后再试");
+        }
+    }
+
+    /**
      * 验证比赛时间
      * @param startTime 开始时间
      * @param endTime 结束时间
@@ -322,6 +613,20 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (endTime.isBefore(LocalDateTime.now().plusMinutes(10))) {
             throw new ContestException("比赛结束时间至少要在当前时间10分钟之后");
         }
+    }
+
+    /**
+     * 生成随机颜色
+     * @return 十六进制颜色代码
+     */
+    private String generateRandomColor() {
+        String[] colors = {
+            "#ff4757", "#ff6348", "#ffa502", "#ffb142", "#f1c40f",
+            "#2ed573", "#7bed9f", "#70a1ff", "#5352ed", "#a4b0be",
+            "#ff3838", "#ff9ff3", "#54a0ff", "#5f27cd", "#00d2d3",
+            "#ff9f43", "#10ac84", "#ee5a24", "#0abde3", "#3867d6"
+        };
+        return colors[new java.util.Random().nextInt(colors.length)];
     }
 
 }

@@ -2,9 +2,9 @@ package com.ymcloud.web.controller.oj;
 
 import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.query.oj.ProblemSubmissionPageQuery;
-import com.ymcloud.pojo.vo.PageVO;
-import com.ymcloud.pojo.vo.ProblemVO;
-import com.ymcloud.pojo.vo.SubmissionTableVO;
+import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.oj.ProblemVO;
+import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
 import com.ymcloud.web.service.oj.ProblemService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

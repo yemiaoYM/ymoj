@@ -2,8 +2,7 @@ package com.ymcloud.core.web.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ymcloud.pojo.entity.ContestProblem;
-import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.vo.ContestProblemTableVO;
+import com.ymcloud.pojo.vo.oj.ContestProblemTableVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

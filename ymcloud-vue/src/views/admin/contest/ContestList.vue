@@ -26,17 +26,17 @@
         <!-- 比赛列表 -->
         <el-table :data="contestList" v-loading="loading" @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="50" align="center" />
-          <el-table-column label="ID" prop="id" width="80" align="center" />
-          <el-table-column label="比赛标题" prop="title" min-width="200" show-overflow-tooltip align="center"/>
+          <el-table-column label="ID" prop="id" width="60" align="center" />
+          <el-table-column label="比赛标题" prop="title" min-width="150" show-overflow-tooltip align="center"/>
           <el-table-column label="创建者" prop="creatorUsername" width="120" align="center" />
-          <el-table-column label="赛制模式" width="100" align="center">
+          <el-table-column label="赛制模式" width="80" align="center">
             <template #default="scope">
               <el-tag :type="getModeTagType(scope.row.mode)">
                 {{ getModeText(scope.row.mode) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="比赛状态" width="100" align="center">
+          <el-table-column label="比赛状态" width="80" align="center">
             <template #default="scope">
               <el-tag :type="getStatusTagType(scope.row)">
                 {{ getContestStatus(scope.row) }}
@@ -58,7 +58,7 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200" align="center">
+          <el-table-column label="操作" width="260" align="center">
             <template #default="scope">
               <n-flex :size="0" justify="center">
                 <el-button 
@@ -70,6 +70,16 @@
                   @click="handleUpdate(scope.row)"
                 >
                   编辑
+                </el-button>
+                <el-button 
+                  class="operation-button" 
+                  type="info" 
+                  size="small" 
+                  text 
+                  :icon="List"
+                  @click="handleManageProblems(scope.row)"
+                >
+                  管理题目
                 </el-button>
                 <el-button 
                   class="operation-button" 
@@ -118,7 +128,7 @@
 //import
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search, Refresh, Plus, Edit, Delete, CopyDocument } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, Edit, Delete, CopyDocument, List } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import {
   getAdminContestList,
@@ -245,6 +255,15 @@ const handleUpdate = (row: any) => {
     return;
   }
   router.push(`/admin/contest/edit/${id}`);
+};
+//管理比赛题目
+const handleManageProblems = (row: any) => {
+  const id = row.id;
+  if (!id) {
+    ElMessage.warning('比赛ID不存在');
+    return;
+  }
+  router.push(`/admin/contest/${id}/problems`);
 };
 //克隆比赛
 const handleClone = (row: any) => {

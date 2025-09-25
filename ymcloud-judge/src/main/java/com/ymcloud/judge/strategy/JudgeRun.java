@@ -21,7 +21,7 @@ import com.ymcloud.pojo.bo.JudgeTask;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.enums.JudgeStatus;
-import com.ymcloud.pojo.vo.JudgeResultVO;
+import com.ymcloud.pojo.vo.oj.JudgeResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;

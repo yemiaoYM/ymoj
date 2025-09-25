@@ -1,4 +1,4 @@
-package com.ymcloud.pojo.vo;
+package com.ymcloud.pojo.vo.oj;
 
 import lombok.Data;
 

@@ -5,7 +5,7 @@ import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.JudgeMapper;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.bo.ContestSubmissionRecord;
-import com.ymcloud.pojo.vo.ProblemCountVO;
+import com.ymcloud.pojo.vo.oj.ProblemCountVO;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;

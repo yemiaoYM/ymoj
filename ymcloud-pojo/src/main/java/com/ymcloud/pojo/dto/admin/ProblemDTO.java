@@ -1,6 +1,6 @@
 package com.ymcloud.pojo.dto.admin;
 
-import com.ymcloud.pojo.vo.ProblemCaseVO;
+import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 

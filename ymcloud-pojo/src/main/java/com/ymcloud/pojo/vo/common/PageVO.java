@@ -1,4 +1,4 @@
-package com.ymcloud.pojo.vo;
+package com.ymcloud.pojo.vo.common;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;

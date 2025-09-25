@@ -1,20 +1,24 @@
-package com.ymcloud.pojo.vo;
+package com.ymcloud.pojo.vo.admin;
 
 import lombok.Data;
 
 import java.io.Serializable;
 
 /**
- * @PackageName: com.ymcloud.pojo.vo
+ * @PackageName: com.ymcloud.pojo.vo.admin
  * @ClassName: ContestProblemTableVO
  * @Author: Yemiao
- * @CreateTime: 2025-08-14  22:56
- * @Description: 比赛题目列表前端实体类
+ * @CreateTime: 2025-09-25  18:49
+ * @Description: 比赛题目列表实体
  */
 @Data
 public class ContestProblemTableVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
+    /**
+     * 比赛题目记录id
+     */
+    private Long id;
     /**
      * 该题目在比赛中的顺序id
      */
@@ -28,15 +32,19 @@ public class ContestProblemTableVO implements Serializable {
      */
     private String color;
     /**
-     * 该题目的ac通过数
+     * 题目id
      */
-    private int ac;
+    private Long problemId;
     /**
-     * 该题目的总提交数
+     * 该题目原展示id
      */
-    private int total;
+    private String problemDisplayId;
     /**
-     * 用户改题目的通过状态
+     * 该题目原名字
      */
-    private boolean isAccepted;
+    private String problemDisplayTitle;
+    /**
+     * 出题人用户名
+     */
+    private String authorUsername;
 }

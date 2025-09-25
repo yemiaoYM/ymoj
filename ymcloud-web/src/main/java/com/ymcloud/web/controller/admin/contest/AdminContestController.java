@@ -3,8 +3,11 @@ package com.ymcloud.web.controller.admin.contest;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminContestPageQuery;
-import com.ymcloud.pojo.vo.PageVO;
+import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
+import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.web.service.admin.AdminContestService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -123,4 +126,80 @@ public class AdminContestController {
         adminContestService.cloneContest(id, title, visibility, password);
         return Result.ok();
     }
+
+    /**
+     * 获取比赛题目列表
+     * @param contestId 比赛ID
+     * @return 比赛题目列表
+     */
+    @GetMapping("/{contestId}/problems")
+    public Result<List<ContestProblemTableVO>> getContestProblems(@PathVariable("contestId") Long contestId) {
+        log.info("获取比赛题目列表: contestId={}", contestId);
+        List<ContestProblemTableVO> problems = adminContestService.getContestProblems(contestId);
+        return Result.ok(problems);
+    }
+
+    /**
+     * 获取可添加到比赛的题目列表（包括公开和私有题目）
+     * @param contestId 比赛ID
+     * @param pageQuery 查询条件
+     * @return 可添加的题目列表
+     */
+    @GetMapping("/{contestId}/available-problems")
+    public Result<PageVO<Problem>> getAvailableProblems(@PathVariable("contestId") Long contestId,
+                                                        @Validated AdminProblemPageQuery pageQuery) {
+        log.info("获取可添加题目列表: contestId={}, query={}", contestId, pageQuery);
+        PageVO<Problem> problems = adminContestService.getAvailableProblems(contestId, pageQuery);
+        return Result.ok(problems);
+    }
+
+    /**
+     * 批量添加题目到比赛（会将题目权限设置为比赛专用）
+     * @param contestId 比赛ID
+     * @param problemIds 题目ID列表
+     * @return 操作结果
+     */
+    @PostMapping("/{contestId}/problems/{problemIds}")
+    public Result<Void> addProblemsToContest(@PathVariable("contestId") Long contestId,
+                                             @PathVariable("problemIds") List<Long> problemIds) {
+        log.info("批量添加题目到比赛: contestId={}, problemIds={}", contestId, problemIds);
+        adminContestService.addProblemsToContest(contestId, problemIds);
+        return Result.ok();
+    }
+
+    /**
+     * 更新比赛题目信息
+     * @param contestId 比赛ID
+     * @param problemId 题目ID
+     * @param displayId 展示ID（如：A, B, C）
+     * @param displayTitle 在比赛中显示的题目标题
+     * @param color 气球颜色
+     * @return 操作结果
+     */
+    @PutMapping("/{contestId}/problems/{problemId}")
+    public Result<Void> updateContestProblem(@PathVariable("contestId") Long contestId,
+                                             @PathVariable("problemId") Long problemId,
+                                             @RequestParam("displayId") String displayId,
+                                             @RequestParam("displayTitle") String displayTitle,
+                                             @RequestParam("color") String color) {
+        log.info("更新比赛题目信息: contestId={}, problemId={}, displayId={}, displayTitle={}, color={}", 
+                 contestId, problemId, displayId, displayTitle, color);
+        adminContestService.updateContestProblem(contestId, problemId, displayId, displayTitle, color);
+        return Result.ok();
+    }
+
+    /**
+     * 从比赛中移除题目（会将题目权限设置为私有）
+     * @param contestId 比赛ID
+     * @param problemIds 题目IDs
+     * @return 操作结果
+     */
+    @DeleteMapping("/{contestId}/problems/{problemIds}")
+    public Result<Void> removeContestProblem(@PathVariable("contestId") Long contestId,
+                                             @PathVariable("problemIds") List<Long> problemIds) {
+        log.info("从比赛中移除题目: contestId={}, problemId={}", contestId, problemIds);
+        adminContestService.removeContestProblem(contestId, problemIds);
+        return Result.ok();
+    }
+
 }

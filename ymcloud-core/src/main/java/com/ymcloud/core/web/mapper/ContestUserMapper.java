@@ -1,7 +1,7 @@
 package com.ymcloud.core.web.mapper;
 
 import java.util.List;
-import com.ymcloud.pojo.vo.ContestCountVO;
+import com.ymcloud.pojo.vo.oj.ContestCountVO;
 import org.apache.ibatis.annotations.Param;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ymcloud.pojo.entity.ContestUser;

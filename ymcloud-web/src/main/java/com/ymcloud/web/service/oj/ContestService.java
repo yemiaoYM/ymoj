@@ -1,11 +1,13 @@
 package com.ymcloud.web.service.oj;
 
+
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.query.oj.ContestPageQuery;
 import com.ymcloud.pojo.query.oj.ContestProblemSubmissionPageQuery;
 import com.ymcloud.pojo.query.oj.ContestRankPageQuery;
 import com.ymcloud.pojo.query.oj.ContestSubmissionPageQuery;
-import com.ymcloud.pojo.vo.*;
+import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.oj.*;
 
 import java.util.List;
 

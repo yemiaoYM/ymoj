@@ -1,7 +1,8 @@
 package com.ymcloud.core.web.mapper;
 import java.util.List;
 
-import com.ymcloud.pojo.vo.LanguageVO;
+
+import com.ymcloud.pojo.vo.oj.LanguageVO;
 import org.apache.ibatis.annotations.Param;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;

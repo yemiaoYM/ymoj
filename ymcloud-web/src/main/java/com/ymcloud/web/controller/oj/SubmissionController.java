@@ -1,7 +1,7 @@
 package com.ymcloud.web.controller.oj;
 
 import com.ymcloud.common.result.Result;
-import com.ymcloud.pojo.vo.SubmissionVO;
+import com.ymcloud.pojo.vo.oj.SubmissionVO;
 import com.ymcloud.web.service.oj.SubmissionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

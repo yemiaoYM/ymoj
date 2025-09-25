@@ -4,7 +4,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.vo.ProblemTableVO;
+import com.ymcloud.pojo.vo.oj.ProblemTableVO;
+
 
 /**
  * @PackageName: com.ymcloud.core.web.dao

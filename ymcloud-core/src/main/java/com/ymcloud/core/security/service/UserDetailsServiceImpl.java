@@ -7,7 +7,6 @@ import com.ymcloud.core.web.mapper.AuthMapper;
 import com.ymcloud.core.web.mapper.RoleMapper;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.UserStatus;
-import com.ymcloud.pojo.vo.AuthVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;

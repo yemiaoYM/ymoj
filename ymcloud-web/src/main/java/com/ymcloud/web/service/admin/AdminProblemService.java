@@ -3,7 +3,7 @@ package com.ymcloud.web.service.admin;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
-import com.ymcloud.pojo.vo.PageVO;
+import com.ymcloud.pojo.vo.common.PageVO;
 
 import java.util.List;
 

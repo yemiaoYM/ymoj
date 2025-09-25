@@ -2,10 +2,10 @@ package com.ymcloud.web.service.oj;
 
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
 import com.ymcloud.pojo.query.oj.ProblemSubmissionPageQuery;
-import com.ymcloud.pojo.vo.PageVO;
-import com.ymcloud.pojo.vo.ProblemTableVO;
-import com.ymcloud.pojo.vo.ProblemVO;
-import com.ymcloud.pojo.vo.SubmissionTableVO;
+import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.oj.ProblemTableVO;
+import com.ymcloud.pojo.vo.oj.ProblemVO;
+import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
 
 /**
  * @PackageName: com.ymcloud.web.service

@@ -5,7 +5,7 @@ import com.ymcloud.pojo.dto.admin.UpdateUserStatusDTO;
 import com.ymcloud.pojo.dto.admin.UserDTO;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.query.admin.AdminUserPageQuery;
-import com.ymcloud.pojo.vo.PageVO;
+import com.ymcloud.pojo.vo.common.PageVO;
 
 import java.util.List;
 

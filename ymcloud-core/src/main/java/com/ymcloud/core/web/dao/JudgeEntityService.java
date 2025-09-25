@@ -3,7 +3,7 @@ package com.ymcloud.core.web.dao;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.bo.ContestSubmissionRecord;
-import com.ymcloud.pojo.vo.ProblemCountVO;
+import com.ymcloud.pojo.vo.oj.ProblemCountVO;
 
 import java.time.LocalDateTime;
 import java.util.List;

@@ -1,9 +1,9 @@
 package com.ymcloud.web.service.oj;
 
 import com.ymcloud.pojo.query.oj.SubmissionPageQuery;
-import com.ymcloud.pojo.vo.PageVO;
-import com.ymcloud.pojo.vo.SubmissionTableVO;
-import com.ymcloud.pojo.vo.SubmissionVO;
+import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
+import com.ymcloud.pojo.vo.oj.SubmissionVO;
 
 /**
  * @PackageName: com.ymcloud.web.service

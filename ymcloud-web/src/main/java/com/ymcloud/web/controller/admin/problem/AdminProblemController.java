@@ -4,7 +4,7 @@ import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
-import com.ymcloud.pojo.vo.PageVO;
+import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminProblemService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

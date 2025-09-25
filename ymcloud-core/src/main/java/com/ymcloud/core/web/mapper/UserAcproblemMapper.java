@@ -2,7 +2,7 @@ package com.ymcloud.core.web.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ymcloud.pojo.entity.UserAcproblem;
-import com.ymcloud.pojo.vo.UserAcRankVO;
+import com.ymcloud.pojo.vo.oj.UserAcRankVO;
 import org.apache.ibatis.annotations.Mapper;
 
 import java.util.List;

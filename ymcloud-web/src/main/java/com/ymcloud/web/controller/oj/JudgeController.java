@@ -5,7 +5,7 @@ import com.ymcloud.core.annotation.RepeatSubmit;
 import com.ymcloud.judge.service.JudgeService;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
-import com.ymcloud.pojo.vo.JudgeResultVO;
+import com.ymcloud.pojo.vo.oj.JudgeResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;

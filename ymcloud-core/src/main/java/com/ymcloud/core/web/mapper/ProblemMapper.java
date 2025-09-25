@@ -2,14 +2,11 @@ package com.ymcloud.core.web.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.vo.ProblemTableVO;
+import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 import org.apache.ibatis.annotations.Mapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Param;
-
-
-import java.util.List;
 
 /**
  * @PackageName: com.ymcloud.core.web.mapper

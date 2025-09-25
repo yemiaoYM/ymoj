@@ -8,7 +8,7 @@ import com.ymcloud.common.constant.Constants;
 import com.ymcloud.common.exception.user.CaptchaGenerateException;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.common.utils.RedisCache;
-import com.ymcloud.pojo.vo.CaptchaVO;
+import com.ymcloud.pojo.vo.common.CaptchaVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;

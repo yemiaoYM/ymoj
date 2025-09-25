@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Judge;
-import com.ymcloud.pojo.vo.JudgeResultVO;
+import com.ymcloud.pojo.vo.oj.JudgeResultVO;
 
 /**
  * @PackageName: com.ymcloud.judge.service

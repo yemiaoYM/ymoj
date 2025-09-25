@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.mapper.ProblemMapper;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.vo.ProblemTableVO;
+import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 import org.springframework.stereotype.Service;
 
 /**

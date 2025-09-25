@@ -2,7 +2,7 @@ package com.ymcloud.core.web.dao;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.ContestUser;
-import com.ymcloud.pojo.vo.ContestCountVO;
+import com.ymcloud.pojo.vo.oj.ContestCountVO;
 
 import java.util.List;
 

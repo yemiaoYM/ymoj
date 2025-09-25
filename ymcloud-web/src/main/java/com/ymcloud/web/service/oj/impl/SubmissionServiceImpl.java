@@ -16,10 +16,10 @@ import com.ymcloud.core.web.dao.JudgeCaseEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.query.oj.SubmissionPageQuery;
-import com.ymcloud.pojo.vo.JudgeCaseVO;
-import com.ymcloud.pojo.vo.PageVO;
-import com.ymcloud.pojo.vo.SubmissionTableVO;
-import com.ymcloud.pojo.vo.SubmissionVO;
+import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.oj.JudgeCaseVO;
+import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
+import com.ymcloud.pojo.vo.oj.SubmissionVO;
 import com.ymcloud.web.service.oj.SubmissionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -82,7 +82,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .orderByDesc(Judge::getCreatedTime)
                 .page(page);
         //返回vo实体
-        return PageVO.of(judgePage,judge->{
+        return PageVO.of(judgePage, judge->{
             SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
             vo.setSubmissionId(judge.getId());
             return vo;
