@@ -23,23 +23,11 @@ const adminRoutes = [
       }
     ]
   },
-  {
-    path: '/admin/contest',
-    component: Layout,
-    children: [
-      {
-        path: ':id(\\d+)/problems',
-        name: 'AdminContestProblemList',
-        component: () => import('@/views/admin/contest/ContestProblemList.vue'),
-        meta: { title: 'Admin Contest Problem List', requireLogin: true },
-      }
-    ]
-  },
   //缓冲加载页面
   {
     path: '/admin/:pathMatch(.*)*',
     component: Layout,
-    meta: { hidden: true },
+    meta: { hidden: true, requireLogin: true },
   }
 ]
 
@@ -72,7 +60,21 @@ export const dynamicRoutes = [
         meta: { title: 'Admin Contest Edit', requireLogin: true },
       }
     ]
-  }
+  },
+  //比赛题目列表
+  {
+    path: '/admin/contest',
+    component: Layout,
+    permissions: ['contest:problem:list'],
+    children: [
+      {
+        path: ':id(\\d+)/problems',
+        name: 'AdminContestProblemList',
+        component: () => import('@/views/admin/contest/ContestProblemList.vue'),
+        meta: { title: 'Admin Contest Problem List', requireLogin: true },
+      }
+    ]
+  },
 ]
 
 

@@ -20,9 +20,31 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue';
+import { defineAsyncComponent, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { usePermissionStore } from '@/stores/permission';
 const AdminHeader = defineAsyncComponent(() => import('@/components/admin/AdminHeader.vue'));
 const AdminAside = defineAsyncComponent(() => import('@/components/admin/AdminAside.vue'));
+
+//data
+const permissionStore = usePermissionStore();
+const route = useRoute();
+const router = useRouter();
+
+watch(
+  () => [permissionStore.isRoutesLoaded, route.path],
+  ([routesLoaded, currentPath]) => {
+    if (routesLoaded) {
+      //检查当前路径是否匹配任何已注册的路由
+      const matched = router.resolve(currentPath.toString());
+      if (matched.name === undefined) {
+        //跳转到404页面
+        router.replace('/404');
+      }
+    }
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped lang="css">

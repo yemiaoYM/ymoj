@@ -268,10 +268,10 @@ Web层接收请求
 ### 后端启动
 
 1. **克隆项目**
-   ```bash
-   git clone https://gitee.com/yemiaoo/ymcloud.git
-   cd ymcloud
-   ```
+    ```bash
+    git clone https://gitee.com/yemiaoo/ymcloud.git
+    cd ymcloud
+    ```
 
 2. **配置数据库**
    ```bash

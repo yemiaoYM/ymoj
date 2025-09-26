@@ -11,6 +11,7 @@ import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.web.service.admin.AdminContestService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,6 +37,7 @@ public class AdminContestController {
      * @param pageQuery 查询条件
      * @return 比赛列表
      */
+    @PreAuthorize("hasAuthority('contest:contest:list')")
     @GetMapping("/list")
     public Result<PageVO<Contest>> queryList(@Validated AdminContestPageQuery pageQuery) {
         log.info("查询比赛列表:{}", pageQuery);
@@ -48,6 +50,7 @@ public class AdminContestController {
      * @param id 比赛ID
      * @return 比赛信息
      */
+    @PreAuthorize("hasAuthority('contest:contest:query')")
     @GetMapping("/{id}")
     public Result<Contest> getContestById(@PathVariable("id") Long id) {
         log.info("根据ID查询比赛:{}", id);
@@ -60,6 +63,7 @@ public class AdminContestController {
      * @param contestDTO 比赛信息
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('contest:contest:add')")
     @PostMapping
     public Result<Void> addContest(@RequestBody @Validated ContestDTO contestDTO) {
         log.info("新增比赛:{}", contestDTO);
@@ -73,6 +77,7 @@ public class AdminContestController {
      * @param contestDTO 比赛信息
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('contest:contest:edit')")
     @PutMapping("/{id}")
     public Result<Void> updateContest(@PathVariable("id") Long id, @Validated @RequestBody ContestDTO contestDTO) {
         log.info("修改比赛:{}, 数据:{}", id, contestDTO);
@@ -85,6 +90,7 @@ public class AdminContestController {
      * @param ids 比赛ID列表
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('contest:contest:remove')")
     @DeleteMapping("/{ids}")
     public Result<Void> deleteContestById(@PathVariable("ids") List<Long> ids) {
         log.info("根据ID删除比赛:{}", ids);
@@ -99,6 +105,7 @@ public class AdminContestController {
      * @param password 密码（私有比赛时必填）
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('contest:contest:edit')")
     @PutMapping("/{id}/visibility")
     public Result<Void> updateContestVisibility(@PathVariable("id") Long id, 
                                                 @RequestParam("visibility") Integer visibility,
@@ -117,6 +124,7 @@ public class AdminContestController {
      * @param password 密码（私有比赛时必填）
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('contest:contest:add')")
     @PostMapping("/{id}/clone")
     public Result<Void> cloneContest(@PathVariable("id") Long id,
                                      @RequestParam("title") String title,
@@ -132,6 +140,7 @@ public class AdminContestController {
      * @param contestId 比赛ID
      * @return 比赛题目列表
      */
+    @PreAuthorize("hasAuthority('contest:problem:list')")
     @GetMapping("/{contestId}/problems")
     public Result<List<ContestProblemTableVO>> getContestProblems(@PathVariable("contestId") Long contestId) {
         log.info("获取比赛题目列表: contestId={}", contestId);
@@ -145,6 +154,7 @@ public class AdminContestController {
      * @param pageQuery 查询条件
      * @return 可添加的题目列表
      */
+    @PreAuthorize("hasAuthority('contest:problem:list')")
     @GetMapping("/{contestId}/available-problems")
     public Result<PageVO<Problem>> getAvailableProblems(@PathVariable("contestId") Long contestId,
                                                         @Validated AdminProblemPageQuery pageQuery) {
@@ -159,6 +169,7 @@ public class AdminContestController {
      * @param problemIds 题目ID列表
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('contest:problem:add')")
     @PostMapping("/{contestId}/problems/{problemIds}")
     public Result<Void> addProblemsToContest(@PathVariable("contestId") Long contestId,
                                              @PathVariable("problemIds") List<Long> problemIds) {
@@ -176,6 +187,7 @@ public class AdminContestController {
      * @param color 气球颜色
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('contest:problem:edit')")
     @PutMapping("/{contestId}/problems/{problemId}")
     public Result<Void> updateContestProblem(@PathVariable("contestId") Long contestId,
                                              @PathVariable("problemId") Long problemId,
@@ -194,6 +206,7 @@ public class AdminContestController {
      * @param problemIds 题目IDs
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('contest:problem:remove')")
     @DeleteMapping("/{contestId}/problems/{problemIds}")
     public Result<Void> removeContestProblem(@PathVariable("contestId") Long contestId,
                                              @PathVariable("problemIds") List<Long> problemIds) {

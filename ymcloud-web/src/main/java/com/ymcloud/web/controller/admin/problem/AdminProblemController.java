@@ -8,6 +8,7 @@ import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminProblemService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,6 +34,7 @@ public class AdminProblemController {
      * @param pageQuery 查询条件
      * @return 题目列表
      */
+    @PreAuthorize("hasAuthority('problem:problem:list')")
     @GetMapping("/list")
     public Result<PageVO<Problem>> queryList(@Validated AdminProblemPageQuery pageQuery) {
         log.info("查询题目列表:{}", pageQuery);
@@ -45,6 +47,7 @@ public class AdminProblemController {
      * @param id 题目ID
      * @return 题目信息
      */
+    @PreAuthorize("hasAuthority('problem:problem:query')")
     @GetMapping("/{id}")
     public Result<Problem> getProblemById(@PathVariable("id") Long id) {
         log.info("根据ID查询题目:{}", id);
@@ -57,6 +60,7 @@ public class AdminProblemController {
      * @param problemDTO 题目信息
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('problem:problem:add')")
     @PostMapping
     public Result<Void> addProblem(@RequestBody @Validated ProblemDTO problemDTO) {
         log.info("新增题目:{}", problemDTO);
@@ -70,6 +74,7 @@ public class AdminProblemController {
      * @param problemDTO 题目信息
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('problem:problem:edit')")
     @PutMapping("/{id}")
     public Result<Void> updateProblem(@PathVariable("id") Long id, @Validated @RequestBody ProblemDTO problemDTO) {
         log.info("修改题目:{}, 数据:{}", id, problemDTO);
@@ -82,6 +87,7 @@ public class AdminProblemController {
      * @param ids 题目ID列表
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('problem:problem:remove')")
     @DeleteMapping("/{ids}")
     public Result<Void> deleteProblemById(@PathVariable("ids") List<Long> ids) {
         log.info("根据ID删除题目:{}", ids);
@@ -95,6 +101,7 @@ public class AdminProblemController {
      * @param visibility 可见性：1=公开，2=私有，3=比赛专用
      * @return 操作结果
      */
+    @PreAuthorize("hasAuthority('problem:problem:edit')")
     @PutMapping("/{id}/visibility")
     public Result<Void> updateProblemVisibility(@PathVariable("id") Long id, @RequestParam("visibility") Integer visibility) {
         log.info("修改题目可见性: id={}, visibility={}", id, visibility);
