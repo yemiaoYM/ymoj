@@ -1,6 +1,5 @@
 package com.ymcloud.pojo.vo.oj;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -28,22 +27,14 @@ public class AnnouncementVO implements Serializable {
     /**
      * 是否置顶：1=置顶，0=不置顶
      */
-    private Integer isPinned;
-    /**
-     * 发布时间（支持定时发布）
-     */
-    private LocalDateTime publishTime;
-    /**
-     * 过期时间（为空则长期有效）
-     */
-    private LocalDateTime expireTime;
-    /**
-     * 跳转链接（可选）
-     */
-    private String linkUrl;
+    private Boolean pinned;
     /**
      * 发布人用户名
      */
     private String authorUsername;
+    /**
+     * 更新时间
+     */
+    private LocalDateTime updatedTime;
 
 }

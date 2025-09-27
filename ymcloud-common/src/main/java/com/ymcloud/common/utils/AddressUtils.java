@@ -30,18 +30,15 @@ public class AddressUtils {
             return "内网IP";
         }
         try {
-            String rspStr = HttpUtil.get(IP_URL + "ip=" + ip + "&json=true", CharsetUtil.CHARSET_GBK);
+            String rspStr = HttpUtil.get(IP_URL + "?ip=" + ip + "&json=true", CharsetUtil.CHARSET_GBK);
             if (StrUtil.isEmpty(rspStr)) {
                 log.error("获取地理位置异常 {}", ip);
                 return UNKNOWN;
             }
             JSONObject obj = JSON.parseObject(rspStr);
-            //String region = obj.getString("pro");
-            //String city = obj.getString("city");
-            //return String.format("%s %s", region, city);
             return obj.getString("addr");
         } catch (Exception e) {
-            log.error("获取地理位置异常 {}", ip);
+            log.error("获取地理位置异常 {}", ip, e);
         }
         return UNKNOWN;
     }

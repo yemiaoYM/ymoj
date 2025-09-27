@@ -351,6 +351,48 @@ export type AdminProblemVO = {
 }
 
 /**
+ * 公告实体
+ */
+export type Announcement = {
+  /** 公告ID */
+  id: number;
+  /** 公告标题 */
+  title: string;
+  /** 公告内容（支持HTML/Markdown） */
+  content: string;
+  /** 公告权重（值越大越靠前） */
+  priority: number;
+  /** 是否置顶：true=置顶，false=不置顶 */
+  pinned: boolean;
+  /** 是否可见：true=可见，false=不可见 */
+  status: boolean;
+  /** 发布人ID */
+  authorId: number;
+  /** 发布人用户名 */
+  authorUsername: string;
+  /** 创建时间 */
+  createdTime: string;
+  /** 更新时间 */
+  updatedTime: string;
+}
+
+/**
+ * 公告DTO
+ */
+export type AnnouncementDTO = {
+  /** 公告标题 */
+  title: string;
+  /** 公告内容（支持HTML/Markdown） */
+  content: string;
+  /** 公告权重（值越大越靠前） */
+  priority: number;
+  /** 是否置顶：true=置顶，false=不置顶 */
+  pinned: boolean;
+  /** 是否可见：true=可见，false=不可见 */
+  status: boolean;
+}
+
+/**
  * 题目表单DTO
  */
 export type ProblemDTO = {
@@ -488,13 +530,11 @@ export type ContestProblemTableVO={
  * 公告列表VO
  */
 export type AnnouncementTableVO={
-    title:string;
-    content:string;
-    isPinned:number;
-    publishTime:string;
-    expireTime:string|null;
-    linkUrl:string|null;
-    authorUsername:string;
+  title:string;
+  content:string;
+  pinned:boolean;
+  authorUsername:string;
+  updatedTime:string;
 }
 /**
  * 比赛题目VO

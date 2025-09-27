@@ -721,7 +721,99 @@ export function getAdminContestList(params: any) {
 export function getAdminContestById(id: number) {
   return request({
     url: `/admin/contest/${id}`,
+    method: "GET"
+  })
+}
+
+/**
+ * 获取公告列表（管理员）
+ * @param params 查询参数
+ * @returns 公告列表
+ */
+export function getAdminAnnouncementList(params: any) {
+  return request({
+    url: "/admin/announcement/list",
     method: "GET",
+    params
+  })
+}
+
+/**
+ * 根据ID获取公告详情（管理员）
+ * @param id 公告ID
+ * @returns 公告详情
+ */
+export function getAdminAnnouncementById(id: number) {
+  return request({
+    url: `/admin/announcement/${id}`,
+    method: "GET"
+  })
+}
+
+/**
+ * 新增公告（管理员）
+ * @param announcement 公告信息
+ * @returns 操作结果
+ */
+export function addAnnouncement(announcement: any) {
+  return request({
+    url: "/admin/announcement",
+    method: "POST",
+    data: announcement
+  })
+}
+
+/**
+ * 修改公告（管理员）
+ * @param id 公告ID
+ * @param announcement 公告信息
+ * @returns 操作结果
+ */
+export function updateAnnouncement(id: number, announcement: any) {
+  return request({
+    url: `/admin/announcement/${id}`,
+    method: "PUT",
+    data: announcement
+  })
+}
+
+/**
+ * 删除公告（管理员）
+ * @param ids 公告ID列表
+ * @returns 操作结果
+ */
+export function deleteAnnouncementByIds(ids: number | number[]) {
+  return request({
+    url: `/admin/announcement/${ids}`,
+    method: "DELETE"
+  })
+}
+
+/**
+ * 修改公告状态（管理员）
+ * @param id 公告ID
+ * @param status 状态
+ * @returns 操作结果
+ */
+export function updateAnnouncementStatus(id: number, status: boolean) {
+  return request({
+    url: `/admin/announcement/${id}/status`,
+    method: "PUT",
+    params: { status }
+  })
+}
+
+/**
+ * 修改公告置顶状态（管理员）
+ * @param id 公告ID
+ * @param pinned 置顶状态
+ * @returns 操作结果
+ */
+export function updateAnnouncementPinned(id: number, pinned: boolean) {
+  return request({
+    url: `/admin/announcement/${id}/pinned`,
+    method: "PUT",
+    params: { pinned }
   })
 }
 
@@ -730,7 +822,7 @@ export function getAdminContestById(id: number) {
  * @param ids 比赛ID
  * @returns 操作结果
  */
-export function deleteContestByIds(ids: string | number) {
+export function deleteContestByIds(ids: number | number[]) {
   return request({
     url: `/admin/contest/${ids}`,
     method: "DELETE",

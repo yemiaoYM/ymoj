@@ -25,7 +25,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -132,17 +131,10 @@ public class PublicController {
     @GetMapping("/announcements")
     public Result<List<AnnouncementVO>> listAnnouncements() {
         log.info("获取公告列表");
-        //查询未过期的可见系统公告
+        //查询可见的公告
         List<Announcement> list = announcementEntityService.lambdaQuery()
-                .select(Announcement::getTitle, Announcement::getContent,
-                        Announcement::getIsPinned, Announcement::getPublishTime,
-                        Announcement::getExpireTime, Announcement::getLinkUrl, Announcement::getAuthorUsername)
-                .eq(Announcement::getType, 0)
-                .eq(Announcement::getIsVisible, 1)
-                .and(o -> o.isNull(Announcement::getExpireTime)
-                        .or()
-                        .ge(Announcement::getExpireTime, LocalDateTime.now()))
-                .orderByDesc(Announcement::getIsPinned, Announcement::getPriority, Announcement::getPublishTime)
+                .eq(Announcement::getStatus, true)
+                .orderByDesc(Announcement::getPinned, Announcement::getPriority, Announcement::getUpdatedTime)
                 .list();
         //拷贝未vo列表
         List<AnnouncementVO> voList = BeanUtil.copyToList(list, AnnouncementVO.class);

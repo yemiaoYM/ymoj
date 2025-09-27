@@ -75,11 +75,11 @@
         <div v-else>
           <el-timeline style="width: 100%;">
             <el-timeline-item v-for="announcement in announcements" :key="announcement.title"
-              :timestamp="announcement.publishTime" placement="top">
+              :timestamp="announcement.updatedTime" placement="top">
               <el-card>
                 <n-flex align="center">
                   <h2>{{ announcement.title }}</h2>
-                  <el-icon v-if="announcement.isPinned" size="20" color="#ffc107">
+                  <el-icon v-if="announcement.pinned" size="20" color="#ffc107">
                     <StarFilled />
                   </el-icon>
                 </n-flex>
@@ -87,8 +87,7 @@
                   <MarkdownPreview :content="announcement.content"></MarkdownPreview>
                 </div>
                 <div style="margin-top: 15px;">
-                  by <el-tag disable-transitions color="#409eff" style="color: white;">{{ announcement.authorUsername
-                    }}</el-tag>
+                  by <el-tag disable-transitions color="#409eff" style="color: white;">{{ announcement.authorUsername }}</el-tag>
                 </div>
               </el-card>
             </el-timeline-item>

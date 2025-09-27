@@ -64,7 +64,7 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="Option" width="200" align="center">
+          <el-table-column label="操作" width="200" align="center">
             <template #default="scope">
               <n-flex :size="0" justify="center">
                 <el-button 
