@@ -4,6 +4,7 @@ import com.ymcloud.pojo.enums.UserSex;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -49,6 +50,26 @@ public class UserProfileVO implements Serializable {
      * 博客
      */
     private String blog;
+    /**
+     * 登录时间
+     */
+    private LocalDateTime loginDateTime;
+    /**
+     * IP地址
+     */
+    private String ipaddr;
+    /**
+     * 登录地点
+     */
+    private String loginLocation;
+    /**
+     * 浏览器类型
+     */
+    private String browser;
+    /**
+     * 操作系统
+     */
+    private String os;
     /**
      * 用户角色信息
      */

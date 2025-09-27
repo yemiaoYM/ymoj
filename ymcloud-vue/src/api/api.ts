@@ -400,6 +400,26 @@ export function getLanguageTableList() {
 //================= Admin =====================
 
 /**
+ * 获取管理员首页统计数据
+ * @returns 统计数据
+ */
+export function getAdminDashboardStats() {
+  return request({
+    url: "/admin/dashboard/stats",
+    method: "GET",
+  })
+}
+/**
+ * 获取最近两周提交数据折线图
+ * @returns 折线图数据
+ */
+export function getAdminSubmissionChart() {
+  return request({
+    url: "/admin/dashboard/submission-chart",
+    method: "GET",
+  })
+}
+/**
  * 获取菜单列表
  * @returns 菜单列表
  */

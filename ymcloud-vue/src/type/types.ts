@@ -77,6 +77,11 @@ export type UserProfile = {
   school: string;
   signature: string;
   blog: string;
+  loginDateTime: string;
+  ipaddr: string;
+  loginLocation: string;
+  browser: string;
+  os: string;
   roles:string[];
   permissions:string[];
 }

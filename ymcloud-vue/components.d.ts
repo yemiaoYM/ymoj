@@ -99,6 +99,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SidebarItem: typeof import('./src/components/admin/SidebarItem.vue')['default']
+    SubmissionChart: typeof import('./src/components/admin/SubmissionChart.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

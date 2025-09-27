@@ -5,13 +5,21 @@
       <el-card class="welcome-card">
         <n-flex align="center" justify="space-between">
           <n-flex align="center" :size="16">
-            <Avatar :text="userStore.user.username" :src="userStore.user.avatar" :size="64" />
+            <Avatar
+              :text="userStore.user.username"
+              :src="userStore.user.avatar"
+              :size="64"
+            />
             <n-flex vertical :size="4">
-              <el-text size="large" tag="b">欢迎回来，{{ userStore.user.username }}</el-text>
-              <el-text type="info">今天是个美好的一天，开始您的工作吧！</el-text>
+              <el-text size="large" tag="b"
+                >欢迎回来，{{ userStore.user.username }}</el-text
+              >
+              <el-text type="info"
+                >今天是个美好的一天，开始您的工作吧！</el-text
+              >
             </n-flex>
           </n-flex>
-          <n-flex vertical :size="8" style="text-align: right;">
+          <n-flex vertical :size="8" style="text-align: right">
             <el-text type="primary" size="large">{{ currentTime }}</el-text>
             <el-text type="info" size="large">{{ currentDate }}</el-text>
           </n-flex>
@@ -21,32 +29,35 @@
       <!-- 统计卡片区域 -->
       <n-flex :size="16">
         <InfoCard
-            color="#909399"
-              :icon-component="People"
-            message="总用户数"
-            iconSize="50"
-            :value="1"
-          ></InfoCard>
-          <InfoCard
-            color="#67C23A"
-            :icon-component="ReorderFour"
-            message="今日总题数"
-            iconSize="50"
-            :value="1"
-          ></InfoCard>
-          <InfoCard
-            color="#409EFF"
-            :icon-component="Trophy"
-            message="最近两周比赛"
-            iconSize="50"
-            :value="1"
-          ></InfoCard>
+          color="#909399"
+          :icon-component="People"
+          message="总用户数"
+          iconSize="50"
+          :value="statsData.totalUsers"
+          :loading="statsLoading"
+        />
+        <InfoCard
+          color="#67C23A"
+          :icon-component="ReorderFour"
+          message="题目总数"
+          iconSize="50"
+          :value="statsData.totalProblems"
+          :loading="statsLoading"
+        />
+        <InfoCard
+          color="#409EFF"
+          :icon-component="Trophy"
+          message="比赛总数"
+          iconSize="50"
+          :value="statsData.totalContests"
+          :loading="statsLoading"
+        />
       </n-flex>
 
       <!-- 主要内容区域 -->
       <n-flex :size="16">
         <!-- 左侧内容 -->
-        <n-flex vertical :size="16" style="flex: 2;">
+        <n-flex vertical :size="16" style="flex: 2">
           <!-- 快速操作 -->
           <el-card>
             <template #header>
@@ -55,49 +66,75 @@
                 <span>快速操作</span>
               </n-flex>
             </template>
-            <n-flex :size="12">
-              <el-button type="primary" :icon="Plus" @click="router.push('/admin/problem/add')">
+            <n-flex :size="12" wrap>
+              <el-button
+                type="primary"
+                :icon="Plus"
+                @click="router.push('/admin/problem/add')"
+              >
                 添加题目
               </el-button>
-              <el-button type="success" :icon="Plus" @click="router.push('/admin/contest/add')">
+              <el-button
+                type="success"
+                :icon="Plus"
+                @click="router.push('/admin/contest/add')"
+              >
                 创建比赛
               </el-button>
-              <el-button type="warning" :icon="User" @click="router.push('/admin/user/list')">
+              <el-button
+                type="warning"
+                :icon="User"
+                @click="router.push('/admin/user/list')"
+              >
                 用户管理
               </el-button>
-              <el-button type="info" :icon="Monitor" @click="router.push('/admin/monitor/server')">
+              <el-button
+                type="info"
+                :icon="Monitor"
+                @click="router.push('/admin/monitor/server')"
+              >
                 系统监控
+              </el-button>
+              <el-button
+                type="danger"
+                :icon="Bell"
+                @click="router.push('/admin/announcement/list')"
+              >
+                公告管理
+              </el-button>
+              <el-button
+                type="primary"
+                :icon="Edit"
+                @click="router.push('/admin/problem/tag')"
+              >
+                标签管理
               </el-button>
             </n-flex>
           </el-card>
 
-          <!-- 最近活动 -->
+          <!-- 提交趋势图 -->
           <el-card>
             <template #header>
-              <n-flex align="center" :size="8">
-                <el-icon><Clock /></el-icon>
-                <span>最近活动</span>
+              <n-flex align="center" justify="space-between">
+                <n-flex align="center" :size="8">
+                  <el-icon><TrendCharts /></el-icon>
+                  <span>提交趋势</span>
+                </n-flex>
+                <el-text type="info" size="small">最近2周</el-text>
               </n-flex>
             </template>
-            <el-timeline>
-              <el-timeline-item timestamp="2024-01-15 10:30" type="primary">
-                <el-text>用户 "张三" 提交了题目 "两数之和" 的解答</el-text>
-              </el-timeline-item>
-              <el-timeline-item timestamp="2024-01-15 09:45" type="success">
-                <el-text>比赛 "新年编程挑战赛" 创建成功</el-text>
-              </el-timeline-item>
-              <el-timeline-item timestamp="2024-01-15 08:20" type="warning">
-                <el-text>系统进行了例行维护更新</el-text>
-              </el-timeline-item>
-              <el-timeline-item timestamp="2024-01-14 16:30" type="info">
-                <el-text>新增题目 "动态规划入门" 已发布</el-text>
-              </el-timeline-item>
-            </el-timeline>
+            <div v-loading="chartLoading">
+              <SubmissionChart
+                :dates="chartData.dates"
+                :totalSubmissions="chartData.totalSubmissions"
+                :acceptedSubmissions="chartData.acceptedSubmissions"
+              />
+            </div>
           </el-card>
         </n-flex>
 
         <!-- 右侧内容 -->
-        <n-flex vertical :size="16" style="flex: 1;">
+        <n-flex vertical :size="16" style="flex: 1">
           <!-- 登录信息 -->
           <el-card>
             <template #header>
@@ -107,41 +144,83 @@
               </n-flex>
             </template>
             <el-descriptions :column="1" border>
-              <el-descriptions-item label="登录IP">
-                <el-tag type="info">127.0.0.1</el-tag>
+              <el-descriptions-item label="用户名">
+                <span>{{ userStore.user.username }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="操作系统">
-                <el-tag>Windows 10</el-tag>
+              <el-descriptions-item label="角色">
+                <span>{{ userStore.user.roles.join(',') }}</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="登录IP">
+                <span>{{ userStore.user.ipaddr }}</span>
               </el-descriptions-item>
               <el-descriptions-item label="浏览器">
-                <el-tag type="success">Chrome 139.0.0</el-tag>
+                <span>{{ userStore.user.browser }}</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="登录地点">
+                <span>{{ userStore.user.loginLocation }}</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="操作系统">
+                <span>{{ userStore.user.os }}</span>
               </el-descriptions-item>
               <el-descriptions-item label="登录时间">
-                <el-tag type="warning">{{ loginTime }}</el-tag>
+                <span>{{ userStore.user.loginDateTime }}</span>
               </el-descriptions-item>
             </el-descriptions>
           </el-card>
 
-          <!-- 通知公告 -->
+          <!-- 最新公告 -->
           <el-card>
             <template #header>
-              <n-flex align="center" :size="8">
-                <el-icon><Bell /></el-icon>
-                <el-text tag="b">通知公告</el-text>
+              <n-flex align="center" justify="space-between">
+                <n-flex align="center" :size="8">
+                  <el-icon><Bell /></el-icon>
+                  <el-text tag="b">最新公告</el-text>
+                </n-flex>
+                <el-button
+                  type="primary"
+                  text
+                  size="small"
+                  @click="router.push('/admin/announcement/list')"
+                >
+                  查看全部
+                </el-button>
               </n-flex>
             </template>
-            <n-flex vertical :size="8">
-              <el-alert title="系统维护通知" type="info" :closable="false" show-icon>
-                <template #default>
-                  系统将于本周日凌晨2:00-4:00进行例行维护
-                </template>
-              </el-alert>
-              <el-alert title="新功能上线" type="success" :closable="false" show-icon>
-                <template #default>
-                  题目标签管理功能已上线，欢迎体验
-                </template>
-              </el-alert>
-            </n-flex>
+            <div v-loading="announcementsLoading">
+              <n-flex vertical :size="8">
+                <div
+                  v-for="announcement in latestAnnouncements"
+                  :key="announcement.id"
+                  class="announcement-item"
+                >
+                  <n-flex align="center" justify="space-between">
+                    <n-flex align="center" :size="8">
+                      <el-tag
+                        v-if="announcement.pinned"
+                        type="danger"
+                        size="small"
+                      >
+                        置顶
+                      </el-tag>
+                      <el-text
+                        class="announcement-title"
+                        :title="announcement.title"
+                      >
+                        {{ announcement.title }}
+                      </el-text>
+                    </n-flex>
+                    <el-text type="info" size="small">
+                      {{ formatDate(announcement.updatedTime) }}
+                    </el-text>
+                  </n-flex>
+                </div>
+                <el-empty
+                  v-if="latestAnnouncements.length === 0"
+                  description="暂无公告"
+                  :image-size="60"
+                />
+              </n-flex>
+            </div>
           </el-card>
         </n-flex>
       </n-flex>
@@ -151,72 +230,154 @@
 
 <script lang="ts" setup>
 //import
-import { ref, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
-import { 
-  User, Plus, Operation, Clock, 
-  Monitor, InfoFilled, Bell
-} from '@element-plus/icons-vue';
-import { People,ReorderFour,Trophy } from '@vicons/ionicons5';
-import { useUserStore } from '@/stores/user';
-import { useRouter } from 'vue-router';
-
-const InfoCard = defineAsyncComponent(() => import('@/components/admin/InfoCard.vue'));
-const Avatar = defineAsyncComponent(() => import('@/components/common/Avatar.vue'));
-
+import { ref, onMounted, onUnmounted, defineAsyncComponent } from "vue";
+import {
+  User,
+  Plus,
+  Operation,
+  Monitor,
+  InfoFilled,
+  Bell,
+  Edit,
+  TrendCharts,
+} from "@element-plus/icons-vue";
+import { People, ReorderFour, Trophy } from "@vicons/ionicons5";
+import { useUserStore } from "@/stores/user";
+import { useRouter } from "vue-router";
+import type { Announcement } from "@/type/types";
+import {
+  getAdminAnnouncementList,
+  getAdminDashboardStats,
+  getAdminSubmissionChart,
+} from "@/api/api";
+const SubmissionChart = defineAsyncComponent(
+  () => import("@/components/admin/SubmissionChart.vue")
+);
+const InfoCard = defineAsyncComponent(
+  () => import("@/components/admin/InfoCard.vue")
+);
+const Avatar = defineAsyncComponent(
+  () => import("@/components/common/Avatar.vue")
+);
 //data
 const userStore = useUserStore();
 const router = useRouter();
-
 //时间相关
-const currentTime = ref('');
-const currentDate = ref('');
-const loginTime = ref('2024-01-15 08:30:25');
+const currentTime = ref("");
+const currentDate = ref("");
+//统计数据
+const statsData = ref({
+  totalUsers: 0,
+  totalProblems: 0,
+  totalContests: 0,
+});
+const statsLoading = ref(false);
+//折线图数据
+const chartData = ref({
+  dates: [],
+  totalSubmissions: [],
+  acceptedSubmissions: [],
+});
+const chartLoading = ref(false);
+//最新公告
+const latestAnnouncements = ref<Announcement[]>([]);
+const announcementsLoading = ref(false);
 
+//methods
+onMounted(() => {
+  updateTime();
+  //初始化Dashboard数据
+  initDashboard();
+});
 //更新时间
 const updateTime = () => {
   const now = new Date();
-  currentTime.value = now.toLocaleTimeString('zh-CN', { 
+  currentTime.value = now.toLocaleTimeString("zh-CN", {
     hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
-  currentDate.value = now.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long'
+  currentDate.value = now.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
   });
 };
-
-//methods
-// 快速操作
-const quickAction = (action: string) => {
-  switch (action) {
-    case 'add-problem':
-      router.push('/admin/problem/add');
-      break;
-    case 'add-contest':
-      router.push('/admin/contest/add');
-      break;
-    case 'user-manage':
-      router.push('/admin/user/list');
-      break;
-    case 'system-monitor':
-      router.push('/admin/monitor/server');
-      break;
+const timer = setInterval(updateTime, 1000);
+onUnmounted(() => {
+  clearInterval(timer);
+});
+//初始化数据
+const initDashboard = () => {
+  loadStatsData();
+  loadChartData();
+  loadLatestAnnouncements();
+};
+//获取统计数据
+const loadStatsData = async () => {
+  statsLoading.value = true;
+  try {
+    const res = await getAdminDashboardStats();
+    statsData.value = {
+      totalUsers: res.data.data.totalUsers || 0,
+      totalProblems: res.data.data.totalProblems || 0,
+      totalContests: res.data.data.totalContests || 0,
+    };
+  } catch (e) {
+    console.log(e);
+  } finally {
+    statsLoading.value = false;
+  }
+};
+//获取折线图数据
+const loadChartData = async () => {
+  chartLoading.value = true;
+  try {
+    const res = await getAdminSubmissionChart();
+    chartData.value = {
+      dates: res.data.data.dates || [],
+      totalSubmissions: res.data.data.totalSubmissions || [],
+      acceptedSubmissions: res.data.data.acceptedSubmissions || [],
+    };
+  } catch (e) {
+    console.log(e);
+  } finally {
+    chartLoading.value = false;
+  }
+};
+//获取最新公告
+const loadLatestAnnouncements = async () => {
+  announcementsLoading.value = true;
+  try {
+    const res = await getAdminAnnouncementList({
+      pageNo: 1,
+      pageSize: 5,
+      status: true,
+    });
+    latestAnnouncements.value = res.data.data.records || [];
+  } catch (e) {
+    console.log(e);
+    latestAnnouncements.value = [];
+  } finally {
+    announcementsLoading.value = false;
   }
 };
 
-// 生命周期
-onMounted(() => {
-  updateTime();
-  const timer = setInterval(updateTime, 1000);
-  
-  onUnmounted(() => {
-    clearInterval(timer);
-  });
-});
+//格式化日期
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+  if (days === 0) return "今天";
+  if (days === 1) return "昨天";
+  if (days < 7) return `${days}天前`;
+  return date.toLocaleDateString("zh-CN");
+};
 </script>
 
 <style scoped lang="css">
@@ -236,5 +397,60 @@ onMounted(() => {
 
 .stat-card:hover {
   transform: translateY(-2px);
+}
+
+.announcement-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.announcement-item:last-child {
+  border-bottom: none;
+}
+
+.announcement-title {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.announcement-title:hover {
+  color: #409eff;
+}
+
+
+:deep(.el-card__header) {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+:deep(.el-card__body) {
+  padding: 20px;
+}
+
+:deep(.el-descriptions__label) {
+  font-weight: 500;
+}
+
+:deep(.el-button + .el-button) {
+  margin-left: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 16px;
+  }
+
+  :deep(.n-flex[style*="flex: 2"]) {
+    flex: 1 !important;
+  }
+
+  :deep(.n-flex[style*="flex: 1"]) {
+    flex: 1 !important;
+    margin-top: 16px;
+  }
 }
 </style>

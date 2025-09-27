@@ -4,7 +4,7 @@
   </div>
 </template>
 
-<script setup>
-import { ref,watch } from 'vue';
+<script lang="ts" setup>
+import { ref,watch,onMounted } from 'vue';
 
 </script>

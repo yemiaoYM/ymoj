@@ -98,6 +98,10 @@ public class JudgeRun {
         //docker容器
         CodeExecContainer container = null;
         try {
+            //评测样式严格限制不能为空
+            if (CollUtil.isEmpty(testCases)){
+                throw new JudgeException("暂无测试用例，评测失败");
+            }
             //通知开始编译
             notifyStatus(result,JudgeStatus.STATUS_COMPILING,null,task.getStrategy());
             //获取语言配置
@@ -295,23 +299,28 @@ public class JudgeRun {
      * @return 所有测试用例
      */
     private List<TestCase> getAllTestCases(Long problemId) {
-        String problemCaseDir = baseDir + "/"
-                + FileConstants.DIR_PRIVATE + "/"
-                + FileConstants.SUB_DIR_PROBLEM + "/" + problemId;
+        try {
+            String problemCaseDir = baseDir + "/"
+                    + FileConstants.DIR_PRIVATE + "/"
+                    + FileConstants.SUB_DIR_PROBLEM + "/" + problemId;
 
-        //获取到测试样例的基本信息
-        String infoFile = problemCaseDir + "/info.json";
-        List<ProblemCaseInfo> caseInfos = JSON.parseArray(FileUtils.readFileString(infoFile), ProblemCaseInfo.class);
-        //获取测试点信息
-        List<TestCase> testCases = new ArrayList<>();
-        for (ProblemCaseInfo caseInfo : caseInfos) {
-            TestCase testCase = new TestCase(
-                    caseInfo.getId(),
-                    FileUtils.readFileString(problemCaseDir + caseInfo.getInput()),
-                    FileUtils.readFileString(problemCaseDir + caseInfo.getOutput()));
-            testCases.add(testCase);
+            //获取到测试样例的基本信息
+            String infoFile = problemCaseDir + "/info.json";
+            List<ProblemCaseInfo> caseInfos = JSON.parseArray(FileUtils.readFileString(infoFile), ProblemCaseInfo.class);
+            //获取测试点信息
+            List<TestCase> testCases = new ArrayList<>();
+            for (ProblemCaseInfo caseInfo : caseInfos) {
+                TestCase testCase = new TestCase(
+                        caseInfo.getId(),
+                        FileUtils.readFileString(problemCaseDir + caseInfo.getInput()),
+                        FileUtils.readFileString(problemCaseDir + caseInfo.getOutput()));
+                testCases.add(testCase);
+            }
+            return testCases;
+        }catch (Exception e){
+            log.error("获取题目{}测试用例异常：",problemId,e);
+            return List.of();
         }
-        return testCases;
     }
 
 }

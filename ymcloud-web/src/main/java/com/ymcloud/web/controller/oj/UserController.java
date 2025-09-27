@@ -38,9 +38,8 @@ public class UserController {
     public Result<UserProfileVO> profile() {
         log.info("获取当前用户基本信息");
         LoginUser loginUser = SecurityUtils.getLoginUser();
-        UserProfileVO userVO = BeanUtil.copyProperties(loginUser.getUser(), UserProfileVO.class);
-        userVO.setRoles(loginUser.getRoles());
-        userVO.setPermissions(loginUser.getPermissions());
+        UserProfileVO userVO = BeanUtil.copyProperties(loginUser, UserProfileVO.class);
+        BeanUtil.copyProperties(loginUser.getUser(), userVO);
         return Result.ok(userVO);
     }
 
