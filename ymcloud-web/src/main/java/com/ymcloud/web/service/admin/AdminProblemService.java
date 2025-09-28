@@ -1,9 +1,13 @@
 package com.ymcloud.web.service.admin;
 
+import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -55,4 +59,33 @@ public interface AdminProblemService {
      * @param visibility 可见性：1=公开，2=私有，3=比赛专用
      */
     void updateProblemVisibility(Long id, Integer visibility);
+
+    /**
+     * 获取题目的测试样例文件列表
+     * @param problemId 题目ID
+     * @return 测试样例信息列表
+     */
+    List<ProblemCaseInfo> getTestCaseFiles(Long problemId);
+
+    /**
+     * 上传测试样例文件（支持单个或多个）
+     * @param problemId 题目ID
+     * @param files 文件数组
+     */
+    void uploadTestCaseFile(Long problemId, MultipartFile[] files);
+
+    /**
+     * 下载测试样例文件
+     * @param problemId 题目ID
+     * @param fileName 文件名
+     * @return 文件资源
+     */
+    ResponseEntity<Resource> downloadTestCaseFile(Long problemId, String fileName);
+
+    /**
+     * 删除测试样例文件
+     * @param problemId 题目ID
+     * @param fileName 文件名
+     */
+    void deleteTestCaseFile(Long problemId, String fileName);
 }

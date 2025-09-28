@@ -23,4 +23,8 @@ public class ProblemException extends ServiceException {
         super(message, code);
     }
 
+    public ProblemException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
 }

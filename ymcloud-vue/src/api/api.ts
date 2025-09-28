@@ -621,6 +621,59 @@ export function updateProblem(problemId: number, problem: any) {
 }
 
 /**
+ * 获取题目测试用例列表
+ * @param problemId 题目ID
+ */
+export function getProblemTestCases(problemId: number) {
+  return request({
+    url: `/admin/problem/${problemId}/testcases`,
+    method: "GET"
+  })
+}
+
+/**
+ * 上传测试用例文件
+ * @param problemId 题目ID
+ * @param files 文件列表
+ */
+export function uploadTestCaseFiles(problemId: number, files: FormData) {
+  return request({
+    url: `/admin/problem/${problemId}/testcases/upload`,
+    method: "POST",
+    data: files,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+/**
+ * 下载测试用例文件
+ * @param problemId 题目ID
+ * @param fileName 文件名
+ */
+export function downloadTestCaseFile(problemId: number, fileName: string) {
+  return request({
+    url: `/admin/problem/${problemId}/testcases/download/${fileName}`,
+    method: "GET",
+    responseType: 'blob'
+  })
+}
+
+/**
+ * 删除测试用例文件
+ * @param problemId 题目ID
+ * @param fileName 文件名
+ */
+export function deleteTestCaseFile(problemId: number, fileName: string) {
+  return request({
+    url: `/admin/problem/${problemId}/testcases`,
+    method: "DELETE",
+    params: { fileName }
+  })
+}
+
+/**
  * 获取标签和分类列表（管理员）
  * @returns 标签和分类列表
  */

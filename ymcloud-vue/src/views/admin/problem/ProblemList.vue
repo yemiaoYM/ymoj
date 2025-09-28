@@ -79,6 +79,16 @@
                 </el-button>
                 <el-button 
                   class="operation-button" 
+                  type="info" 
+                  size="small" 
+                  text 
+                  :icon="DocumentCopy"
+                  @click="handleTestCase(scope.row)"
+                >
+                  测试用例
+                </el-button>
+                <el-button 
+                  class="operation-button" 
                   type="danger" 
                   size="small" 
                   text 
@@ -115,7 +125,7 @@
 //import
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search, Refresh, Plus, Edit, Delete, Download } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, Edit, Delete, Download, DocumentCopy } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import type { AdminProblemVO } from '@/type/types';
 import {
@@ -174,24 +184,20 @@ const resetQuery = () => {
   };
   handleQuery();
 };
-
 //改变页大小
 const handleSizeChange = (val: number) => {
   queryParams.value.pageSize = val;
   handleQuery();
 };
-
 //改变当前页
 const handleCurrentChange = (val: number) => {
   queryParams.value.pageNo = val;
   handleQuery();
 };
-
 //选择题目
 const handleSelectionChange = (selection: AdminProblemVO[]) => {
   problemIds.value = selection.map(item => item.id);
 };
-
 //获取权限文本
 const getVisibilityText = (visibility: number) => {
   switch (visibility) {
@@ -201,17 +207,14 @@ const getVisibilityText = (visibility: number) => {
     default: return '未知';
   }
 };
-
 //新增题目
 const handleAdd = () => {
   router.push('/admin/problem/add');
 };
-
 //添加远程OJ题目
 const handleAddRemote = () => {
   ElMessage.info('远程OJ题目添加功能待开发');
 };
-
 //编辑题目
 const handleUpdate = (row: AdminProblemVO) => {
   const id = row.id || problemIds.value[0];
@@ -221,6 +224,16 @@ const handleUpdate = (row: AdminProblemVO) => {
   }
   // 跳转到编辑页面，传递题目ID
   router.push(`/admin/problem/edit/${id}`);
+};
+//管理测试用例
+const handleTestCase = (row: AdminProblemVO) => {
+  const id = row.id;
+  if (!id) {
+    ElMessage.warning('请选择要管理的题目');
+    return;
+  }
+  // 跳转到测试用例管理页面
+  router.push(`/admin/problem/${id}/testcases`);
 };
 //删除题目
 const handleDelete = (row: AdminProblemVO) => {

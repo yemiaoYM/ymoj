@@ -75,6 +75,20 @@ export const dynamicRoutes = [
       }
     ]
   },
+  //题目测试用例列表
+  {
+    path: '/admin/problem',
+    component: Layout,
+    permissions: ['problem:testcase:query'],
+    children: [
+      {
+        path: ':id(\\d+)/testcases',
+        name: 'AdminProblemCaseList',
+        component: () => import('@/views/admin/problem/ProblemCase.vue'),
+        meta: { title: 'Admin Problem Case List', requireLogin: true },
+      }
+    ]
+  },
 ]
 
 

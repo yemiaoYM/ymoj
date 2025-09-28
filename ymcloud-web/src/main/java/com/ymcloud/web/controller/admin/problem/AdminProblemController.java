@@ -1,11 +1,15 @@
 package com.ymcloud.web.controller.admin.problem;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminProblemService;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -108,4 +112,62 @@ public class AdminProblemController {
         adminProblemService.updateProblemVisibility(id, visibility);
         return Result.ok();
     }
+
+    /**
+     * 获取题目的所有测试样例文件列表
+     * @param problemId 题目ID
+     * @return 测试样例文件列表
+     */
+    @PreAuthorize("hasAuthority('problem:testcase:query')")
+    @GetMapping("/{problemId}/testcases")
+    public Result<List<ProblemCaseInfo>> getTestCaseFiles(@PathVariable("problemId") Long problemId) {
+        log.info("获取题目测试样例文件列表: problemId={}", problemId);
+        List<ProblemCaseInfo> testCaseFiles = adminProblemService.getTestCaseFiles(problemId);
+        return Result.ok(testCaseFiles);
+    }
+
+    /**
+     * 上传测试样例文件(支持单个或者多个)
+     * @param problemId 题目ID
+     * @param file 测试样例文件
+     * @return 操作结果
+     */
+    @PreAuthorize("hasAuthority('problem:testcase:add')")
+    @PostMapping("/{problemId}/testcases/upload")
+    public Result<Void> uploadTestCaseFile(@PathVariable("problemId") Long problemId,
+                                           @RequestParam("file") MultipartFile[] file) {
+        log.info("上传测试样例文件: problemId={}, fileCount={}", problemId, file.length);
+        adminProblemService.uploadTestCaseFile(problemId, file);
+        return Result.ok();
+    }
+
+    /**
+     * 下载测试样例文件
+     * @param problemId 题目ID
+     * @param fileName 文件名
+     * @return 文件资源
+     */
+    @PreAuthorize("hasAuthority('problem:testcase:query')")
+    @GetMapping("/{problemId}/testcases/download/{fileName}")
+    public ResponseEntity<Resource> downloadTestCaseFile(@PathVariable("problemId") Long problemId,
+                                                         @PathVariable("fileName") String fileName) {
+        log.info("下载测试样例文件: problemId={}, fileName={}", problemId, fileName);
+        return adminProblemService.downloadTestCaseFile(problemId, fileName);
+    }
+
+    /**
+     * 删除测试样例文件
+     * @param problemId 题目ID
+     * @param fileName 文件名
+     * @return 操作结果
+     */
+    @PreAuthorize("hasAuthority('problem:testcase:remove')")
+    @DeleteMapping("/{problemId}/testcases")
+    public Result<Void> deleteTestCaseFile(@PathVariable("problemId") Long problemId,
+                                            @RequestParam("fileName") String fileName) {
+        log.info("删除测试样例文件: problemId={}, fileName={}", problemId, fileName);
+        adminProblemService.deleteTestCaseFile(problemId, fileName);
+        return Result.ok();
+    }
+
 }

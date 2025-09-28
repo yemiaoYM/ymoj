@@ -606,3 +606,15 @@ export type UserOnlineVO={
   os: string;
   loginDateTime: string;
 }
+
+/**
+ * 测试用例信息VO
+ */
+export type ProblemCaseInfoVO = {
+  /** 样例编号 */
+  id: number;
+  /** 输入文件名 */
+  input: string;
+  /** 输出文件名 */
+  output: string;
+}

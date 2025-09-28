@@ -2,6 +2,7 @@ package com.ymcloud.web.service.admin.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -11,6 +12,7 @@ import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
+import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
@@ -19,10 +21,21 @@ import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
 import com.ymcloud.web.service.admin.AdminProblemService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -32,8 +45,12 @@ import java.util.List;
  * @CreateTime: 2025-09-21  21:45
  * @Description: 管理端题目服务实现类
  */
+@Slf4j
 @Service
 public class AdminProblemServiceImpl implements AdminProblemService {
+
+    @Value("${ymcloud.file.base-dir}")
+    private String fileUploadPath;
 
     @Autowired
     private ProblemEntityService problemEntityService;
@@ -238,4 +255,234 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         }
     }
 
+    /**
+     * 获取题目的测试样例文件列表
+     * @param problemId 题目ID
+     * @return 测试样例信息列表
+     */
+    @Override
+    public List<ProblemCaseInfo> getTestCaseFiles(Long problemId) {
+        //检查题目是否存在
+        Problem problem = problemEntityService.getById(problemId);
+        if (problem == null) {
+            throw new ProblemNotExistException();
+        }
+        //构造题目测试样例目录路径
+        String problemDir = fileUploadPath + "/private/problem/" + problemId;
+        String infoJsonPath = problemDir + "/info.json";
+        try {
+            //检查info.json文件是否存在
+            File infoFile = FileUtil.file(infoJsonPath);
+            if (!infoFile.exists()) {
+                return List.of();
+            }
+            //读取info.json文件内容
+            String jsonContent = FileUtil.readUtf8String(infoFile);
+            //解析JSON为ProblemCaseInfo列表
+            List<ProblemCaseInfo> caseInfos = JSON.parseArray(jsonContent, ProblemCaseInfo.class);
+            
+            //处理返回给前端的数据，去掉路径前缀，只保留文件名
+            return caseInfos.stream().map(caseInfo -> {
+                ProblemCaseInfo result = new ProblemCaseInfo();
+                result.setId(caseInfo.getId());
+                // 去掉 "/in/" 前缀，只保留文件名
+                String inputFileName = caseInfo.getInput();
+                if (inputFileName.startsWith("/in/")) {
+                    inputFileName = inputFileName.substring(4);
+                }
+                result.setInput(inputFileName);
+                
+                // 去掉 "/out/" 前缀，只保留文件名
+                String outputFileName = caseInfo.getOutput();
+                if (outputFileName.startsWith("/out/")) {
+                    outputFileName = outputFileName.substring(5);
+                }
+                result.setOutput(outputFileName);
+                
+                return result;
+            }).toList();
+        } catch (Exception e) {
+            throw new ProblemException("读取测试样例配置文件失败",e);
+        }
+    }
+
+    /**
+     * 上传测试样例文件（支持单个或多个）
+     * @param problemId 题目ID
+     * @param files 文件数组
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void uploadTestCaseFile(Long problemId, MultipartFile[] files) {
+        //检查题目是否存在
+        Problem problem = problemEntityService.getById(problemId);
+        if (problem == null) {
+            throw new ProblemNotExistException();
+        }
+        if (files == null || files.length == 0) {
+            throw new ProblemException("请选择要上传的文件");
+        }
+        //构造题目测试样例目录路径
+        String problemDir = fileUploadPath + "/private/problem/" + problemId;
+        String inDir = problemDir + "/in";
+        String outDir = problemDir + "/out";
+        try {
+            //创建目录
+            FileUtil.mkdir(problemDir);
+            FileUtil.mkdir(inDir);
+            FileUtil.mkdir(outDir);
+            //处理每个上传的文件
+            for (MultipartFile file : files) {
+                if (file.isEmpty()) {
+                    continue;
+                }
+                String fileName = file.getOriginalFilename();
+                if (StrUtil.isBlank(fileName)) {
+                    throw new ProblemException("文件名不能为空");
+                }
+                //检查文件扩展名
+                String fileExtension = FileUtil.extName(fileName);
+                if (!"in".equals(fileExtension) && !"out".equals(fileExtension)) {
+                    throw new ProblemException("只支持上传.in和.out格式的测试样例文件");
+                }
+                //确定保存路径
+                String saveDir = "in".equals(fileExtension) ? inDir : outDir;
+                String savePath = saveDir + "/" + fileName;
+                //保存文件
+                file.transferTo(new File(savePath));
+            }
+            //重新生成info.json文件
+            generateInfoJson(problemId);
+        } catch (Exception e) {
+            throw new ProblemException("上传文件失败",e);
+        }
+    }
+
+    /**
+     * 下载测试样例文件
+     * @param problemId 题目ID
+     * @param fileName 文件名
+     * @return 文件资源
+     */
+    @Override
+    public ResponseEntity<Resource> downloadTestCaseFile(Long problemId, String fileName) {
+        //检查题目是否存在
+        Problem problem = problemEntityService.getById(problemId);
+        if (problem == null) {
+            throw new ProblemNotExistException();
+        }
+        //检查文件名格式
+        if (StrUtil.isBlank(fileName)) {
+            throw new ProblemException("文件名不能为空");
+        }
+        //构造文件路径
+        String problemDir = fileUploadPath + "/private/problem/" + problemId;
+        String fileExtension = FileUtil.extName(fileName);
+        String subDir = "in".equals(fileExtension) ? "in" : "out";
+        String filePath = problemDir + "/" + subDir + "/" + fileName;
+        //检查是否存在
+        File file = new File(filePath);
+        if (!file.exists()) {
+            throw new ProblemException("文件不存在" + fileName);
+        }
+        try {
+            Resource resource = new FileSystemResource(file);
+            //设置响应头
+            HttpHeaders headers = new HttpHeaders();
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
+            headers.add(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_PLAIN_VALUE);
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .contentLength(file.length())
+                    .body(resource);
+        } catch (Exception e) {
+            throw new ProblemException("下载文件失败", e);
+        }
+    }
+
+    /**
+     * 删除测试样例文件
+     * @param problemId 题目ID
+     * @param fileName 文件名
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteTestCaseFile(Long problemId, String fileName) {
+        //检查题目是否存在
+        Problem problem = problemEntityService.getById(problemId);
+        if (problem == null) {
+            throw new ProblemNotExistException();
+        }
+        if (StrUtil.isBlank(fileName)) {
+            throw new ProblemException("文件名不能为空");
+        }
+        //构造文件路径
+        String problemDir = fileUploadPath + "/private/problem/" + problemId;
+        String fileExtension = FileUtil.extName(fileName);
+        if (!"in".equals(fileExtension) && !"out".equals(fileExtension)) {
+            throw new ProblemException("只能删除.in和.out格式的测试样例文件");
+        }
+        
+        String subDir = "in".equals(fileExtension) ? "in" : "out";
+        String filePath = problemDir + "/" + subDir + "/" + fileName;
+        //检查是否存在
+        File file = new File(filePath);
+        if (!file.exists()) {
+            throw new ProblemException("文件不存在" + fileName);
+        }
+        //删除文件
+        boolean deleted = file.delete();
+        if (!deleted) {
+            throw new ProblemException("删除文件失败" + fileName);
+        }
+        //重新生成info.json文件
+        generateInfoJson(problemId);
+    }
+
+    /**
+     * 生成或更新info.json文件
+     * @param problemId 题目ID
+     */
+    private void generateInfoJson(Long problemId) {
+        String problemDir = fileUploadPath + "/private/problem/" + problemId;
+        String inDir = problemDir + "/in";
+        String outDir = problemDir + "/out";
+        try {
+            //获取输入文件列表
+            File inDirectory = new File(inDir);
+            File outDirectory = new File(outDir);
+            if (!inDirectory.exists() || !outDirectory.exists()) {
+                return;
+            }
+            //获取所有.in文件
+            File[] inFiles = inDirectory.listFiles((dir, name) -> name.endsWith(".in"));
+            if (inFiles == null) {
+                inFiles = new File[0];
+            }
+            List<ProblemCaseInfo> caseInfos = new ArrayList<>();
+            //为每个输入文件创建测试样例信息
+            int index = 1;
+            for (File inFile : inFiles) {
+                String baseName = FileUtil.mainName(inFile.getName()); //获取不带扩展名的文件名
+                String outFileName = baseName + ".out";
+                File outFile = new File(outDir + "/" + outFileName);
+                //只有当对应的输出文件也存在时，才添加到配置中
+                if (outFile.exists()) {
+                    ProblemCaseInfo caseInfo = new ProblemCaseInfo();
+                    caseInfo.setId(index++); // 使用递增的索引作为ID
+                    caseInfo.setInput("/in/" + inFile.getName());
+                    caseInfo.setOutput("/out/" + outFileName);
+                    caseInfos.add(caseInfo);
+                }
+            }
+            //按文件名排序（保证顺序一致性）
+            caseInfos.sort(Comparator.comparing(ProblemCaseInfo::getInput));
+            //写入info.json文件
+            String infoJsonPath = problemDir + "/info.json";
+            String jsonContent = JSON.toJSONString(caseInfos);
+            FileUtil.writeUtf8String(jsonContent, infoJsonPath);
+        } catch (Exception e) {
+            throw new ProblemException("生成测试样例配置文件失败" + e);
+        }
+    }
 }
