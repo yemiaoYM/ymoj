@@ -83,9 +83,9 @@ public interface AdminProblemService {
     ResponseEntity<Resource> downloadTestCaseFile(Long problemId, String fileName);
 
     /**
-     * 删除测试样例文件
+     * 删除测试样例文件（支持单个或批量）
      * @param problemId 题目ID
-     * @param fileName 文件名
+     * @param fileNames 文件名数组
      */
-    void deleteTestCaseFile(Long problemId, String fileName);
+    void deleteTestCaseFiles(Long problemId, List<String> fileNames);
 }

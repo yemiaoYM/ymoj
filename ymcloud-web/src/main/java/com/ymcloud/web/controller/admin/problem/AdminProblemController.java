@@ -148,25 +148,25 @@ public class AdminProblemController {
      * @return 文件资源
      */
     @PreAuthorize("hasAuthority('problem:testcase:query')")
-    @GetMapping("/{problemId}/testcases/download/{fileName}")
+    @GetMapping("/{problemId}/testcases/download")
     public ResponseEntity<Resource> downloadTestCaseFile(@PathVariable("problemId") Long problemId,
-                                                         @PathVariable("fileName") String fileName) {
+                                                         @RequestParam("fileName") String fileName) {
         log.info("下载测试样例文件: problemId={}, fileName={}", problemId, fileName);
         return adminProblemService.downloadTestCaseFile(problemId, fileName);
     }
 
     /**
-     * 删除测试样例文件
+     * 删除测试样例文件（支持单个或批量）
      * @param problemId 题目ID
-     * @param fileName 文件名
+     * @param fileNames 文件名数组
      * @return 操作结果
      */
     @PreAuthorize("hasAuthority('problem:testcase:remove')")
     @DeleteMapping("/{problemId}/testcases")
-    public Result<Void> deleteTestCaseFile(@PathVariable("problemId") Long problemId,
-                                            @RequestParam("fileName") String fileName) {
-        log.info("删除测试样例文件: problemId={}, fileName={}", problemId, fileName);
-        adminProblemService.deleteTestCaseFile(problemId, fileName);
+    public Result<Void> deleteTestCaseFiles(@PathVariable("problemId") Long problemId,
+                                            @RequestBody List<String> fileNames) {
+        log.info("删除测试样例文件: problemId={}, fileNames={}", problemId, fileNames);
+        adminProblemService.deleteTestCaseFiles(problemId, fileNames);
         return Result.ok();
     }
 

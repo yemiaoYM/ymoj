@@ -37,6 +37,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.nio.file.Paths;
+import java.util.Objects;
 
 /**
  * @PackageName: com.ymcloud.web.service.admin.impl
@@ -263,10 +265,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     @Override
     public List<ProblemCaseInfo> getTestCaseFiles(Long problemId) {
         //检查题目是否存在
-        Problem problem = problemEntityService.getById(problemId);
-        if (problem == null) {
-            throw new ProblemNotExistException();
-        }
+        getProblemById(problemId);
         //构造题目测试样例目录路径
         String problemDir = fileUploadPath + "/private/problem/" + problemId;
         String infoJsonPath = problemDir + "/info.json";
@@ -279,28 +278,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
             //读取info.json文件内容
             String jsonContent = FileUtil.readUtf8String(infoFile);
             //解析JSON为ProblemCaseInfo列表
-            List<ProblemCaseInfo> caseInfos = JSON.parseArray(jsonContent, ProblemCaseInfo.class);
-            
-            //处理返回给前端的数据，去掉路径前缀，只保留文件名
-            return caseInfos.stream().map(caseInfo -> {
-                ProblemCaseInfo result = new ProblemCaseInfo();
-                result.setId(caseInfo.getId());
-                // 去掉 "/in/" 前缀，只保留文件名
-                String inputFileName = caseInfo.getInput();
-                if (inputFileName.startsWith("/in/")) {
-                    inputFileName = inputFileName.substring(4);
-                }
-                result.setInput(inputFileName);
-                
-                // 去掉 "/out/" 前缀，只保留文件名
-                String outputFileName = caseInfo.getOutput();
-                if (outputFileName.startsWith("/out/")) {
-                    outputFileName = outputFileName.substring(5);
-                }
-                result.setOutput(outputFileName);
-                
-                return result;
-            }).toList();
+            return JSON.parseArray(jsonContent, ProblemCaseInfo.class);
         } catch (Exception e) {
             throw new ProblemException("读取测试样例配置文件失败",e);
         }
@@ -312,13 +290,9 @@ public class AdminProblemServiceImpl implements AdminProblemService {
      * @param files 文件数组
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public void uploadTestCaseFile(Long problemId, MultipartFile[] files) {
         //检查题目是否存在
-        Problem problem = problemEntityService.getById(problemId);
-        if (problem == null) {
-            throw new ProblemNotExistException();
-        }
+        getProblemById(problemId);
         if (files == null || files.length == 0) {
             throw new ProblemException("请选择要上传的文件");
         }
@@ -327,26 +301,53 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         String inDir = problemDir + "/in";
         String outDir = problemDir + "/out";
         try {
-            //创建目录
-            FileUtil.mkdir(problemDir);
+            //检查目录是否存在
             FileUtil.mkdir(inDir);
             FileUtil.mkdir(outDir);
-            //处理每个上传的文件
+            List<String> fileNames = new ArrayList<>();
+            //检查格式和参数
             for (MultipartFile file : files) {
+                //检查文件是否为空
                 if (file.isEmpty()) {
-                    continue;
+                    throw new ProblemException("文件不能为空");
                 }
-                String fileName = file.getOriginalFilename();
-                if (StrUtil.isBlank(fileName)) {
+                //检查文件大小
+                if (file.getSize() > 5 * 1024 * 1024) {
+                    throw new ProblemException("文件大小不能超过5MB");
+                }
+                String filename = Paths.get(Objects.requireNonNull(file.getOriginalFilename())).getFileName().toString();
+                //检查文件名是否为空
+                if (StrUtil.isBlank(filename)) {
                     throw new ProblemException("文件名不能为空");
                 }
                 //检查文件扩展名
-                String fileExtension = FileUtil.extName(fileName);
+                String fileExtension = FileUtil.extName(filename);
                 if (!"in".equals(fileExtension) && !"out".equals(fileExtension)) {
                     throw new ProblemException("只支持上传.in和.out格式的测试样例文件");
                 }
+                //case1.in case1.out
+                fileNames.add(filename);
+            }
+            //检查是否配对
+            for (String fileName : fileNames) {
+                String baseName = FileUtil.mainName(fileName);
+                String extName = FileUtil.extName(fileName);
+                String pairName = null;
+                if("in".equals(extName)){
+                    pairName = baseName + ".out";
+                }else{
+                    pairName = baseName + ".in";
+                }
+                if(!fileNames.contains(pairName)){
+                    throw new ProblemException("文件不配对，无法上传");
+                }
+            }
+            //处理每个上传的文件
+            for (MultipartFile file : files) {
                 //确定保存路径
-                String saveDir = "in".equals(fileExtension) ? inDir : outDir;
+                String fileName = Paths.get(Objects.requireNonNull(file.getOriginalFilename())).getFileName().toString();
+                String extName = FileUtil.extName(fileName);
+                String saveDir = "in".equals(extName) ? inDir : outDir;
                 String savePath = saveDir + "/" + fileName;
                 //保存文件
                 file.transferTo(new File(savePath));
@@ -367,25 +368,20 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     @Override
     public ResponseEntity<Resource> downloadTestCaseFile(Long problemId, String fileName) {
         //检查题目是否存在
-        Problem problem = problemEntityService.getById(problemId);
-        if (problem == null) {
-            throw new ProblemNotExistException();
-        }
+        getProblemById(problemId);
         //检查文件名格式
         if (StrUtil.isBlank(fileName)) {
             throw new ProblemException("文件名不能为空");
         }
         //构造文件路径
         String problemDir = fileUploadPath + "/private/problem/" + problemId;
-        String fileExtension = FileUtil.extName(fileName);
-        String subDir = "in".equals(fileExtension) ? "in" : "out";
-        String filePath = problemDir + "/" + subDir + "/" + fileName;
-        //检查是否存在
-        File file = new File(filePath);
-        if (!file.exists()) {
-            throw new ProblemException("文件不存在" + fileName);
-        }
+        String filePath = problemDir + "/" + fileName;
         try {
+            //检查是否存在
+            File file = new File(filePath);
+            if (!file.exists()) {
+                throw new ProblemException("文件不存在" + fileName);
+            }
             Resource resource = new FileSystemResource(file);
             //设置响应头
             HttpHeaders headers = new HttpHeaders();
@@ -401,42 +397,55 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 删除测试样例文件
+     * 删除测试样例文件（支持单个或批量）
      * @param problemId 题目ID
-     * @param fileName 文件名
+     * @param fileNames 文件名数组
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void deleteTestCaseFile(Long problemId, String fileName) {
+    public void deleteTestCaseFiles(Long problemId, List<String> fileNames) {
         //检查题目是否存在
-        Problem problem = problemEntityService.getById(problemId);
-        if (problem == null) {
-            throw new ProblemNotExistException();
-        }
-        if (StrUtil.isBlank(fileName)) {
+        getProblemById(problemId);
+        if (CollUtil.isEmpty(fileNames)) {
             throw new ProblemException("文件名不能为空");
         }
-        //构造文件路径
+        //构造题目测试样例目录路径
         String problemDir = fileUploadPath + "/private/problem/" + problemId;
-        String fileExtension = FileUtil.extName(fileName);
-        if (!"in".equals(fileExtension) && !"out".equals(fileExtension)) {
-            throw new ProblemException("只能删除.in和.out格式的测试样例文件");
+        try {
+            //验证所有文件都存在且格式正确
+            for (String fileName : fileNames) {
+                if (StrUtil.isBlank(fileName)) {
+                    throw new ProblemException("文件名不能为空");
+                }
+                String fileExtension = FileUtil.extName(fileName);
+                if (!"in".equals(fileExtension) && !"out".equals(fileExtension)) {
+                    throw new ProblemException("只能删除.in和.out格式的测试样例文件");
+                }
+                String filePath = problemDir + "/" + fileName;
+                if (!FileUtil.exist(filePath)) {
+                    throw new ProblemException("文件不存在");
+                }
+                //验证是否是成对的
+                String baseName = FileUtil.mainName(fileName);
+                String pairName = null;
+                if(fileExtension.equals("in")){
+                    pairName = "/out/" + baseName + ".out";
+                }else{
+                    pairName = "/in/" + baseName + ".in";
+                }
+                if(!fileNames.contains(pairName)){
+                    throw new ProblemException("文件不配对，无法删除");
+                }
+            }
+            //执行删除操作
+            for (String fileName : fileNames) {
+                String filePath = problemDir + "/" + fileName;
+                FileUtil.del(filePath);
+            }
+            //重新生成info.json文件
+            generateInfoJson(problemId);
+        }catch (Exception e) {
+            throw new ProblemException("删除文件失败",e);
         }
-        
-        String subDir = "in".equals(fileExtension) ? "in" : "out";
-        String filePath = problemDir + "/" + subDir + "/" + fileName;
-        //检查是否存在
-        File file = new File(filePath);
-        if (!file.exists()) {
-            throw new ProblemException("文件不存在" + fileName);
-        }
-        //删除文件
-        boolean deleted = file.delete();
-        if (!deleted) {
-            throw new ProblemException("删除文件失败" + fileName);
-        }
-        //重新生成info.json文件
-        generateInfoJson(problemId);
     }
 
     /**
@@ -482,7 +491,8 @@ public class AdminProblemServiceImpl implements AdminProblemService {
             String jsonContent = JSON.toJSONString(caseInfos);
             FileUtil.writeUtf8String(jsonContent, infoJsonPath);
         } catch (Exception e) {
-            throw new ProblemException("生成测试样例配置文件失败" + e);
+            throw new ProblemException("生成测试样例配置文件失败",e);
         }
     }
+    
 }

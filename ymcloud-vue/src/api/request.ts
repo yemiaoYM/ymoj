@@ -27,6 +27,10 @@ service.interceptors.request.use(
 //添加响应拦截器
 service.interceptors.response.use(
   response=>{
+    //如果是文件操作的返回，由后续进行处理
+    if (response.config.responseType === 'blob') {
+      return response;
+    }
     const res = response.data;
     //操作成功
     if(res.code === 200){

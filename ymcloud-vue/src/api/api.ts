@@ -630,7 +630,6 @@ export function getProblemTestCases(problemId: number) {
     method: "GET"
   })
 }
-
 /**
  * 上传测试用例文件
  * @param problemId 题目ID
@@ -646,30 +645,33 @@ export function uploadTestCaseFiles(problemId: number, files: FormData) {
     }
   })
 }
-
 /**
  * 下载测试用例文件
  * @param problemId 题目ID
  * @param fileName 文件名
  */
 export function downloadTestCaseFile(problemId: number, fileName: string) {
+  let params = {
+    fileName
+  }
   return request({
-    url: `/admin/problem/${problemId}/testcases/download/${fileName}`,
+    url: `/admin/problem/${problemId}/testcases/download`,
     method: "GET",
+    params,
     responseType: 'blob'
   })
 }
 
 /**
- * 删除测试用例文件
+ * 删除测试用例文件（支持单个或批量）
  * @param problemId 题目ID
- * @param fileName 文件名
+ * @param fileNames 文件名数组
  */
-export function deleteTestCaseFile(problemId: number, fileName: string) {
+export function deleteTestCaseFiles(problemId: number, fileNames: string[]) {
   return request({
     url: `/admin/problem/${problemId}/testcases`,
     method: "DELETE",
-    params: { fileName }
+    data: fileNames
   })
 }
 
