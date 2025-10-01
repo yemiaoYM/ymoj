@@ -163,21 +163,12 @@ const validateContestTime = (rule: any, value: string, callback: any) => {
     callback();
     return;
   }
-  
   const startTime = new Date(contest.value.startTime);
   const endTime = new Date(contest.value.endTime);
-  const now = new Date();
-  
   if (startTime >= endTime) {
     callback(new Error("开始时间必须早于结束时间"));
     return;
   }
-  
-  if (endTime <= new Date(now.getTime() + 10 * 60 * 1000)) {
-    callback(new Error("结束时间至少要在当前时间10分钟之后"));
-    return;
-  }
-  
   callback();
 };
 

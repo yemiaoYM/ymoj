@@ -448,7 +448,7 @@ const loadProblemData = async () => {
       mode: data.mode,
       openCaseResult: data.openCaseResult,
       timeLimit: data.timeLimit,
-      memoryLimit: data.memoryLimit,
+      memoryLimit: Math.round(data.memoryLimit / 1024), // 后端KB转换为前端MB
       problemCaseList: JSON.parse(data.examples) || [],
       tagList: data.tagList || [],
     });

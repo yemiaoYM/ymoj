@@ -413,7 +413,7 @@ export type ProblemDTO = {
   isRemote: boolean;
   /** 时间限制（ms） */
   timeLimit: number;
-  /** 内存限制（KB） */
+  /** 内存限制（MB） */
   memoryLimit: number;
   /** 输入描述 */
   input: string;

@@ -69,6 +69,13 @@ public class SecurityUtils {
     }
 
     /**
+     * 判断是否为管理员
+     */
+    public static Boolean isAdmin(){
+        return getLoginUser().getRoles().contains("ADMIN");
+    }
+
+    /**
      * 判断是否为超级管理员
      */
     public static Boolean isSuperAdmin(Long userId){

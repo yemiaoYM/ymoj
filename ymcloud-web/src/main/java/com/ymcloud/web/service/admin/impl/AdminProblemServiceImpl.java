@@ -121,6 +121,8 @@ public class AdminProblemServiceImpl implements AdminProblemService {
             String examples = JSON.toJSONString(problemCaseList);
             problem.setExamples(examples);
         }
+        //将mb转化为kb
+        problem.setMemoryLimit(problemDTO.getMemoryLimit()*1024);
         //暂不支持远程题目
         problem.setIsRemote(false);
         //如果没有设置可见性，默认为私有
@@ -170,10 +172,10 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         //构造实体
         Problem problem = BeanUtil.copyProperties(problemDTO, Problem.class);
         problem.setId(id);
+        problem.setMemoryLimit(problemDTO.getMemoryLimit()*1024);
         //保留原有的创建者信息
         problem.setAuthorId(existProblem.getAuthorId());
         problem.setAuthorUsername(existProblem.getAuthorUsername());
-        problem.setCreatedTime(existProblem.getCreatedTime());
         //题目测试用例
         List<ProblemCaseVO> problemCaseList = problemDTO.getProblemCaseList();
         if (CollUtil.isNotEmpty(problemCaseList)) {

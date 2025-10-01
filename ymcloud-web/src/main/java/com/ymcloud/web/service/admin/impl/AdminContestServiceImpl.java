@@ -610,9 +610,6 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (startTime.isAfter(endTime)) {
             throw new ContestException("比赛开始时间不能晚于结束时间");
         }
-        if (endTime.isBefore(LocalDateTime.now().plusMinutes(10))) {
-            throw new ContestException("比赛结束时间至少要在当前时间10分钟之后");
-        }
     }
 
     /**

@@ -29,7 +29,7 @@
                 <el-tag size="large" disable-transitions color="#21c1c6" style="cursor:pointer;">
                   <span style="color: white;font-weight:bold;" @click="toUserInfo(row.username)">{{ row.username }}</span>
                 </el-tag>
-                <el-tag size="large" disable-transitions color="#fe9000" style="color: white;">
+                <el-tag v-if="row.school" size="large" disable-transitions color="#fe9000" style="color: white;">
                   {{ row.school }}
                 </el-tag>
               </n-flex>

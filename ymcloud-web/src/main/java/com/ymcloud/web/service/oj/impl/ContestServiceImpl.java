@@ -296,6 +296,8 @@ public class ContestServiceImpl implements ContestService {
         return PageVO.of(judgePage,judge->{
             SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
             vo.setSubmissionId(judge.getId());
+
+
             if(!isEnd&&!judge.getUserId().equals(userId)){
                 //如果比赛没有结束则禁止查看其他人的提交时间，内存等等
                 vo.setTime(null);
@@ -415,7 +417,7 @@ public class ContestServiceImpl implements ContestService {
         tableVO.setProblemInfoData(problemList);
         //排名排序
         if (contest.getMode() == ContestConstants.MODE_ACM) {
-            //acm模式排名：先按照通过数排名，再按照总时间排名
+            //ACM模式排名：先按照通过数降序（多的在前），再按照总时间升序（少的在前）
             contestUserRankVOList.sort(Comparator
                     .comparingInt(ContestUserRankVO::getAc).reversed()
                     .thenComparingLong(ContestUserRankVO::getTotalTime)
@@ -437,9 +439,9 @@ public class ContestServiceImpl implements ContestService {
             }
         }
         else {
-            //io模式排名：先按照总分数排名，再按照通过数排名，再按照总时间排名
+            //IOI模式排名：先按照总分数降序（高的在前），再按照通过数降序（多的在前），再按照总时间升序（少的在前）
             contestUserRankVOList.sort(Comparator
-                    .comparingInt(ContestUserRankVO::getTotalScore).reversed()
+                    .comparingInt(ContestUserRankVO::getTotalScore)
                     .thenComparingInt(ContestUserRankVO::getAc).reversed()
                     .thenComparingLong(ContestUserRankVO::getTotalTime)
             );
