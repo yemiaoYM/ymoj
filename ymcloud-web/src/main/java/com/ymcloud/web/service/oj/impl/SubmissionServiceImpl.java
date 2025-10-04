@@ -102,13 +102,16 @@ public class SubmissionServiceImpl implements SubmissionService {
             throw new SubmissionNotExistException();
         }
 
-        // 清空vj信息
+        //清空vj信息
         submission.setVjudgeUsername(null);
         submission.setVjudgeSubmitId(null);
         submission.setVjudgePassword(null);
 
         //获取当前用户
         Long userId = SecurityUtils.getUserId();
+        //判断是否为管理员
+        boolean isAdmin = SecurityUtils.isAdmin();
+        boolean creator = false;
         //处理比赛提交
         if(submission.getContestId()!=0){
             //查询比赛
@@ -126,15 +129,23 @@ public class SubmissionServiceImpl implements SubmissionService {
                     throw new ContestNotAccessException();
                 }
             }
+            //判断是否为比赛创建者
+            creator = userId.equals(contest.getCreatorId());
             //比赛未结束不允许查看他人提交详情
             LocalDateTime now = LocalDateTime.now();
-            if(!userId.equals(submission.getUserId())&&now.isBefore(contest.getEndTime())){
+            if (!creator &&
+                !isAdmin &&
+                !userId.equals(submission.getUserId()) &&
+                now.isBefore(contest.getEndTime())){
                 throw new SubmissionException("比赛结束前禁止查看他人提交详情");
             }
         }
 
         //个人提交和公开分享才支持查看代码
-        if(!submission.getUserId().equals(userId) && !submission.getShare()){
+        if (!isAdmin && 
+            !creator && 
+            !submission.getUserId().equals(userId) && 
+            !submission.getShare()) {
             //不为本人且不公开分享
             submission.setCode(null);
         }

@@ -61,11 +61,8 @@
                   <span v-else style="font-size: 18px;color: black;">
                     {{ row.submissionInfo[q.displayId].acTime }}
                   </span>
-                  <span v-if="row.submissionInfo[q.displayId].errorNum > 0" style="color: black;">
-                    {{ formatTries(row.submissionInfo[q.displayId].errorNum) }}
-                  </span>
-                  <span v-else style="color: black;">
-                    1 try
+                  <span style="color: black;">
+                    {{ formatTries(row.submissionInfo[q.displayId].errorNum + 1) }}
                   </span>
                 </n-flex>
                 <n-flex justify="center" vertical v-else style="height: 70px;background-color: #e87272;">

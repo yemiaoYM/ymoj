@@ -67,8 +67,6 @@ public class CommonServiceImpl implements CommonService {
         List<Judge> recentSubmissions = judgeEntityService.lambdaQuery()
                 .select(Judge::getCreatedTime, Judge::getStatus)
                 .ge(Judge::getCreatedTime, twoWeeksAgo)
-                //排除比赛提交，只统计普通提交
-                .eq(Judge::getContestId, 0L)
                 .list();
         //创建日期格式化器
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM-dd");

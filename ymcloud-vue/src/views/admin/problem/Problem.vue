@@ -74,6 +74,28 @@
           <el-form-item label="是否公开测试用例" prop="openCaseResult">
             <el-switch v-model="problem.openCaseResult" />
           </el-form-item>
+          <!-- 标签管理 -->
+          <el-form-item label="标签管理" prop="tagList">
+            <el-select
+              v-model="problem.tagList"
+              multiple
+              multiple-limit="5"
+              placeholder="请选择标签"
+              clearable
+              style="width: 450px"
+            >
+              <el-option
+                v-for="item in tagList"
+                :key="item.id"
+                :label="item.name"
+                :value="item.id"
+              >
+                <el-tag :color="item.color" style="color: white;">
+                  {{ item.name }}
+                </el-tag>
+              </el-option>
+            </el-select>
+          </el-form-item>
           <!-- 题目描述 -->
           <el-form-item
             label="题目描述"
@@ -178,7 +200,8 @@
 import { ref, defineAsyncComponent, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
-import { addProblem, updateProblem, getAdminProblemById } from "@/api/api";
+import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/api/api";
+import type { Tag } from "@/type/types";
 //异步导入markdown
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/MarkdownEidt.vue")
@@ -191,8 +214,9 @@ const loading = ref(false);
 const formRef = ref();
 const mode = ref('add');
 const problemId = ref<number | null>(null);
+const tagList = ref<Tag[]>([] as Tag[]);
 
-// 验证题目展示id格式
+//验证题目展示id格式
 const validateProblemId = (rule: any, value: string, callback: any) => {
   if (!value) {
     callback(new Error("题目展示id不能为空"));
@@ -204,7 +228,7 @@ const validateProblemId = (rule: any, value: string, callback: any) => {
     callback();
   }
 };
-// 验证测试用例
+//验证测试用例
 const validateTestCases = (rule: any, value: any[], callback: any) => {
   if (value && value.length > 5) {
     callback(new Error("最多设置5个测试样例"));
@@ -225,6 +249,14 @@ const validateTestCases = (rule: any, value: any[], callback: any) => {
         return;
       }
     }
+    callback();
+  }
+};
+//验证标签列表
+const validateTagList = (rule: any, value: any[], callback: any) => {
+  if (value && value.length > 5) {
+    callback(new Error("最多设置5个标签"));
+  } else {
     callback();
   }
 };
@@ -309,6 +341,7 @@ const rules = {
     },
   ],
   problemCaseList: [{ validator: validateTestCases, trigger: "blur" }],
+  tagList: [{ validator: validateTagList, trigger: "blur" }],
 };
 
 const problem = ref({
@@ -395,7 +428,14 @@ const handleSubmitProblem = () => {
     }
   });
 };
-
+//加载标签列表
+const loadTagList = () => {
+  getTagsList().then(res => {
+    tagList.value = res.data.data;
+  }).catch(e => {
+    console.log(e);
+  });
+};
 //重置表单
 const resetForm = () => {
   problem.value= {
@@ -425,7 +465,6 @@ const resetForm = () => {
     formRef.value.resetFields();
   }
 };
-
 //加载题目数据
 const loadProblemData = async () => {
   if (!problemId.value) return;
@@ -449,7 +488,7 @@ const loadProblemData = async () => {
       openCaseResult: data.openCaseResult,
       timeLimit: data.timeLimit,
       memoryLimit: Math.round(data.memoryLimit / 1024), // 后端KB转换为前端MB
-      problemCaseList: JSON.parse(data.examples) || [],
+      problemCaseList: data.problemCaseList || [],
       tagList: data.tagList || [],
     });
   } catch (e) {
@@ -469,6 +508,7 @@ watch(() => route.name, () => {
     mode.value = 'add';
     resetForm();
   }
+  loadTagList();
 }, { immediate: true });
 </script>
 

@@ -72,7 +72,8 @@ public class SecurityUtils {
      * 判断是否为管理员
      */
     public static Boolean isAdmin(){
-        return getLoginUser().getRoles().contains("ADMIN");
+        LoginUser loginUser = getLoginUser();
+        return loginUser.getUser().getId() == 1L || loginUser.getRoles().contains("ADMIN");
     }
 
     /**

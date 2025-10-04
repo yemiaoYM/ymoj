@@ -100,19 +100,26 @@ export default defineComponent({
         ],
         series: [
           {
-            name: '总数',
-            type: 'line',
-            stack: 'Total',
-            areaStyle: {},
-            data: props.totalSubmissions
-          },
-          {
             name: '通过',
             type: 'line',
             stack: 'Total',
             areaStyle: {},
             data: props.acceptedSubmissions
-          }
+          },
+          {
+            name: '总数',
+            type: 'line',
+            stack: 'Total',
+            areaStyle: {},
+            label: {
+              show: true,
+              position: 'top',
+              formatter: function (params: any) {
+                return params.value > 0 ? params.value : '';
+              }
+            },
+            data: props.totalSubmissions
+          },
         ]
       };
       option && myChart.setOption(option);

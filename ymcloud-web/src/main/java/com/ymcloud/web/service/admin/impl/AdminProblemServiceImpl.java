@@ -18,6 +18,7 @@ import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
+import com.ymcloud.pojo.vo.admin.ProblemVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
 import com.ymcloud.web.service.admin.AdminProblemService;
@@ -88,12 +89,24 @@ public class AdminProblemServiceImpl implements AdminProblemService {
      * @return 题目信息
      */
     @Override
-    public Problem getProblemById(Long id) {
+    public ProblemVO getProblemById(Long id) {
         Problem problem = problemEntityService.getById(id);
         if (problem == null) {
             throw new ProblemNotExistException();
         }
-        return problem;
+        ProblemVO problemVO = BeanUtil.copyProperties(problem, ProblemVO.class);
+        //查询题目的题面样例,将json转化为对象
+        List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
+        problemVO.setProblemCaseList(problemCaseVOList);
+        //查询题目关联的标签ID列表
+        List<Long> tagList = problemTagEntityService.lambdaQuery()
+                .eq(ProblemTag::getProblemId, problem.getId())
+                .list()
+                .stream()
+                .map(ProblemTag::getTagId)
+                .toList();
+        problemVO.setTagList(tagList);
+        return problemVO;
     }
 
     /**

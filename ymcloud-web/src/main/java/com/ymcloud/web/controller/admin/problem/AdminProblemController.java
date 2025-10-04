@@ -5,6 +5,7 @@ import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
+import com.ymcloud.pojo.vo.admin.ProblemVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminProblemService;
 import org.springframework.core.io.Resource;
@@ -53,9 +54,9 @@ public class AdminProblemController {
      */
     @PreAuthorize("hasAuthority('problem:problem:query')")
     @GetMapping("/{id}")
-    public Result<Problem> getProblemById(@PathVariable("id") Long id) {
+    public Result<ProblemVO> getProblemById(@PathVariable("id") Long id) {
         log.info("根据ID查询题目:{}", id);
-        Problem problem = adminProblemService.getProblemById(id);
+        ProblemVO problem = adminProblemService.getProblemById(id);
         return Result.ok(problem);
     }
 

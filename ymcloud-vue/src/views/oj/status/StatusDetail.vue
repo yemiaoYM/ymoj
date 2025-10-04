@@ -36,7 +36,7 @@
                 <pre class="error-info">{{submissionData.errorMessage}}</pre>
             </el-card>
             <!-- 提交详细信息 -->
-            <el-card>
+            <el-card v-if="submissionData && Object.keys(submissionData).length > 0">
                 <el-descriptions title="提交详细信息" :column="4">
                     <el-descriptions-item label="提交ID">{{ submissionData.submissionId }}</el-descriptions-item>
                     <el-descriptions-item label="题目">
@@ -67,7 +67,7 @@
                 </el-descriptions>
             </el-card>
             <!-- 测试点详情 -->
-            <el-card>
+            <el-card v-if="submissionData.judgeCases && submissionData.judgeCases.length > 0">
                 <template #header>
                     <div class="card-header">
                         <span>测试点详情</span>

@@ -4,6 +4,7 @@ import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
+import com.ymcloud.pojo.vo.admin.ProblemVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +33,7 @@ public interface AdminProblemService {
      * @param id 题目ID
      * @return 题目信息
      */
-    Problem getProblemById(Long id);
+    ProblemVO getProblemById(Long id);
 
     /**
      * 添加题目

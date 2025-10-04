@@ -4,7 +4,6 @@ package com.ymcloud.pojo.entity;
 import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import io.swagger.v3.oas.annotations.media.Schema;

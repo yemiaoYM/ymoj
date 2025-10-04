@@ -292,14 +292,17 @@ public class ContestServiceImpl implements ContestService {
         //判断比赛是否结束
         LocalDateTime now = LocalDateTime.now();
         boolean isEnd = now.isAfter(contest.getEndTime());
+        boolean isAdmin = SecurityUtils.isAdmin();
         //返回vo实体
         return PageVO.of(judgePage,judge->{
             SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
             vo.setSubmissionId(judge.getId());
-
-
+            //如果为管理员或者比赛创建者则不限制
+            if(isAdmin || userId.equals(contest.getCreatorId())){
+                return vo;
+            }
+            //如果比赛没有结束则禁止查看其他人的提交时间，内存等等
             if(!isEnd&&!judge.getUserId().equals(userId)){
-                //如果比赛没有结束则禁止查看其他人的提交时间，内存等等
                 vo.setTime(null);
                 vo.setMemory(null);
                 vo.setCodeLength(null);
