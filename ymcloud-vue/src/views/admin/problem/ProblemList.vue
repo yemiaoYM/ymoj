@@ -123,10 +123,10 @@
 
 <script lang="ts" setup>
 //import
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search, Refresh, Plus, Edit, Delete, Download, DocumentCopy } from '@element-plus/icons-vue';
-import { useRouter } from 'vue-router';
+import { Search, Refresh, Plus, Edit, Delete, DocumentCopy } from '@element-plus/icons-vue';
+import { useRouter, useRoute } from 'vue-router';
 import type { AdminProblemVO } from '@/type/types';
 import {
   getAdminProblemList,
@@ -136,32 +136,60 @@ import {
 
 //data
 const router = useRouter();
+const route = useRoute();
 const problemList = ref<AdminProblemVO[]>([] as AdminProblemVO[]);
 const problemIds = ref<number[]>([]);
 const total = ref<number>(0);
 const loading = ref<boolean>(false);
 
+//URL同步工具函数
+const useUrlSync = () => {
+  //默认查询参数
+  const defaults = {
+    keyword: null as string | null,
+    visibility: null as number | null,
+    difficulty: null as number | null,
+    pageNo: 1,
+    pageSize: 15,
+  };
+  //从URL解析查询参数
+  const parseFromUrl = () => {
+    const { query } = route;
+    return {
+      keyword: query.keyword as string || defaults.keyword,
+      visibility: query.visibility ? Number(query.visibility) : defaults.visibility,
+      difficulty: query.difficulty ? Number(query.difficulty) : defaults.difficulty,
+      pageNo: query.pageNo ? Number(query.pageNo) : defaults.pageNo,
+      pageSize: query.pageSize ? Number(query.pageSize) : defaults.pageSize,
+    };
+  };
+  //同步URL
+  const syncToUrl = (params: typeof defaults) => {
+    const query = Object.entries(params).reduce((acc, [key, value]) => {
+      if (value !== null && value !== undefined && value !== defaults[key as keyof typeof defaults]) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+
+    router.replace({ query: Object.keys(query).length ? query : undefined });
+  };
+  return { defaults, parseFromUrl, syncToUrl };
+};
+const { defaults, parseFromUrl, syncToUrl } = useUrlSync();
 //查询参数
-const queryParams = ref({
-  keyword: null,
-  visibility: null,
-  difficulty: null,
-  pageNo: 1,
-  pageSize: 15,
-});
+const queryParams = ref(parseFromUrl());
 
 
 //生命周期
 onMounted(() => {
   handleQuery();
 });
-
 //methods
 //查询题目列表
 const handleQuery = () => {
   loading.value = true;
-  
-  // 调用真实API
+  syncToUrl(queryParams.value); // 同步到 URL
   getAdminProblemList(queryParams.value).then(res => {
     problemList.value = res.data.data.records;
     total.value = res.data.data.total;
@@ -172,21 +200,15 @@ const handleQuery = () => {
     loading.value = false;
   });
 };
-
 //重置查询
 const resetQuery = () => {
-  queryParams.value = {
-    keyword: null,
-    visibility: null,
-    difficulty: null,
-    pageNo: 1,
-    pageSize: 15,
-  };
+  Object.assign(queryParams.value, defaults);
   handleQuery();
 };
 //改变页大小
 const handleSizeChange = (val: number) => {
   queryParams.value.pageSize = val;
+  queryParams.value.pageNo = 1; // 重置到第一页
   handleQuery();
 };
 //改变当前页
@@ -286,6 +308,30 @@ const handleVisibilityChange = (row: AdminProblemVO, newVisibility: number) => {
   }).catch(() => {  });
 };
 
+//监听 URL 变化 同步查询参数
+watch(
+  () => route.query,
+  () => {
+    const newParams = parseFromUrl();
+    //检查是否有变化，避免无限循环
+    const hasChanged = Object.keys(newParams).some(
+      key => newParams[key as keyof typeof newParams] !== queryParams.value[key as keyof typeof queryParams.value]
+    );
+    if (hasChanged) {
+      Object.assign(queryParams.value, newParams);
+      loading.value = true;
+      getAdminProblemList(queryParams.value).then(res => {
+        problemList.value = res.data.data.records;
+        total.value = res.data.data.total;
+      }).catch(err => {
+        console.log(err);
+      }).finally(() => {
+        loading.value = false;
+      });
+    }
+  },
+  { immediate: false }
+);
 </script>
 
 <style scoped lang="css">
