@@ -92,7 +92,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public String login(LoginDTO loginDTO) {
         //1.验证码检测
-        //validateCaptcha(loginDTO.getCode(),loginDTO.getUuid());
+        validateCaptcha(loginDTO.getCode(),loginDTO.getUuid());
         //2.信息校验（简化放到DTO的注释检验实现）
         String username=loginDTO.getUsername().trim();
         String password=loginDTO.getPassword();

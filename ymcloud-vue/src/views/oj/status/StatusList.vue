@@ -203,7 +203,6 @@ const init=()=>{
   pageNo.value=Number(queryParams.pageNo) || 1;
   pageSize.value=Number(queryParams.pageSize) || 15;
 }
-init();
 //分页查询
 const getData=()=>{
   loading.value=true;

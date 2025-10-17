@@ -53,12 +53,6 @@ public class ProblemServiceImpl implements ProblemService {
     @Autowired
     private LanguageMapper languageMapper;
 
-    @Autowired
-    private TagEntityService tagEntityService;
-
-    @Autowired
-    private ProblemTagEntityService problemTagEntityService;
-
     /**
      * 获取题目列表表单 分页查询
      * @param query 查询实体

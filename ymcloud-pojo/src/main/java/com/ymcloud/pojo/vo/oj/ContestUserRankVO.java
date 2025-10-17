@@ -28,6 +28,10 @@ public class ContestUserRankVO implements Serializable {
      */
     private String username;
     /**
+     * 昵称
+     */
+    private String nickname;
+    /**
      * 学校
      */
     private String school;

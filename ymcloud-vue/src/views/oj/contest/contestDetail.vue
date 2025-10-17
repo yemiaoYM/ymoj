@@ -13,11 +13,11 @@
             <h1 style="font-weight: bold;font-size: 30px;">{{ contestData.title }}</h1>
             <!-- 创建者或主办方 -->
             <el-tag v-if="contestData.creatorUsername" 
-                    @click=""
+                    @click="toUserInfo(contestData.creatorUsername)"
                     size="large" 
                     disable-transitions 
                     effect="dark" 
-                    style="margin-left: 10px;" 
+                    style="margin-left: 10px;cursor:pointer;" 
                     color="#21c1c6">
                 <span style="font-weight: bold;">{{ contestData.creatorUsername }}</span>
             </el-tag>
@@ -211,7 +211,7 @@ const initContestInfo=(contestID: number)=>{
       routeName.value="ContestDetail";
       contestMenuDisabled.value = true;
     }
-    if(routeName.value!="ContestDetail"&&contestData.value.status === '未开始'){
+    if(contestData.value.status === '未开始'){
       ElMessage.warning('比赛还未开始');
       routeName.value="ContestDetail";
       contestMenuDisabled.value = true;
@@ -237,11 +237,14 @@ const handleRegisterContest=()=>{
   }).then(res=>{
     ElMessage.success(res.data.msg);
     contestData.value.access = true;
-    contestMenuDisabled.value = false;
   }).catch(e=>{
     console.log(e);
   })
 }
+//跳转到用户主页
+const toUserInfo = (username: string) => {
+  router.push({ name: "UserHome", query: { username: username } });
+};
 
 watch(() => route.name, (newName:any) => {
   routeName.value = newName as string;

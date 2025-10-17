@@ -568,6 +568,7 @@ export type ContestUserRankVO={
   rank: number;
   order: number;
   username: string;
+  nickname: string;
   school: string|null;
   ac: number;
   total: number;

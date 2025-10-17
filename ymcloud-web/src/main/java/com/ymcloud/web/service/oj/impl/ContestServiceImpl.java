@@ -7,6 +7,7 @@ import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.exception.contest.*;
 import com.ymcloud.core.security.utils.SecurityUtils;
@@ -100,7 +101,11 @@ public class ContestServiceImpl implements ContestService {
     @Override
     public ContestVO getContestInfo(Long contestId) {
         //根据id查询
-        Contest contest = contestEntityService.getInfoById(contestId);
+        Contest contest = contestEntityService.getById(contestId);
+        //判断是否存在
+        if(contest == null){
+            throw new ContestNotExistException();
+        }
         //拷贝前端实体
         ContestVO contestVO = BeanUtil.copyProperties(contest, ContestVO.class);
         //查询当前用户的比赛权限
@@ -135,7 +140,11 @@ public class ContestServiceImpl implements ContestService {
         Long contestId = registerContestDTO.getContestId();
         String password = registerContestDTO.getPassword();
         //2.根据id查询
-        Contest contest = contestEntityService.getInfoById(contestId);
+        Contest contest = contestEntityService.getById(contestId);
+        //判断是否存在
+        if(contest == null){
+            throw new ContestNotExistException();
+        }
         //3.公开赛不需要注册报名
         if(contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
             throw new ContestException("公开赛不需要注册报名");
@@ -350,8 +359,9 @@ public class ContestServiceImpl implements ContestService {
         userMap.forEach((key, value) -> {
             ContestUserRankVO contestUserRankVO = new ContestUserRankVO();
             contestUserRankVO.setUsername(key);
-            //取第一跳记录的学校即可
+            //取第一跳记录的学校和昵称即可
             contestUserRankVO.setSchool(value.get(0).getSchool());
+            contestUserRankVO.setNickname(value.get(0).getNickname());
             //统计用户每个题目的提交情况
             Map<String,ContestUserSubmissionVO> submissionInfo=new HashMap<>();
             int ac=0;
@@ -488,8 +498,15 @@ public class ContestServiceImpl implements ContestService {
      * 检验比赛
      */
     private Contest validateContest(Long contestId,Long userId) {
+        //简单校验
+        if (contestId == null || contestId <= 0) {
+            throw new ContestException("比赛id参数格式错误", HttpStatus.BAD_REQUEST);
+        }
         //先根据比赛id查询
-        Contest contest = contestEntityService.getInfoById(contestId);
+        Contest contest = contestEntityService.getById(contestId);
+        if (contest == null) {
+            throw new ContestNotExistException();
+        }
         //验证比赛当前状态
         LocalDateTime now = LocalDateTime.now();
         if(contest.getStartTime().isAfter(now)){

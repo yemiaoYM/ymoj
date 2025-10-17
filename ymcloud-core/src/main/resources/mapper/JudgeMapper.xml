@@ -30,6 +30,7 @@
     <select id="getContestSubmissionRecordList" resultType="com.ymcloud.pojo.bo.ContestSubmissionRecord">
         SELECT
         u.username,
+        u.nickname,
         u.school,
         j.display_id,
         j.status,

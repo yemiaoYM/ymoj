@@ -12,10 +12,4 @@ import com.ymcloud.pojo.entity.Contest;
  */
 public interface ContestEntityService extends IService<Contest> {
 
-    /**
-     * 根据主键获取比赛信息
-     * @param contestId 比赛id
-     * @return 比赛信息
-     */
-    Contest getInfoById(Long contestId);
 }

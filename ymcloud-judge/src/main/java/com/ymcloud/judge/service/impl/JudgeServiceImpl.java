@@ -3,10 +3,7 @@ package com.ymcloud.judge.service.impl;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.common.constant.*;
-import com.ymcloud.common.exception.contest.ContestException;
-import com.ymcloud.common.exception.contest.ContestNotAccessException;
-import com.ymcloud.common.exception.contest.ContestNotStartException;
-import com.ymcloud.common.exception.contest.ContestProblemNotExistException;
+import com.ymcloud.common.exception.contest.*;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
@@ -156,7 +153,10 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
      */
     private Long contestJudge(JudgeDTO judgeDTO){
         //获取比赛
-        Contest contest = contestEntityService.getInfoById(judgeDTO.getContestId());
+        Contest contest = contestEntityService.getById(judgeDTO.getContestId());
+        if(contest == null){
+            throw new ContestNotExistException();
+        }
         //判断比赛是否开始
         LocalDateTime now = LocalDateTime.now();
         if(now.isBefore(contest.getStartTime())){
