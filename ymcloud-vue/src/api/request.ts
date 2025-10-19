@@ -38,45 +38,25 @@ service.interceptors.response.use(
     }
     //请求成功，但业务异常
     if(res.code === 500){
-      ElMessage({
-        message:res.msg,
-        grouping: true,
-        type: 'error',
-      });
+      ElMessage.error(res.msg);
     }
     //未登录
     if(res.code === 401){
-      ElMessage({
-        message:res.msg,
-        grouping: true,
-        type: 'error',
-      });
+      ElMessage.error(res.msg);
       //清除缓存
       Storage.remove("Authorization");
     }
     //参数列表错误（缺少，格式不匹配）
     if(res.code === 400){
-      ElMessage({
-        message:res.msg,
-        grouping: true,
-        type: 'warning',
-      });
+      ElMessage.warning(res.msg);
     }
     //访问受限，权限不足，授权过期
     if(res.code === 403){
-      ElMessage({
-        message: res.msg,
-        grouping: true,
-        type: 'error',
-      });
+      ElMessage.error(res.msg);
     }
     //未找到
     if(res.code === 404){
-      ElMessage({
-        message:res.msg,
-        grouping: true,
-        type: 'error',
-      });
+      ElMessage.error(res.msg);
     }
     return Promise.reject(response);
   },
@@ -90,11 +70,7 @@ service.interceptors.response.use(
       }else if (message.includes("Request failed with status code")) {
         message = "系统接口" + message.substr(message.length - 3) + "异常";
       }
-      ElMessage({
-        message: message,
-        grouping: true,
-        type: 'error',
-      });
+      ElMessage.error(message);
       return Promise.reject(error);
     }
   }

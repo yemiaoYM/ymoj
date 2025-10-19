@@ -1,12 +1,22 @@
 <template>
   <div>
-    <router-view />
+    <el-config-provider :message="messageConfig" :locale="zhCn">
+      <router-view />
+    </el-config-provider>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, nextTick } from 'vue';
-import { LOGO, MOTTO } from '@/constants/logo';
+import { onMounted, nextTick, reactive } from "vue";
+import { LOGO, MOTTO } from "@/constants/logo";
+import zhCn from "element-plus/dist/locale/zh-cn.mjs";
+
+//消息配置
+const messageConfig = reactive({
+  max: 1,
+  plain: true,
+  placement: "top",
+});
 
 //methods
 const removeLoader = () => {
@@ -85,22 +95,10 @@ body {
   min-height: 100vh;
   color: var(--color-text);
   background: var(--color-background);
-  transition:
-    color 0.5s,
-    background-color 0.5s;
+  transition: color 0.5s, background-color 0.5s;
   line-height: 1.6;
-  font-family:
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Fira Sans',
-    'Droid Sans',
-    'Helvetica Neue',
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
   font-size: 15px;
   text-rendering: optimizeLegibility;
@@ -114,11 +112,15 @@ body {
 }
 
 /* 禁用所有原生滚动条 */
-body, #app, html {
+body,
+#app,
+html {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE 10+ */
 }
-body::-webkit-scrollbar, #app::-webkit-scrollbar, html::-webkit-scrollbar {
+body::-webkit-scrollbar,
+#app::-webkit-scrollbar,
+html::-webkit-scrollbar {
   display: none; /* Chrome/Safari/Webkit */
 }
 </style>

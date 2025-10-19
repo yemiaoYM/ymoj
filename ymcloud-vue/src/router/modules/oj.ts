@@ -73,6 +73,12 @@ const ojRoutes = [
             meta: { title: 'Contest Submission List', requireLogin: true }
           },
           {
+            path: 'submission-detail/:submitID',
+            name: 'ContestSubmissionDetail',
+            component: () => import('@/views/oj/contest/child/ContestStatusDetail.vue'),
+            meta: { title: 'Contest Submission Detail', requireLogin: true }
+          },
+          {
             path: 'rank',
             name: 'ContestRank',
             component: () => import('@/views/oj/contest/child/contestRank.vue'),
