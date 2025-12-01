@@ -160,10 +160,10 @@ public class JudgeRun {
 
                 //没有TLE也没有MLE，则比较输出。
                 if(caseResult.getStatus() == null){
-                    String expectedOutput = StrUtil.trimToEmpty(testCase.getOutput());
-                    String actualOutput = StrUtil.trimToEmpty(codeRunResult.getStdout());
+                    String expectedOutput = testCase.getOutput();
+                    String actualOutput = codeRunResult.getStdout();
 
-                    if(expectedOutput.equals(actualOutput)){
+                    if(equalsOutput(expectedOutput,actualOutput)){
                         caseResult.setStatus(JudgeStatus.STATUS_ACCEPTED);
                     }else {
                         caseResult.setStatus(JudgeStatus.STATUS_WRONG_ANSWER);
@@ -322,5 +322,39 @@ public class JudgeRun {
             return List.of();
         }
     }
+
+    /**
+     * 标准化 OJ 输出：
+     * 1. 统一换行符
+     * 2. 去掉每行末尾空格
+     * 3. 去掉末尾空行
+     */
+    public static String normalize(String s) {
+        if (s == null) return "";
+        //统一成 \n
+        s = StrUtil.replace(s, "\r\n", "\n");
+        s = StrUtil.replace(s, "\r", "\n");
+        //按行切分
+        String[] lines = s.split("\n", -1);
+        //去掉每行末尾空白
+        for (int i = 0; i < lines.length; i++) {
+            lines[i] = StrUtil.trimEnd(lines[i]);
+        }
+        //转成 List 处理末尾空行
+        List<String> list = CollUtil.newArrayList(lines);
+        //去除末尾空行
+        while (!list.isEmpty() && StrUtil.isBlank(list.get(list.size() - 1))) {
+            list.remove(list.size() - 1);
+        }
+        return StrUtil.join("\n", list);
+    }
+
+    /**
+     * 对比输出（忽略末尾空行与行尾空格）
+     */
+    private boolean equalsOutput(String expected, String actual) {
+        return normalize(expected).equals(normalize(actual));
+    }
+
 
 }

@@ -84,7 +84,6 @@ declare module 'vue' {
     Layout: typeof import('./src/components/oj/Layout.vue')['default']
     MarkdownEidt: typeof import('./src/components/common/MarkdownEidt.vue')['default']
     MarkdownPreview: typeof import('./src/components/common/MarkdownPreview.vue')['default']
-    Message: typeof import('./src/components/common/Message.vue')['default']
     NButton: typeof import('naive-ui')['NButton']
     NCard: typeof import('naive-ui')['NCard']
     NCode: typeof import('naive-ui')['NCode']

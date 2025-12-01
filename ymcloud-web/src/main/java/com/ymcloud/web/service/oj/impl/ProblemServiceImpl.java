@@ -100,10 +100,12 @@ public class ProblemServiceImpl implements ProblemService {
         Problem problem = validateProblem(problemId);
         //私有题目查询权限
         Long userId = SecurityUtils.getUserId();
-        if(problem.getVisibility() == ProblemConstants.PRIVATE){
-            if(!Objects.equals(problem.getAuthorId(), userId)){
-                throw new ProblemPermissionException("私有题目，请联系题目创建者:"+problem.getAuthorUsername());
-            }
+        //管理员权限
+        Boolean admin = SecurityUtils.isAdmin();
+        if(problem.getVisibility() == ProblemConstants.PRIVATE
+                && !admin
+                && !Objects.equals(problem.getAuthorId(), userId)){
+            throw new ProblemPermissionException("私有题目，请联系题目创建者:"+problem.getAuthorUsername());
         }
         //拷贝前端实体
         ProblemVO problemVO = BeanUtil.copyProperties(problem, ProblemVO.class);

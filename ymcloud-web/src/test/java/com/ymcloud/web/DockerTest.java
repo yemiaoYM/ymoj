@@ -8,14 +8,17 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.StreamType;
+import com.ymcloud.common.constant.RabbitMQConstants;
 import com.ymcloud.common.utils.FileUtils;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
 import com.ymcloud.judge.docker.factory.CodeExecContainerFactory;
 import com.ymcloud.judge.bo.CodeRunResult;
 import com.ymcloud.judge.sandbox.SandBox;
 import com.ymcloud.judge.sandbox.SandBoxFactory;
+import com.ymcloud.pojo.bo.JudgeTask;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
@@ -36,6 +39,21 @@ public class DockerTest {
 
     @Autowired
     private DockerClient dockerClient;
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    @Test
+    public void testMQ(){
+        JudgeTask task = new JudgeTask();
+        rabbitTemplate.convertAndSend(
+                RabbitMQConstants.JUDGE_EXCHANGE,
+                RabbitMQConstants.JUDGE_ROUTING_KEY,
+                task, msg -> {
+            msg.getMessageProperties().setDelayLong(1000L);
+            return msg;
+        });
+    }
 
     @Test
     public void testCreateContainer() {

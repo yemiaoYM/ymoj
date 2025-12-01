@@ -76,9 +76,7 @@ application-prod.yml
 *.local
 
 # 应用文件存储
-/files/*
-!/files/private
-!/files/private/**
+files/*
 
 ### 日志文件 ###
 *.log
