@@ -26,11 +26,10 @@ public class ContestProblemEntityServiceImpl extends ServiceImpl<ContestProblemM
      * 获取比赛题目列表
      * @param contestId 比赛id
      * @param userId 用户id
-     * @param endTime 比赛结束时间
      * @return 比赛题目列表
      */
     @Override
-    public List<ContestProblemTableVO> getContestProblemList(Long contestId, Long userId, LocalDateTime endTime) {
-        return getBaseMapper().getContestProblemList(contestId, userId, endTime);
+    public List<ContestProblemTableVO> getContestProblemList(Long contestId, Long userId) {
+        return getBaseMapper().getContestProblemList(contestId, userId);
     }
 }

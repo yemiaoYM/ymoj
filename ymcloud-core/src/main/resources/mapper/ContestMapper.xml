@@ -2,4 +2,313 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.ymcloud.core.web.mapper.ContestMapper">
 
+    <resultMap id="ContestRankMap" type="com.ymcloud.pojo.vo.oj.ContestRankVO">
+        <result column="rank" property="rank"/>
+        <result column="username" property="username"/>
+        <result column="nickname" property="nickname"/>
+        <result column="school" property="school"/>
+        <result column="ac" property="ac"/>
+        <result column="total" property="total"/>
+        <result column="total_time" property="totalTime"/>
+        <result column="total_score" property="totalScore"/>
+        <result column="submission_info" property="submissionInfo"
+                typeHandler="com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler"/>
+    </resultMap>
+
+    <select id="getAcmContestRank" resultMap="ContestRankMap">
+        WITH contest_info AS (
+            SELECT id, start_time, end_time
+            FROM contest
+            WHERE id = #{contestId}
+        ),
+        -- 只带赛时内提交，尽早过滤
+        jc AS (
+            SELECT j.*
+            FROM judge j
+            JOIN contest_info c ON j.contest_id = c.id
+            WHERE j.created_time BETWEEN c.start_time AND c.end_time
+            AND j.contest_id = #{contestId}
+        ),
+        -- 每个用户每题的第一次 AC 时间（赛时内）
+        first_ac AS (
+            SELECT user_id, display_id, MIN(created_time) AS first_ac_time
+            FROM jc
+            WHERE status = 0
+            GROUP BY user_id, display_id
+        ),
+        -- 每题全场最早 AC（用于判断 isFirstAC）
+        first_ac_global AS (
+            SELECT display_id, MIN(first_ac_time) AS first_ac_time
+            FROM first_ac
+            GROUP BY display_id
+        ),
+        -- 错误次数统计：若有 first_ac 则统计 first_ac 之前的非 AC，否则统计全部非 AC
+        error_cnt AS (
+            SELECT
+            j.user_id,
+            j.display_id,
+            SUM(CASE
+                WHEN fa.first_ac_time IS NULL THEN (CASE WHEN j.status != 0 THEN 1 ELSE 0 END)
+                WHEN j.status != 0 AND j.created_time &lt; fa.first_ac_time THEN 1
+                ELSE 0
+            END) AS error_num
+            FROM jc j
+            LEFT JOIN first_ac fa
+            ON fa.user_id = j.user_id AND fa.display_id = j.display_id
+            GROUP BY j.user_id, j.display_id
+        ),
+        -- 合并用户-题信息：AC 的记录
+        per_problem_ac AS (
+            SELECT
+                fa.user_id,
+                fa.display_id,
+                1 AS is_ac,
+                TIMESTAMPDIFF(SECOND, ci.start_time, fa.first_ac_time) AS ac_time,
+                COALESCE(ec.error_num, 0) AS error_num,
+                CASE WHEN fa.first_ac_time = fag.first_ac_time THEN 1 ELSE 0 END AS is_first_ac
+            FROM first_ac fa
+            JOIN contest_info ci ON TRUE
+            LEFT JOIN error_cnt ec ON ec.user_id = fa.user_id AND ec.display_id = fa.display_id
+            LEFT JOIN first_ac_global fag ON fag.display_id = fa.display_id
+        ),
+        -- 合并用户-题信息：仅错题（无 AC）
+        per_problem_nonac AS (
+            SELECT
+            ec.user_id,
+            ec.display_id,
+            0 AS is_ac,
+            NULL AS ac_time,
+            ec.error_num,
+            0 AS is_first_ac
+            FROM error_cnt ec
+            LEFT JOIN first_ac fa ON fa.user_id = ec.user_id AND fa.display_id = ec.display_id
+            WHERE fa.user_id IS NULL
+        ),
+        all_problem AS (
+            SELECT * FROM per_problem_ac
+            UNION ALL
+            SELECT * FROM per_problem_nonac
+        ),
+        -- 只包含本场有提交的用户
+        users_with_subs AS (
+            SELECT DISTINCT user_id FROM jc
+        ),
+        -- 汇总每位用户：ac 数、总罚时（秒）、提交次数
+        user_summary AS (
+            SELECT
+            u.user_id,
+            COALESCE(SUM(ap.is_ac), 0) AS ac,
+            COALESCE(SUM(
+            CASE WHEN ap.is_ac = 1 THEN (COALESCE(ap.ac_time,0) + ap.error_num * 1200) ELSE 0 END
+            ), 0) AS total_time,
+            COALESCE(subs.sub_count, 0) AS total_submissions
+            FROM users_with_subs u
+            LEFT JOIN all_problem ap ON ap.user_id = u.user_id
+            LEFT JOIN (
+            SELECT user_id, COUNT(*) AS sub_count FROM jc GROUP BY user_id
+            ) subs ON subs.user_id = u.user_id
+            GROUP BY u.user_id
+        ),
+        ranked AS (
+            SELECT
+            us.user_id,
+            us.ac,
+            us.total_time,
+            us.total_submissions,
+            ROW_NUMBER() OVER (ORDER BY us.ac DESC, us.total_time ASC, us.user_id ASC) AS rank_num
+            FROM user_summary us
+        )
+        SELECT
+        r.rank_num           AS `rank`,
+        u.id                 AS uid,
+        u.username,
+        u.nickname,
+        u.school,
+        r.ac,
+        r.total_time,
+        r.total_submissions  AS `total`,
+        COALESCE(
+        JSON_OBJECTAGG(
+            ap.display_id,
+            JSON_OBJECT(
+                'errorNum', ap.error_num,
+                'isAC', ap.is_ac,
+                'actime', ap.ac_time,
+                'isFirstAC', ap.is_first_ac
+            )
+        ), JSON_OBJECT()
+        ) AS submission_info
+        FROM ranked r
+        JOIN `user` u ON u.id = r.user_id
+        LEFT JOIN all_problem ap ON ap.user_id = r.user_id
+        <where>
+            <if test="keyword != null and keyword.trim() != ''">
+                u.username LIKE CONCAT('%', #{keyword}, '%')
+                OR u.nickname LIKE CONCAT('%', #{keyword}, '%')
+                OR u.school LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        GROUP BY r.rank_num, u.id, u.username, u.nickname, u.school, r.ac, r.total_time, r.total_submissions
+        ORDER BY r.rank_num
+    </select>
+
+    <select id="getOIContestRank" resultMap="ContestRankMap">
+        WITH contest_info AS (
+            SELECT id, start_time, end_time
+            FROM contest
+            WHERE id = #{contestId}
+        ),
+        -- 只带赛时内提交，尽早过滤
+        jc AS (
+            SELECT j.*
+            FROM judge j
+            JOIN contest_info c ON j.contest_id = c.id
+            WHERE j.created_time BETWEEN c.start_time AND c.end_time
+            AND j.contest_id = #{contestId}
+        ),
+        -- 每位用户每题的最高分（仅基于赛时内提交）
+        max_score_per AS (
+            SELECT user_id, display_id, COALESCE(MAX(score), 0) AS score
+            FROM jc
+            GROUP BY user_id, display_id
+        ),
+        -- 每个用户每题的第一次 AC 时间（赛时内）
+        first_ac AS (
+            SELECT user_id, display_id, MIN(created_time) AS first_ac_time
+            FROM jc
+            WHERE status = 0
+            GROUP BY user_id, display_id
+        ),
+        -- 每题全场最早 AC（用于判断 isFirstAC）
+        first_ac_global AS (
+            SELECT display_id, MIN(first_ac_time) AS first_ac_time
+            FROM first_ac
+            GROUP BY display_id
+        ),
+        -- 错误次数统计：若有 first_ac 则统计 first_ac 之前的非 AC，否则统计全部非 AC
+        error_cnt AS (
+            SELECT
+                j.user_id,
+                j.display_id,
+                SUM(CASE
+                WHEN fa.first_ac_time IS NULL THEN (CASE WHEN j.status != 0 THEN 1 ELSE 0 END)
+                WHEN j.status != 0 AND j.created_time &lt; fa.first_ac_time THEN 1
+                ELSE 0
+                END) AS error_num
+            FROM jc j
+            LEFT JOIN first_ac fa
+            ON fa.user_id = j.user_id AND fa.display_id = j.display_id
+            GROUP BY j.user_id, j.display_id
+        ),
+        -- 合并用户-题信息：AC 的记录（增加 score）
+        per_problem_ac AS (
+            SELECT
+            fa.user_id,
+            fa.display_id,
+            1 AS is_ac,
+            TIMESTAMPDIFF(SECOND, ci.start_time, fa.first_ac_time) AS ac_time,
+            COALESCE(ec.error_num, 0) AS error_num,
+            CASE WHEN fa.first_ac_time = fag.first_ac_time THEN 1 ELSE 0 END AS is_first_ac,
+            COALESCE(ms.score, 0) AS score
+            FROM first_ac fa
+            JOIN contest_info ci ON TRUE
+            LEFT JOIN error_cnt ec ON ec.user_id = fa.user_id AND ec.display_id = fa.display_id
+            LEFT JOIN first_ac_global fag ON fag.display_id = fa.display_id
+            LEFT JOIN max_score_per ms ON ms.user_id = fa.user_id AND ms.display_id = fa.display_id
+        ),
+        -- 合并用户-题信息：仅错题（无 AC）——增加 score（多数为 0，但若有分数也保留）
+        per_problem_nonac AS (
+            SELECT
+            ec.user_id,
+            ec.display_id,
+            0 AS is_ac,
+            NULL AS ac_time,
+            ec.error_num,
+            0 AS is_first_ac,
+            COALESCE(ms.score, 0) AS score
+            FROM error_cnt ec
+            LEFT JOIN first_ac fa ON fa.user_id = ec.user_id AND fa.display_id = ec.display_id
+            LEFT JOIN max_score_per ms ON ms.user_id = ec.user_id AND ms.display_id = ec.display_id
+            WHERE fa.user_id IS NULL
+        ),
+        all_problem AS (
+            SELECT * FROM per_problem_ac
+            UNION ALL
+            SELECT * FROM per_problem_nonac
+        ),
+        -- 只包含本场有提交的用户
+        users_with_subs AS (
+            SELECT DISTINCT user_id FROM jc
+        ),
+        -- 汇总每位用户：ac 数、总罚时（秒）、提交次数，并新增 total_score（OI）
+        user_summary AS (
+            SELECT
+            u.user_id,
+            COALESCE(SUM(ap.is_ac), 0) AS ac,
+            COALESCE(SUM(ap.score), 0) AS total_score,
+            COALESCE(SUM(
+            CASE WHEN ap.is_ac = 1 THEN (COALESCE(ap.ac_time,0) + ap.error_num * 1200) ELSE 0 END
+            ), 0) AS total_time,
+            COALESCE(subs.sub_count, 0) AS total_submissions
+            FROM users_with_subs u
+            LEFT JOIN all_problem ap ON ap.user_id = u.user_id
+            LEFT JOIN (
+            SELECT user_id, COUNT(*) AS sub_count FROM jc GROUP BY user_id
+            ) subs ON subs.user_id = u.user_id
+            GROUP BY u.user_id
+        ),
+        -- 排名：按 OI 规则 total_score DESC -> ac DESC -> total_time ASC
+        ranked AS (
+            SELECT
+            us.user_id,
+            us.ac,
+            us.total_score,
+            us.total_time,
+            us.total_submissions,
+            ROW_NUMBER() OVER (
+            ORDER BY
+            us.total_score DESC,
+            us.ac DESC,
+            us.total_time,
+            us.user_id
+            ) AS rank_num
+            FROM user_summary us
+        )
+        SELECT
+            r.rank_num            AS `rank`,
+            u.id                  AS uid,
+            u.username,
+            u.nickname,
+            u.school,
+            r.total_score,
+            r.ac,
+            r.total_time,
+            r.total_submissions  AS `total`,
+            COALESCE(
+                JSON_OBJECTAGG(
+                ap.display_id,
+                JSON_OBJECT(
+                    'errorNum', ap.error_num,
+                    'isAC', ap.is_ac,
+                    'actime', ap.ac_time,
+                    'isFirstAC', ap.is_first_ac,
+                    'score', ap.score
+                    )
+                ), JSON_OBJECT()
+            ) AS submission_info
+        FROM ranked r
+        JOIN `user` u ON u.id = r.user_id
+        LEFT JOIN all_problem ap ON ap.user_id = r.user_id
+        <where>
+            <if test="keyword != null and keyword.trim() != ''">
+                u.username LIKE CONCAT('%', #{keyword}, '%')
+                OR u.nickname LIKE CONCAT('%', #{keyword}, '%')
+                OR u.school LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        GROUP BY r.rank_num, u.id, u.username, u.nickname, u.school,
+        r.total_score, r.ac, r.total_time, r.total_submissions
+        ORDER BY r.rank_num
+    </select>
+
 </mapper>

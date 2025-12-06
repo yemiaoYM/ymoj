@@ -554,19 +554,18 @@ export type ContestProblemVO={
 /**
  * 比赛用户提交VO
  */
-export type ContestUserSubmissionVO={
+export type ContestSubmissionVO={
   score: number;
   errorNum: number;
-  acTime: number;
-  ac: boolean;
-  firstAc: boolean;
+  actime: number;
+  isAC: boolean;
+  isFirstAC: boolean;
 }
 /**
  * 比赛用户排名VO
  */
-export type ContestUserRankVO={
+export type ContestRankVO={
   rank: number;
-  order: number;
   username: string;
   nickname: string;
   school: string|null;
@@ -574,7 +573,7 @@ export type ContestUserRankVO={
   total: number;
   totalScore: number;
   totalTime: number;
-  submissionInfo: Record<string, ContestUserSubmissionVO>;
+  submissionInfo: Record<string, ContestSubmissionVO>;
 }
 /**
  * 比赛排名VO
@@ -582,7 +581,7 @@ export type ContestUserRankVO={
 export type ContestRankTableVO={
   mode: number;
   problemInfoData: ContestProblemVO[];
-  userRankData: ContestUserRankVO[];
+  userRankData: ContestRankVO[];
   total: number;
 }
 /**

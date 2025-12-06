@@ -3,24 +3,37 @@
 <mapper namespace="com.ymcloud.core.web.mapper.ContestProblemMapper">
 
     <select id="getContestProblemList" resultType="com.ymcloud.pojo.vo.oj.ContestProblemTableVO">
+        WITH contest_info AS (
+            SELECT id, start_time, end_time
+            FROM contest
+            WHERE id = #{contestId}
+        ),
+        -- 先聚合赛时内的评测数据
+        judge_agg AS (
+             SELECT
+                 j.contest_id,
+                 j.display_id,
+                 SUM(j.status = 0) AS ac,
+                 COUNT(*) AS total,
+                 MAX(j.status = 0 AND j.user_id = #{userId}) AS is_accepted
+             FROM judge j
+             JOIN contest_info c
+                   ON j.contest_id = c.id
+                   AND j.created_time BETWEEN c.start_time AND c.end_time
+             GROUP BY j.contest_id, j.display_id
+        )
         SELECT
-            cp.id,
             cp.display_id,
-            cp.contest_id,
-            cp.problem_id,
             cp.display_title,
             cp.color,
-            COUNT(j.id) AS total,
-            SUM(j.status = 0) AS ac,
-            MAX(j.status = 0 AND j.user_id = #{userId}) AS is_accepted
+            COALESCE(ja.ac, 0) AS ac,
+            COALESCE(ja.total, 0) AS total,
+            COALESCE(ja.is_accepted, 0) AS is_accepted
         FROM contest_problem cp
-        LEFT JOIN judge j
-            ON j.contest_problem_id = cp.id
-            AND j.contest_id = cp.contest_id
-            AND j.problem_id = cp.problem_id
-            AND #{endTime}>=j.created_time
+        LEFT JOIN judge_agg ja
+        ON ja.contest_id = cp.contest_id
+        AND ja.display_id = cp.display_id
         WHERE cp.contest_id = #{contestId}
-        GROUP BY cp.id, cp.display_id, cp.contest_id, cp.problem_id, cp.display_title, cp.color
         ORDER BY cp.display_id;
     </select>
 

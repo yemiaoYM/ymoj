@@ -251,28 +251,30 @@
                 <!-- 比赛名称和进行状态 -->
                 <n-flex justify="space-between" align="center">
                   <span
-                    style="font-weight: 600; cursor: pointer"
+                    style="font-size: 16px;font-weight: 600; cursor: pointer"
                     @click="toContestDetail(contest.id)"
                     >{{ contest.title }}</span
                   >
-                  <el-tooltip
-                    effect="light"
-                    content="需要密码才能加入比赛"
-                    placement="top"
-                  >
-                    <el-icon v-show="contest.visibility" size="20">
-                      <Lock />
-                    </el-icon>
-                  </el-tooltip>
-                  <el-tag
-                    effect="dark"
-                    size="large"
-                    disable-transitions
-                    :type="getContestStatusType(contest.status)"
-                    round
-                  >
-                    {{ contest.status }}
-                  </el-tag>
+                  <n-flex align="center">
+                    <el-tooltip
+                      effect="light"
+                      content="需要密码才能加入比赛"
+                      placement="top"
+                    >
+                      <el-icon v-show="contest.visibility" size="20">
+                        <Lock />
+                      </el-icon>
+                    </el-tooltip>
+                    <el-tag
+                      effect="dark"
+                      size="large"
+                      disable-transitions
+                      :type="getContestStatusType(contest.status)"
+                      round
+                    >
+                      {{ contest.status }}
+                    </el-tag>
+                  </n-flex>
                 </n-flex>
 
                 <n-flex style="margin-top: 12px">

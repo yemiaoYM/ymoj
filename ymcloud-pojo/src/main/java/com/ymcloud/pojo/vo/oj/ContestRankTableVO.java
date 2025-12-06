@@ -26,7 +26,7 @@ public class ContestRankTableVO implements Serializable {
     /**
      * 用户排名信息
      */
-    private List<ContestUserRankVO> userRankData;
+    private List<ContestRankVO> userRankData;
     /**
      * 总记录数
      */

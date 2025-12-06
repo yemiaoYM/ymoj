@@ -20,9 +20,8 @@ public interface ContestProblemEntityService extends IService<ContestProblem> {
      * 获取比赛题目列表
      * @param contestId 比赛id
      * @param userId 用户id
-     * @param endTime 比赛结束时间
      * @return 比赛题目列表
      */
-    List<ContestProblemTableVO> getContestProblemList(Long contestId, Long userId, LocalDateTime endTime);
+    List<ContestProblemTableVO> getContestProblemList(Long contestId, Long userId);
 
 }

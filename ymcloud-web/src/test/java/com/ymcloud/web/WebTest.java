@@ -3,6 +3,7 @@ package com.ymcloud.web;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.RuntimeUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.common.utils.MailUtils;
@@ -10,6 +11,7 @@ import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.common.utils.ShortSnowflake;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.mapper.AuthMapper;
+import com.ymcloud.core.web.mapper.ContestMapper;
 import com.ymcloud.core.web.mapper.ContestProblemMapper;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
 import com.ymcloud.pojo.entity.Auth;
@@ -55,6 +57,16 @@ public class WebTest {
 
     @Autowired
     private AuthMapper authMapper;
+
+    @Autowired
+    private ContestMapper contestMapper;
+
+    @Test
+    public void getRank(){
+        Page<ContestRankVO> page = new Page<>(1, 5);
+        Page<ContestRankVO> oiContestRank = contestMapper.getOIContestRank(page, 10L, null);
+        System.out.println(oiContestRank);
+    }
 
     @Test
     public void testMenu(){
@@ -107,12 +119,6 @@ public class WebTest {
         //674858377103616
         //674858554624256
         //1954861094082318336
-    }
-
-    @Test
-    public void getDateStamp(){
-        List<ContestProblemTableVO> list = contestProblemMapper.getContestProblemList(1L, 1L, LocalDateTime.now());
-        list.forEach(System.out::println);
     }
 
     @Test

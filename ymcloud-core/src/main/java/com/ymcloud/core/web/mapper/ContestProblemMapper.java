@@ -23,11 +23,8 @@ public interface ContestProblemMapper extends BaseMapper<ContestProblem> {
      * 获取比赛题目列表
      * @param contestId 比赛id
      * @param userId 用户id
-     * @param endTime 比赛结束时间
      * @return 比赛题目列表
      */
-    List<ContestProblemTableVO> getContestProblemList(@Param("contestId") Long contestId,
-                                                      @Param("userId") Long userId,
-                                                      @Param("endTime") LocalDateTime endTime);
+    List<ContestProblemTableVO> getContestProblemList(@Param("contestId") Long contestId, @Param("userId") Long userId);
 
 }

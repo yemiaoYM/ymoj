@@ -184,7 +184,7 @@ public class ContestServiceImpl implements ContestService {
         Long userId = SecurityUtils.getUserId();
         Contest contest = validateContest(contestId, userId);
         //查询比赛题目列表
-        return contestProblemEntityService.getContestProblemList(contest.getId(),userId,contest.getEndTime());
+        return contestProblemEntityService.getContestProblemList(contest.getId(),userId);
     }
 
     /**
@@ -329,6 +329,7 @@ public class ContestServiceImpl implements ContestService {
     public ContestRankTableVO getContestRankList(ContestRankPageQuery query) {
         Long contestId = query.getContestId();
         Long userId = SecurityUtils.getUserId();
+        //关键词匹配 匹配用户名，学校
         String keyword = query.getKeyword();
         //检查比赛比赛情况
         Contest contest = validateContest(contestId, userId);
@@ -337,160 +338,23 @@ public class ContestServiceImpl implements ContestService {
         //比赛模式
         tableVO.setMode(contest.getMode());
         //查询比赛题目列表
-        List<ContestProblem> contestProblemList = contestProblemEntityService.lambdaQuery()
-                .eq(ContestProblem::getContestId, contestId)
-                .orderByAsc(ContestProblem::getDisplayId)
-                .list();
+        List<ContestProblemTableVO> contestProblemList = contestProblemEntityService.getContestProblemList(contest.getId(), userId);
         List<ContestProblemVO> problemList = BeanUtil.copyToList(contestProblemList, ContestProblemVO.class);
-        //查询所有比赛用户所有提交情况
-        List<ContestSubmissionRecord> recordList = judgeEntityService.
-                getContestSubmissionRecordList(contest.getId(), contest.getEndTime(), keyword);
-        //如果是空直接返回即可
-        if(CollectionUtil.isEmpty(recordList)){
-            return tableVO;
-        }
-        //按用户分组
-        Map<String, List<ContestSubmissionRecord>> userMap = recordList.stream()
-                .collect(Collectors.groupingBy(ContestSubmissionRecord::getUsername));
-        List<ContestUserRankVO> contestUserRankVOList = new ArrayList<>();
-        //比赛开始时间
-        LocalDateTime startTime = contest.getStartTime();
-        //遍历每个用户的比赛记录
-        userMap.forEach((key, value) -> {
-            ContestUserRankVO contestUserRankVO = new ContestUserRankVO();
-            contestUserRankVO.setUsername(key);
-            //取第一跳记录的学校和昵称即可
-            contestUserRankVO.setSchool(value.get(0).getSchool());
-            contestUserRankVO.setNickname(value.get(0).getNickname());
-            //统计用户每个题目的提交情况
-            Map<String,ContestUserSubmissionVO> submissionInfo=new HashMap<>();
-            int ac=0;
-            int total=0;
-            int totalScore=0;
-            long totalTime=0;
-            for(ContestProblemVO problem : problemList){
-                //获取当前题目的提交信息
-                List<ContestSubmissionRecord> list = value.stream()
-                        .filter(o -> problem.getDisplayId().equals(o.getDisplayId())).toList();
-                if(CollectionUtil.isEmpty(list))continue;
-                //构造提交详情实体
-                ContestUserSubmissionVO submissionVO = new ContestUserSubmissionVO();
-                //状态信息
-                int errorNum=0;
-                int score=0;
-                for(ContestSubmissionRecord record : list){
-                    //如果是评测进行状态则属于最后一个状态，此状态也不计入
-                    if(record.getStatus()==JudgeStatus.STATUS_PENDING
-                            ||record.getStatus()==JudgeStatus.STATUS_JUDGING
-                            ||record.getStatus()==JudgeStatus.STATUS_COMPILING){
-                        break;
-                    }
-                    //总提交数加一
-                    total++;
-                    //获取当前题目的最高得分
-                    if(record.getScore()!=null){
-                        score=Math.max(score,record.getScore());
-                    }
-                    //只统计第一次通过前的情况
-                    if(record.getStatus()==JudgeStatus.STATUS_ACCEPTED){
-                        //只有通过的题目才算罚时
-                        long acTime = LocalDateTimeUtil.between(startTime, record.getSubmitTime()).toMinutes() +
-                                errorNum * 20L;
-                        submissionVO.setAc(true);
-                        submissionVO.setAcTime(acTime);
-                        //用户通过数加一
-                        ac++;
-                        //将此题的罚时加给总罚时
-                        totalTime+=acTime;
-                        break;
-                    }else{
-                        errorNum++;
-                    }
-                }
-                submissionVO.setErrorNum(errorNum);
-                submissionVO.setScore(score);
-                submissionInfo.put(problem.getDisplayId(),submissionVO);
-                //设置此题目的通过数，总提交数，总分数
-                totalScore+=score;
-                if(submissionVO.isAc()){
-                    problem.setAc(problem.getAc()+1);
-                    problem.setTotal(problem.getTotal()+errorNum+1);
-                }else {
-                    problem.setTotal(problem.getTotal()+errorNum);
-                }
-            }
-            contestUserRankVO.setAc(ac);
-            contestUserRankVO.setTotal(total);
-            contestUserRankVO.setTotalScore(totalScore);
-            contestUserRankVO.setTotalTime(totalTime);
-            contestUserRankVO.setSubmissionInfo(submissionInfo);
-            contestUserRankVOList.add(contestUserRankVO);
-        });
-        //设置题目数据
         tableVO.setProblemInfoData(problemList);
-        //排名排序
-        if (contest.getMode() == ContestConstants.MODE_ACM) {
-            //ACM模式排名：先按照通过数降序（多的在前），再按照总时间升序（少的在前）
-            contestUserRankVOList.sort(Comparator
-                    .comparingInt(ContestUserRankVO::getAc).reversed()
-                    .thenComparingLong(ContestUserRankVO::getTotalTime)
-            );
-            //设置排名
-            for(int i=0;i<contestUserRankVOList.size();i++){
-                ContestUserRankVO vo = contestUserRankVOList.get(i);
-                //实际排名
-                vo.setOrder(i+1);
-                //展示排名
-                if(i==0){
-                    vo.setRank(1);
-                }else{
-                    ContestUserRankVO preVo = contestUserRankVOList.get(i - 1);
-                    if(vo.getAc()==preVo.getAc()&&vo.getTotalTime()==preVo.getTotalTime()){
-                        vo.setRank(preVo.getRank());
-                    }else vo.setRank(preVo.getRank()+1);
-                }
-            }
+        //分页处理
+        Page<ContestRankVO> page = new Page<>(query.getPageNo(),query.getPageSize());
+        //结果信息
+        Page<ContestRankVO> contestRank = null;
+        //根据模式获取排名信息
+        if(contest.getMode() == ContestConstants.MODE_ACM){
+            contestRank = contestEntityService.getAcmContestRank(page, contest.getId(),keyword);
+        }else if(contest.getMode() == ContestConstants.MODE_OI){
+            contestRank = contestEntityService.getOIContestRank(page, contest.getId(),keyword);
         }
-        else {
-            //IOI模式排名：先按照总分数降序（高的在前），再按照通过数降序（多的在前），再按照总时间升序（少的在前）
-            contestUserRankVOList.sort(Comparator
-                    .comparingInt(ContestUserRankVO::getTotalScore)
-                    .thenComparingInt(ContestUserRankVO::getAc).reversed()
-                    .thenComparingLong(ContestUserRankVO::getTotalTime)
-            );
-            //设置排名
-            for(int i=0;i<contestUserRankVOList.size();i++){
-                ContestUserRankVO vo = contestUserRankVOList.get(i);
-                //实际排名
-                vo.setOrder(i+1);
-                //展示排名
-                if(i==0){
-                    vo.setRank(1);
-                }else{
-                    ContestUserRankVO preVo = contestUserRankVOList.get(i - 1);
-                    if(vo.getTotalScore()== preVo.getTotalScore()
-                            && vo.getAc()==preVo.getAc()
-                            && vo.getTotalTime()==preVo.getTotalTime()){
-                        vo.setRank(preVo.getRank());
-                    }else vo.setRank(preVo.getRank()+1);
-                }
-            }
+        if(contestRank!=null){
+            tableVO.setUserRankData(contestRank.getRecords());
+            tableVO.setTotal(contestRank.getTotal());
         }
-        //分页参数
-        Integer pageNo = query.getPageNo();
-        Integer pageSize = query.getPageSize();
-        if (pageNo == null || pageNo <= 0) pageNo = 1;
-        if (pageSize == null || pageSize <= 0) pageSize = 50;
-        //总记录数
-        long total = contestUserRankVOList.size();
-        //计算当前页的起止索引
-        int fromIndex = (pageNo - 1) * pageSize;
-        int toIndex = Math.min(fromIndex + pageSize, (int) total);
-        List<ContestUserRankVO> records = contestUserRankVOList.subList(fromIndex, toIndex);
-        //设置用户排名数据
-        tableVO.setUserRankData(records);
-        //返回vo实体
-        tableVO.setTotal(total);
         return tableVO;
     }
 

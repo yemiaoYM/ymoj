@@ -98,15 +98,15 @@
           <span style="text-align: center;font-size: 20px;font-weight: bold;">标签分类</span>
         </template>
         <el-skeleton v-if="tagListLoading" style="width: 100%;" :rows="10" />
-        <n-flex v-else>
+        <n-flex v-else :size="8">
           <el-tag v-for="tag in tagsList" :key="tag.id" size="large" :color="tag.color"
-            style="color: white;font-size: 14px;padding: 20px;">
+            style="color: white;font-size: 15px;padding: 16px;">
             {{ tag.name }}
           </el-tag>
         </n-flex>
         <!-- 底部 -->
         <template #footer>
-          <el-button type="primary" :icon="MagicStick" style="height: 40px;" @click="handRandomProblem"
+          <el-button type="primary" :icon="MagicStick" style="height: 40px;width: 100%;" @click="handRandomProblem"
             color="#626aef">随机选择一题</el-button>
         </template>
       </el-card>
