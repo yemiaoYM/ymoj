@@ -37,42 +37,43 @@ service.interceptors.response.use(
       return Promise.resolve(response);
     }
     //请求成功，但业务异常
-    if(res.code === 500){
+    const showErrorMessage = !(response.config as any).skipErrorMessage;
+    if(res.code === 500 && showErrorMessage){
       ElMessage.error(res.msg);
     }
     //未登录
     if(res.code === 401){
-      ElMessage.error(res.msg);
+      if (showErrorMessage) ElMessage.error(res.msg);
       //清除缓存
       Storage.remove("Authorization");
     }
     //参数列表错误（缺少，格式不匹配）
-    if(res.code === 400){
+    if(res.code === 400 && showErrorMessage){
       ElMessage.warning(res.msg);
     }
     //访问受限，权限不足，授权过期
-    if(res.code === 403){
+    if(res.code === 403 && showErrorMessage){
       ElMessage.error(res.msg);
     }
     //未找到
-    if(res.code === 404){
+    if(res.code === 404 && showErrorMessage){
       ElMessage.error(res.msg);
     }
     return Promise.reject(response);
   },
   error => {
-    if(error.response){
-      let { message } = error;
-      if (message == "Network Error") {
-        message = "后端接口连接异常";
-      }else if (message.includes("timeout")) {
-        message = "系统接口请求超时";
-      }else if (message.includes("Request failed with status code")) {
-        message = "系统接口" + message.substr(message.length - 3) + "异常";
-      }
-      ElMessage.error(message);
-      return Promise.reject(error);
+    let { message } = error;
+    if (message === "Network Error") {
+      message = "后端接口连接异常";
+    } else if (message.includes("timeout")) {
+      message = "系统接口请求超时";
+    } else if (message.includes("Request failed with status code")) {
+      message = "系统接口" + message.substr(message.length - 3) + "异常";
     }
+    if (!(error.config as any)?.skipErrorMessage) {
+      ElMessage.error(message);
+    }
+    return Promise.reject(error);
   }
 );
 

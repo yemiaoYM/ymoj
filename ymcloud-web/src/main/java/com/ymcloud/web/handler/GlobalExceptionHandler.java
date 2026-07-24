@@ -14,6 +14,7 @@ import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -96,6 +97,28 @@ public class GlobalExceptionHandler {
     public Result<?> handleHttpMessageNotReadable(HttpMessageConversionException e, HttpServletRequest request) {
         log.warn("请求体无法读取，请求URI：{}，错误信息：{}", request.getRequestURI(), e.getMessage());
         return Result.fail().code(HttpStatus.BAD_REQUEST).msg("请求参数格式不正确，请检查输入数据");
+    }
+
+    /**
+     * multipart请求解析失败（文件数量、大小超限或请求不完整）
+     */
+    @ExceptionHandler(MultipartException.class)
+    public Result<?> handleMultipartException(MultipartException e, HttpServletRequest request) {
+        Throwable cause = e;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        String rootCause = cause.getClass().getSimpleName();
+        log.warn("文件上传解析失败，请求URI：{}，根因：{}，异常信息：{}",
+                request.getRequestURI(), rootCause, cause.getMessage());
+
+        String message = "上传请求解析失败，请检查文件大小后重试";
+        if ("FileCountLimitExceededException".equals(rootCause)) {
+            message = "单次上传的文件数量过多，系统将自动分批，请重新选择文件上传";
+        } else if (rootCause.contains("SizeLimit") || rootCause.contains("FileSizeLimit")) {
+            message = "上传文件超过大小限制，单个文件不能超过50MB";
+        }
+        return Result.fail().code(HttpStatus.BAD_REQUEST).msg(message);
     }
 
     /**

@@ -8,17 +8,20 @@ ymcloud:
 server:
     port: 9091
     address: 127.0.0.1
+    tomcat:
+        # 每组测试用例包含.in和.out两个multipart部件
+        max-part-count: 100
 spring:
     application:
       name: ymcloud
     profiles:
-        active: dev
+        active: prod
     servlet:
         multipart:
             # 单个文件大小
             max-file-size: 50MB
             # 设置总上传的文件大小
-            max-request-size: 100MB
+            max-request-size: 120MB
     rabbitmq:
         listener:
             simple:

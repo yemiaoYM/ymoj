@@ -17,6 +17,7 @@
             :http-request="uploadFiles"
             :before-upload="beforeUpload"
             :show-file-list="false"
+            :disabled="uploading"
             multiple
             accept=".in,.out"
           >
@@ -27,6 +28,11 @@
           <el-button type="danger" :icon="Delete" :disabled="selectedFiles.length === 0" @click="handleBatchDelete">批量删除</el-button>
           <el-button :icon="Refresh" @click="refreshTestCases">刷新</el-button>
         </n-flex>
+
+        <div v-if="uploading" class="upload-progress">
+          <div class="upload-progress__status">{{ uploadStatus }}</div>
+          <el-progress :percentage="uploadProgress" :stroke-width="20" :text-inside="true" striped />
+        </div>
 
         <!-- 上传提示信息 -->
         <el-alert
@@ -40,7 +46,7 @@
           <p>支持同时选择多个文件进行批量上传</p>
           <p>文件名建议使用数字编号，如：1.in, 1.out, 2.in, 2.out 等</p>
           <p>文件名也可以是其他命名，比如test01.in, test01.out, test02.in, test02.out 等</p>
-          <p>单个文件大小不能超过5MB</p>
+          <p>单个文件大小不能超过50MB，大批量文件会自动分批上传</p>
         </el-alert>
         
         <!-- 测试用例列表 -->
@@ -119,10 +125,17 @@ const problemId = ref<number>(Number(route.params.id));
 const testCaseList = ref<ProblemCaseInfoVO[]>([]);
 const loading = ref<boolean>(false);
 const uploading = ref<boolean>(false);
-const uploadRef = ref();
 const selectedFiles = ref<ProblemCaseInfoVO[]>([]);
 const uploadQueue = ref<File[]>([]);
-const isProcessingUpload = ref<boolean>(false);
+const uploadProgress = ref<number>(0);
+const uploadStatus = ref<string>('');
+let uploadTimer: ReturnType<typeof setTimeout> | undefined;
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_BATCH_SIZE = 20 * 1024 * 1024;
+// Tomcat 10.1 默认最多解析 10 个 multipart 部件，每组测试用例包含 2 个文件。
+const MAX_PAIRS_PER_BATCH = 5;
+const MAX_UPLOAD_ATTEMPTS = 3;
 
 
 //生命周期
@@ -186,9 +199,8 @@ const beforeUpload = (file: File) => {
     ElMessage.warning("只允许上传.in和.out格式的文件");
     return false;
   }
-  const maxSize = 5 * 1024 * 1024;
-  if (file.size > maxSize) {
-    ElMessage.warning("文件大小不能超过5MB");
+  if (file.size > MAX_FILE_SIZE) {
+    ElMessage.warning("单个文件大小不能超过50MB");
     return false;
   }
   return true;
@@ -243,41 +255,130 @@ const handleBack = () => {
 //提交上传
 const uploadFiles = (options: any) => {
   const { file } = options;
-  //将文件添加到上传队列
   uploadQueue.value.push(file);
-  //如果没有在处理上传，延迟一段时间后开始处理队列
-  if (!isProcessingUpload.value) {
-    setTimeout(() => {
-      processUploadQueue();
-    }, 500);
+  if (uploadTimer) clearTimeout(uploadTimer);
+  // el-upload 会为每个文件分别触发一次自定义请求，等待选择事件收集完成后统一配对。
+  uploadTimer = setTimeout(processUploadQueue, 300);
+};
+
+const buildUploadBatches = (files: File[]) => {
+  const pairs = new Map<string, { in?: File; out?: File }>();
+  files.forEach(file => {
+    const dotIndex = file.name.lastIndexOf('.');
+    const baseName = file.name.slice(0, dotIndex);
+    const extension = file.name.slice(dotIndex + 1) as 'in' | 'out';
+    const pair = pairs.get(baseName) || {};
+    if (pair[extension]) {
+      throw new Error(`存在重名文件：${file.name}`);
+    }
+    pair[extension] = file;
+    pairs.set(baseName, pair);
+  });
+
+  const orderedPairs = [...pairs.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+    .map(([baseName, pair]) => {
+      if (!pair.in || !pair.out) {
+        throw new Error(`测试用例 ${baseName} 缺少配对的 .in 或 .out 文件`);
+      }
+      return [pair.in, pair.out];
+    });
+
+  const batches: File[][] = [];
+  let currentBatch: File[] = [];
+  let currentSize = 0;
+  orderedPairs.forEach(pair => {
+    const pairSize = pair[0].size + pair[1].size;
+    const reachedSizeLimit = currentSize + pairSize > MAX_BATCH_SIZE;
+    const reachedCountLimit = currentBatch.length / 2 >= MAX_PAIRS_PER_BATCH;
+    if (currentBatch.length > 0 && (reachedSizeLimit || reachedCountLimit)) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentSize = 0;
+    }
+    currentBatch.push(...pair);
+    currentSize += pairSize;
+  });
+  if (currentBatch.length > 0) batches.push(currentBatch);
+  return { batches, pairCount: orderedPairs.length };
+};
+
+const shouldRetryUpload = (error: any) => {
+  if (!error?.isAxiosError) return false;
+  return !error.response || error.response.status >= 500;
+};
+
+const getUploadErrorMessage = (error: any) => {
+  if (error?.data?.msg) return error.data.msg;
+  if (error?.response?.data?.msg) return error.response.data.msg;
+  if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) return '上传超时';
+  if (error?.message === 'Network Error') return '网络连接中断';
+  return error?.message || '上传失败';
+};
+
+const uploadBatch = async (
+  files: File[],
+  completedBytes: number,
+  totalBytes: number
+) => {
+  const formData = new FormData();
+  files.forEach(file => formData.append('file', file));
+  const batchSize = files.reduce((sum, file) => sum + file.size, 0);
+  let maxLoaded = 0;
+
+  for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt++) {
+    try {
+      await uploadTestCaseFiles(problemId.value, formData, event => {
+        maxLoaded = Math.max(maxLoaded, Math.min(event.loaded, batchSize));
+        uploadProgress.value = totalBytes === 0
+          ? 100
+          : Math.min(99, Math.round((completedBytes + maxLoaded) / totalBytes * 100));
+      });
+      return;
+    } catch (error) {
+      if (attempt === MAX_UPLOAD_ATTEMPTS || !shouldRetryUpload(error)) throw error;
+      uploadStatus.value = `连接中断，正在进行第 ${attempt + 1} 次尝试...`;
+      await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+    }
   }
 };
+
 //处理上传队列
-const processUploadQueue = () => {
-  if (isProcessingUpload.value || uploadQueue.value.length === 0) {
+const processUploadQueue = async () => {
+  uploadTimer = undefined;
+  if (uploading.value || uploadQueue.value.length === 0) {
     return;
   }
-  isProcessingUpload.value = true;
   uploading.value = true;
-  //获取队列中的所有文件
-  const filesToUpload = [...uploadQueue.value];
-  //清空队列
-  uploadQueue.value = []; 
-  //创建FormData
-  const formData = new FormData();
-  filesToUpload.forEach(file => {
-    formData.append('file', file);
-  });
-  //执行上传
-  uploadTestCaseFiles(problemId.value, formData).then(response=>{
-    ElMessage.success(response.data.msg);
-    loadTestCases();
-  }).catch(e=>{
-    console.log(e);
-  }).finally(()=>{
-    isProcessingUpload.value = false;
+  uploadProgress.value = 0;
+  const filesToUpload = uploadQueue.value.splice(0);
+  let uploadedPairs = 0;
+  let pairCount = 0;
+
+  try {
+    const uploadPlan = buildUploadBatches(filesToUpload);
+    pairCount = uploadPlan.pairCount;
+    const totalBytes = filesToUpload.reduce((sum, file) => sum + file.size, 0);
+    let completedBytes = 0;
+
+    for (let index = 0; index < uploadPlan.batches.length; index++) {
+      const batch = uploadPlan.batches[index];
+      uploadStatus.value = `正在上传第 ${index + 1}/${uploadPlan.batches.length} 批（已完成 ${uploadedPairs}/${pairCount} 组）`;
+      await uploadBatch(batch, completedBytes, totalBytes);
+      completedBytes += batch.reduce((sum, file) => sum + file.size, 0);
+      uploadedPairs += batch.length / 2;
+      uploadProgress.value = Math.round(completedBytes / totalBytes * 100);
+    }
+
+    ElMessage.success(`成功上传 ${pairCount} 组测试用例`);
+  } catch (error) {
+    const completed = uploadedPairs > 0 ? `，已成功上传 ${uploadedPairs}/${pairCount} 组` : '';
+    ElMessage.error(`${getUploadErrorMessage(error)}${completed}`);
+  } finally {
+    if (uploadedPairs > 0) loadTestCases();
     uploading.value = false;
-  });
+    uploadStatus.value = '';
+  }
 };
 </script>
 
@@ -297,6 +398,16 @@ const processUploadQueue = () => {
 
 :deep(.el-upload) {
   display: inline-block;
+}
+
+.upload-progress {
+  margin-bottom: 15px;
+}
+
+.upload-progress__status {
+  margin-bottom: 6px;
+  color: #606266;
+  font-size: 13px;
 }
 
 :deep(.el-alert__content) {

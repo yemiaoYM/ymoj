@@ -635,11 +635,18 @@ export function getProblemTestCases(problemId: number) {
  * @param problemId 题目ID
  * @param files 文件列表
  */
-export function uploadTestCaseFiles(problemId: number, files: FormData) {
+export function uploadTestCaseFiles(
+  problemId: number,
+  files: FormData,
+  onUploadProgress?: (event: { loaded: number; total?: number }) => void
+) {
   return request({
     url: `/admin/problem/${problemId}/testcases/upload`,
     method: "POST",
     data: files,
+    timeout: 5 * 60 * 1000,
+    onUploadProgress,
+    skipErrorMessage: true,
     headers: {
       'Content-Type': 'multipart/form-data'
     }

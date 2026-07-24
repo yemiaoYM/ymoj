@@ -37,7 +37,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.nio.file.Paths;
 import java.util.Objects;
 
@@ -51,6 +53,8 @@ import java.util.Objects;
 @Slf4j
 @Service
 public class AdminProblemServiceImpl implements AdminProblemService {
+
+    private static final long MAX_TEST_CASE_FILE_SIZE = 50L * 1024 * 1024;
 
     @Value("${ymcloud.file.base-dir}")
     private String fileUploadPath;
@@ -319,7 +323,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
             //检查目录是否存在
             FileUtil.mkdir(inDir);
             FileUtil.mkdir(outDir);
-            List<String> fileNames = new ArrayList<>();
+            Set<String> fileNames = new HashSet<>();
             //检查格式和参数
             for (MultipartFile file : files) {
                 //检查文件是否为空
@@ -327,8 +331,8 @@ public class AdminProblemServiceImpl implements AdminProblemService {
                     throw new ProblemException("文件不能为空");
                 }
                 //检查文件大小
-                if (file.getSize() > 5 * 1024 * 1024) {
-                    throw new ProblemException("文件大小不能超过5MB");
+                if (file.getSize() > MAX_TEST_CASE_FILE_SIZE) {
+                    throw new ProblemException("单个文件大小不能超过50MB");
                 }
                 String filename = Paths.get(Objects.requireNonNull(file.getOriginalFilename())).getFileName().toString();
                 //检查文件名是否为空
@@ -341,7 +345,9 @@ public class AdminProblemServiceImpl implements AdminProblemService {
                     throw new ProblemException("只支持上传.in和.out格式的测试样例文件");
                 }
                 //case1.in case1.out
-                fileNames.add(filename);
+                if (!fileNames.add(filename)) {
+                    throw new ProblemException("存在重名文件：" + filename);
+                }
             }
             //检查是否配对
             for (String fileName : fileNames) {
@@ -369,6 +375,8 @@ public class AdminProblemServiceImpl implements AdminProblemService {
             }
             //重新生成info.json文件
             generateInfoJson(problemId);
+        } catch (ProblemException e) {
+            throw e;
         } catch (Exception e) {
             throw new ProblemException("上传文件失败",e);
         }
