@@ -634,6 +634,7 @@ export function getProblemTestCases(problemId: number) {
  * 上传测试用例文件
  * @param problemId 题目ID
  * @param files 文件列表
+ * @param onUploadProgress
  */
 export function uploadTestCaseFiles(
   problemId: number,
@@ -665,6 +666,7 @@ export function downloadTestCaseFile(problemId: number, fileName: string) {
     url: `/admin/problem/${problemId}/testcases/download`,
     method: "GET",
     params,
+    timeout: 5 * 60 * 1000,
     responseType: 'blob'
   })
 }

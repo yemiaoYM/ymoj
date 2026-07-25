@@ -15,7 +15,7 @@ spring:
     application:
       name: ymcloud
     profiles:
-        active: prod
+        active: dev
     servlet:
         multipart:
             # 单个文件大小
