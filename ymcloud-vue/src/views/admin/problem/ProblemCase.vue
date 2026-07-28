@@ -109,80 +109,69 @@
         </el-table>
       </el-card>
     </n-flex>
-
     <el-dialog
       v-model="previewVisible"
-      :title="`测试用例内容 · ${previewCaseName}`"
-      width="92%"
+      width="85%"
       top="5vh"
       destroy-on-close
-      class="case-preview-dialog"
       @closed="handlePreviewClosed"
+      :show-close="false"
     >
+      <template #header>
+        <div class="dialog-header">
+          <h4 style="font-weight: bold;font-size: large">{{previewCaseName}}测试用例内容</h4>
+          <el-button type="danger" @click="previewVisible = false">
+            <el-icon class="el-icon--left"><CircleCloseFilled /></el-icon>
+            Close
+          </el-button>
+        </div>
+      </template>
       <div v-loading="previewLoading" class="case-preview-grid">
-        <section
+        <el-card
           v-for="preview in previewFiles"
           :key="preview.kind"
-          class="case-preview-pane"
+          shadow="never"
+          class="case-preview-card"
         >
-          <header class="case-preview-pane__header">
-            <div class="case-preview-pane__identity">
-              <span
-                class="case-preview-pane__kind"
-                :class="`case-preview-pane__kind--${preview.kind}`"
-              >
-                {{ preview.kind === 'input' ? 'IN' : 'OUT' }}
-              </span>
-              <div class="case-preview-pane__file">
-                <strong>{{ getDisplayFileName(preview.fileName) }}</strong>
-                <span v-if="preview.size > 0">{{ formatFileSize(preview.size) }}</span>
-              </div>
-            </div>
-            <div class="case-preview-pane__actions">
-              <el-tooltip content="复制当前内容" placement="top">
-                <el-button
-                  circle
-                  :icon="DocumentCopy"
-                  :disabled="!!preview.error || previewLoading"
-                  aria-label="复制当前内容"
-                  @click="copyPreviewContent(preview)"
-                />
-              </el-tooltip>
-              <el-tooltip content="下载完整文件" placement="top">
-                <el-button
-                  circle
-                  :icon="Download"
-                  aria-label="下载完整文件"
-                  @click="handleDownload(preview.fileName)"
-                />
-              </el-tooltip>
-            </div>
-          </header>
+          <template #header>
+            <n-flex justify="space-between" align="center" :wrap="false">
+              <n-flex align="center" :size="10" :wrap="false" class="case-preview-card__title">
+                <el-tag :type="preview.kind === 'input' ? 'primary' : 'success'" effect="dark">
+                  {{ preview.kind === 'input' ? '输入' : '输出' }}
+                </el-tag>
+                <el-text truncated>{{ getDisplayFileName(preview.fileName) }}</el-text>
+              </n-flex>
+              <el-text v-if="preview.size > 0" type="info" size="small">
+                {{ formatFileSize(preview.size) }}
+              </el-text>
+            </n-flex>
+          </template>
 
-          <div class="case-preview-pane__body">
-            <el-empty v-if="preview.error" :description="preview.error" :image-size="56" />
-            <div v-else-if="!previewLoading && preview.content.length === 0" class="case-preview-empty">
-              空文件
-            </div>
-            <pre v-else>{{ preview.content }}</pre>
+          <div class="case-preview-card__content">
+            <el-empty v-if="preview.error" :description="preview.error" :image-size="64" />
+            <PlainTextViewer
+              v-else
+              :content="preview.content"
+              :aria-label="`${preview.kind === 'input' ? '输入' : '输出'}文件内容`"
+            />
           </div>
 
-          <footer v-if="preview.truncated && !preview.error" class="case-preview-pane__notice">
-            <span>文件较大，当前显示前 {{ formatFileSize(PREVIEW_SIZE_LIMIT) }}</span>
+          <div v-if="preview.truncated && !preview.error" class="case-preview-card__notice">
+            <el-text type="warning" size="small">
+              当前显示前 {{ formatFileSize(PREVIEW_SIZE_LIMIT) }}
+            </el-text>
             <el-button
               type="primary"
+              size="small"
               link
               :loading="preview.fullLoading"
               @click="loadFullPreview(preview)"
             >
               加载完整内容
             </el-button>
-          </footer>
-        </section>
+          </div>
+        </el-card>
       </div>
-      <template #footer>
-        <el-button @click="previewVisible = false">关闭</el-button>
-      </template>
     </el-dialog>
   </div>
 </template>
@@ -192,7 +181,8 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowLeft, Upload, Delete, Refresh, Download, DocumentCopy, View } from '@element-plus/icons-vue';
+import { ArrowLeft, Upload, Delete, Refresh, Download, View, CircleCloseFilled } from '@element-plus/icons-vue';
+import PlainTextViewer from '@/components/common/PlainTextViewer.vue';
 import type { ProblemCaseInfoVO } from '@/type/types';
 import {
   getProblemTestCases,
@@ -415,15 +405,6 @@ const loadFullPreview = async (preview: PreviewFileState) => {
   }
 };
 
-const copyPreviewContent = async (preview: PreviewFileState) => {
-  try {
-    await navigator.clipboard.writeText(preview.content);
-    ElMessage.success(preview.truncated ? '已复制当前预览内容' : '文件内容已复制');
-  } catch (error) {
-    console.error(error);
-    ElMessage.error('复制失败');
-  }
-};
 //删除配对文件
 const handleDeletePair = (row: ProblemCaseInfoVO) => {
   ElMessageBox.confirm(
@@ -605,12 +586,11 @@ const processUploadQueue = async () => {
   font-size: 13px;
 }
 
-:global(.case-preview-dialog) {
-  max-width: 1400px;
-}
-
-:global(.case-preview-dialog .el-dialog__body) {
-  padding-top: 8px;
+.dialog-header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .case-preview-grid {
@@ -621,132 +601,55 @@ const processUploadQueue = async () => {
   min-height: 420px;
 }
 
-.case-preview-pane {
+.case-preview-card {
   display: flex;
   min-width: 0;
-  min-height: 420px;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  background: #ffffff;
 }
 
-.case-preview-pane__header {
+:deep(.case-preview-card .el-card__header) {
+  padding: 12px 14px;
+}
+
+:deep(.case-preview-card .el-card__body) {
   display: flex;
-  min-height: 58px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #e4e7ed;
-  background: #f8f9fb;
-}
-
-.case-preview-pane__identity,
-.case-preview-pane__actions {
-  display: flex;
-  align-items: center;
-}
-
-.case-preview-pane__identity {
-  min-width: 0;
-  gap: 10px;
-}
-
-.case-preview-pane__actions {
-  flex: 0 0 auto;
-  gap: 6px;
-}
-
-.case-preview-pane__kind {
-  display: inline-flex;
-  width: 38px;
-  height: 24px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  color: #ffffff;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.case-preview-pane__kind--input {
-  background: #337ecc;
-}
-
-.case-preview-pane__kind--output {
-  background: #529b2e;
-}
-
-.case-preview-pane__file {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.case-preview-pane__file strong {
-  overflow: hidden;
-  color: #303133;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.case-preview-pane__file span {
-  color: #909399;
-  font-size: 12px;
-}
-
-.case-preview-pane__body {
-  position: relative;
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  background: #1f2329;
+  flex-direction: column;
+  padding: 0;
 }
 
-.case-preview-pane__body pre {
-  min-height: 100%;
-  margin: 0;
-  padding: 14px 16px;
-  box-sizing: border-box;
-  color: #e6edf3;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 13px;
-  line-height: 1.65;
-  tab-size: 4;
-  white-space: pre;
+.case-preview-card__title {
+  min-width: 0;
+  overflow: hidden;
 }
 
-.case-preview-pane__body :deep(.el-empty) {
-  height: 100%;
-  background: #ffffff;
+.case-preview-card__title :deep(.el-text) {
+  min-width: 0;
 }
 
-.case-preview-empty {
-  display: grid;
-  min-height: 100%;
-  place-items: center;
-  color: #909399;
-  background: #ffffff;
-  font-size: 13px;
-}
-
-.case-preview-pane__notice {
+.case-preview-card__content {
   display: flex;
-  min-height: 38px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.case-preview-card__content :deep(.el-empty) {
+  width: 100%;
+  height: 100%;
+}
+
+.case-preview-card__notice {
+  display: flex;
+  min-height: 40px;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
   padding: 0 12px;
   border-top: 1px solid #e4e7ed;
-  color: #606266;
   background: #fdf6ec;
-  font-size: 12px;
 }
 
 @media (max-width: 900px) {
@@ -755,9 +658,8 @@ const processUploadQueue = async () => {
     height: auto;
   }
 
-  .case-preview-pane {
-    height: 360px;
-    min-height: 320px;
+  .case-preview-card {
+    height: 380px;
   }
 }
 
