@@ -1,69 +1,52 @@
 <!--
-  PlainTextViewer：轻量级只读纯文本查看器。
-  使用两个 <pre> 文本节点分别渲染行号和内容，不会为每一行创建 Vue 节点。
+  轻量级大文本查看器：只渲染可视区域附近的正文和行号，不随文件总行数增加 DOM。
 
-  最简用法：
   <PlainTextViewer :content="text" />
+  <PlainTextViewer :content="text" aria-label="输入文件" :tab-size="4" />
 
-  属性用法：
-  <PlainTextViewer
-    :content="text"
-    aria-label="输入文件内容"
-    empty-text="文件内容为空"
-    :show-line-numbers="true"
-    :tab-size="4"
-  />
-
-  通过组件 ref 可调用：focus()、scrollToTop()、scrollToLine(line, options)。
+  组件 ref 可调用 focus()、scrollToTop()、scrollToLine(line, options)。
 -->
 <template>
-  <div
-    ref="viewportRef"
-    class="plain-text-viewer"
-    :class="{ 'plain-text-viewer--without-line-numbers': !showLineNumbers }"
-    :style="viewerStyle"
-    role="region"
-    :aria-label="ariaLabel"
-    :aria-describedby="descriptionId"
-    aria-readonly="true"
-    tabindex="0"
-    translate="no"
-    spellcheck="false"
-  >
-    <span :id="descriptionId" class="plain-text-viewer__sr-only">
-      {{ accessibleDescription }}
-    </span>
+  <div ref="rootRef" class="plain-text-viewer">
+    <aside
+      v-if="showLineNumbers"
+      class="plain-text-viewer__gutter"
+      :style="gutterStyle"
+      aria-hidden="true"
+    >
+      <pre class="plain-text-viewer__line-numbers" :style="lineNumbersStyle">{{ visibleLineNumbers }}</pre>
+    </aside>
 
-    <div class="plain-text-viewer__row">
-      <pre
-        v-if="showLineNumbers"
-        class="plain-text-viewer__line-numbers"
-        :style="lineNumberStyle"
-        aria-hidden="true"
-      >{{ viewerMeta.lineNumbers }}</pre>
-      <pre ref="contentRef" class="plain-text-viewer__content">{{ content }}</pre>
+    <div
+      ref="scrollerRef"
+      class="plain-text-viewer__scroller"
+      role="region"
+      :aria-label="ariaLabel"
+      :aria-describedby="descriptionId"
+      tabindex="0"
+      @scroll="handleScroll"
+    >
+      <div class="plain-text-viewer__spacer" :style="spacerStyle" aria-hidden="true" />
+      <pre class="plain-text-viewer__content" :style="contentStyle">{{ visibleContent }}</pre>
     </div>
 
     <span v-if="!content && emptyText" class="plain-text-viewer__empty" aria-hidden="true">
       {{ emptyText }}
     </span>
+    <span ref="measureRef" class="plain-text-viewer__measure" aria-hidden="true">0000000000</span>
+    <span :id="descriptionId" class="plain-text-viewer__sr-only">{{ accessibleDescription }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import type { CSSProperties } from 'vue';
 
 interface PlainTextViewerProps {
-  /** 要显示的纯文本内容。 */
   content?: string;
-  /** 查看区域的无障碍名称。 */
   ariaLabel?: string;
-  /** content 为空时的提示；传入空字符串可隐藏提示。 */
   emptyText?: string;
-  /** 是否显示行号。 */
   showLineNumbers?: boolean;
-  /** Tab 显示宽度，有效范围为 1-16。 */
   tabSize?: number;
 }
 
@@ -80,82 +63,182 @@ const props = withDefaults(defineProps<PlainTextViewerProps>(), {
   tabSize: 4
 });
 
-const viewportRef = ref<HTMLElement>();
-const contentRef = ref<HTMLElement>();
-const descriptionId = `plain-text-viewer-${useId()}`;
+const PADDING_X = 16;
+const PADDING_Y = 12;
+const OVERSCAN_LINES = 5;
+const OVERSCAN_COLUMNS = 30;
+const LONG_LINE_THRESHOLD = 10_000;
 
-// 行号始终合并在一个文本节点中，避免长文本产生大量 DOM 节点。
-const viewerMeta = computed(() => {
-  let lineCount = 1;
+const rootRef = ref<HTMLElement>();
+const scrollerRef = ref<HTMLElement>();
+const measureRef = ref<HTMLElement>();
+const scrollTop = ref(0);
+const scrollLeft = ref(0);
+const viewportWidth = ref(0);
+const viewportHeight = ref(0);
+const lineHeight = ref(23.8);
+const characterWidth = ref(8.4);
+const descriptionId = `plain-text-viewer-${useId()}`;
+let resizeObserver: ResizeObserver | undefined;
+let scrollFrame: number | undefined;
+
+// 仅保存每行起点，不拆分或复制整份正文。
+const textModel = computed(() => {
+  const lineStarts = [0];
+  let columns = 0;
+  let maxColumns = 0;
+  let canVirtualizeColumns = true;
+
   for (let index = 0; index < props.content.length; index++) {
-    const character = props.content.charCodeAt(index);
-    if (character === 10 || (character === 13 && props.content.charCodeAt(index + 1) !== 10)) {
-      lineCount++;
+    const code = props.content.charCodeAt(index);
+    if (code === 10 || code === 13) {
+      maxColumns = Math.max(maxColumns, columns);
+      columns = 0;
+      if (code === 13 && props.content.charCodeAt(index + 1) === 10) index++;
+      lineStarts.push(index + 1);
+      continue;
+    }
+
+    if (code === 9) {
+      const tabSize = normalizedTabSize.value;
+      columns += tabSize - columns % tabSize;
+      canVirtualizeColumns = false;
+    } else {
+      columns += code > 127 ? 2 : 1;
+      if (code > 127) canVirtualizeColumns = false;
     }
   }
 
-  if (!props.showLineNumbers) {
-    return { lineCount, lineNumbers: '' };
-  }
-
-  const numbers = new Array<string>(lineCount);
-  for (let line = 1; line <= lineCount; line++) {
-    numbers[line - 1] = String(line);
-  }
-
   return {
-    lineCount,
-    lineNumbers: numbers.join('\n')
+    lineStarts,
+    lineCount: lineStarts.length,
+    maxColumns: Math.max(maxColumns, columns),
+    canVirtualizeColumns
   };
 });
 
 const normalizedTabSize = computed(() => Number.isFinite(props.tabSize)
-    ? Math.min(16, Math.max(1, Math.round(props.tabSize)))
-    : 4);
+  ? Math.min(16, Math.max(1, Math.round(props.tabSize)))
+  : 4);
 
-const viewerStyle = computed<CSSProperties>(() => ({
-  tabSize: String(normalizedTabSize.value)
-}));
-
-const lineNumberStyle = computed<CSSProperties>(() => ({
-  width: `calc(${String(viewerMeta.value.lineCount).length}ch + 28px)`
-}));
-
-const accessibleDescription = computed(() => {
-  const summary = `共 ${viewerMeta.value.lineCount} 行`;
-  return props.content ? summary : `${summary}，${props.emptyText || '内容为空'}`;
+const visibleLines = computed(() => {
+  const first = Math.floor(Math.max(0, scrollTop.value - PADDING_Y) / lineHeight.value);
+  const start = Math.max(0, first - OVERSCAN_LINES);
+  const count = Math.ceil(viewportHeight.value / lineHeight.value) + OVERSCAN_LINES * 2;
+  return { start, end: Math.min(textModel.value.lineCount, start + Math.max(1, count)) };
 });
 
-const focus = (options?: FocusOptions) => viewportRef.value?.focus(options);
+const visibleColumns = computed(() => {
+  if (!textModel.value.canVirtualizeColumns || textModel.value.maxColumns < LONG_LINE_THRESHOLD) {
+    return { start: 0, end: Number.POSITIVE_INFINITY };
+  }
+  const first = Math.floor(Math.max(0, scrollLeft.value - PADDING_X) / characterWidth.value);
+  const start = Math.max(0, first - OVERSCAN_COLUMNS);
+  const count = Math.ceil(viewportWidth.value / characterWidth.value) + OVERSCAN_COLUMNS * 2;
+  return { start, end: start + count };
+});
 
-const scrollToTop = (behavior: ScrollBehavior = 'auto') => {
-  viewportRef.value?.scrollTo({ top: 0, left: 0, behavior });
+const visibleContent = computed(() => {
+  const { lineStarts } = textModel.value;
+  const { start, end } = visibleLines.value;
+  const columns = visibleColumns.value;
+
+  if (columns.start === 0 && columns.end === Number.POSITIVE_INFINITY) {
+    const startOffset = lineStarts[start];
+    const endOffset = end < lineStarts.length ? lineStarts[end] : props.content.length;
+    return props.content.slice(startOffset, endOffset);
+  }
+
+  const lines = new Array<string>(end - start);
+  for (let line = start; line < end; line++) {
+    const lineStart = lineStarts[line];
+    const nextLineStart = line + 1 < lineStarts.length ? lineStarts[line + 1] : props.content.length;
+    let lineEnd = nextLineStart;
+    while (lineEnd > lineStart && (props.content.charCodeAt(lineEnd - 1) === 10 || props.content.charCodeAt(lineEnd - 1) === 13)) {
+      lineEnd--;
+    }
+    lines[line - start] = props.content.slice(lineStart + columns.start, Math.min(lineEnd, lineStart + columns.end));
+  }
+  return lines.join('\n');
+});
+
+const visibleLineNumbers = computed(() => {
+  const { start, end } = visibleLines.value;
+  return Array.from({ length: end - start }, (_, index) => String(start + index + 1)).join('\n');
+});
+
+const gutterStyle = computed<CSSProperties>(() => ({
+  width: `calc(${String(textModel.value.lineCount).length}ch + 28px)`
+}));
+
+const virtualTop = computed(() => PADDING_Y + visibleLines.value.start * lineHeight.value);
+const contentStyle = computed<CSSProperties>(() => ({
+  top: `${virtualTop.value}px`,
+  left: `${PADDING_X + visibleColumns.value.start * characterWidth.value}px`,
+  tabSize: String(normalizedTabSize.value)
+}));
+const lineNumbersStyle = computed<CSSProperties>(() => ({
+  transform: `translateY(${virtualTop.value - scrollTop.value}px)`
+}));
+const spacerStyle = computed<CSSProperties>(() => ({
+  width: `max(100%, ${PADDING_X * 2 + textModel.value.maxColumns * characterWidth.value}px)`,
+  height: `${PADDING_Y * 2 + textModel.value.lineCount * lineHeight.value}px`
+}));
+
+const accessibleDescription = computed(() => props.content
+  ? `共 ${textModel.value.lineCount} 行`
+  : `共 1 行，${props.emptyText || '内容为空'}`);
+
+const updateMetrics = () => {
+  const scroller = scrollerRef.value;
+  const measure = measureRef.value;
+  if (!scroller || !measure) return;
+  const style = window.getComputedStyle(measure);
+  const measuredLineHeight = Number.parseFloat(style.lineHeight);
+  const measuredCharacterWidth = measure.getBoundingClientRect().width / 10;
+  if (Number.isFinite(measuredLineHeight)) lineHeight.value = measuredLineHeight;
+  if (Number.isFinite(measuredCharacterWidth) && measuredCharacterWidth > 0) characterWidth.value = measuredCharacterWidth;
+  viewportWidth.value = scroller.clientWidth;
+  viewportHeight.value = scroller.clientHeight;
 };
 
+const handleScroll = () => {
+  if (scrollFrame !== undefined) return;
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = undefined;
+    scrollTop.value = scrollerRef.value?.scrollTop || 0;
+    scrollLeft.value = scrollerRef.value?.scrollLeft || 0;
+  });
+};
+
+const focus = (options?: FocusOptions) => scrollerRef.value?.focus(options);
+const scrollToTop = (behavior: ScrollBehavior = 'auto') => scrollerRef.value?.scrollTo({ top: 0, left: 0, behavior });
 const scrollToLine = (line: number, options: ScrollToLineOptions = {}) => {
-  const viewport = viewportRef.value;
-  const content = contentRef.value;
-  if (!viewport || !content || !Number.isFinite(line)) return;
-
-  const targetLine = Math.min(viewerMeta.value.lineCount, Math.max(1, Math.trunc(line)));
-  const computedStyle = window.getComputedStyle(content);
-  const lineHeight = Number.parseFloat(computedStyle.lineHeight);
-  const paddingTop = Number.parseFloat(computedStyle.paddingTop) || 0;
-  if (!Number.isFinite(lineHeight)) return;
-
-  const lineTop = paddingTop + (targetLine - 1) * lineHeight;
+  const scroller = scrollerRef.value;
+  if (!scroller || !Number.isFinite(line)) return;
+  const target = Math.min(textModel.value.lineCount, Math.max(1, Math.trunc(line)));
   const block = options.block || 'start';
   const offset = block === 'center'
-    ? (viewport.clientHeight - lineHeight) / 2
-    : block === 'end'
-      ? viewport.clientHeight - lineHeight - paddingTop
-      : paddingTop;
-
-  viewport.scrollTo({
-    top: Math.max(0, lineTop - offset),
+    ? (scroller.clientHeight - lineHeight.value) / 2
+    : block === 'end' ? scroller.clientHeight - lineHeight.value - PADDING_Y : PADDING_Y;
+  scroller.scrollTo({
+    top: Math.max(0, PADDING_Y + (target - 1) * lineHeight.value - offset),
     behavior: options.behavior || 'auto'
   });
 };
+
+watch(() => props.content, () => nextTick(updateMetrics));
+onMounted(() => {
+  updateMetrics();
+  if (typeof ResizeObserver !== 'undefined' && rootRef.value) {
+    resizeObserver = new ResizeObserver(updateMetrics);
+    resizeObserver.observe(rootRef.value);
+  }
+});
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+});
 
 defineExpose({ focus, scrollToTop, scrollToLine });
 </script>
@@ -163,34 +246,48 @@ defineExpose({ focus, scrollToTop, scrollToLine });
 <style scoped>
 .plain-text-viewer {
   position: relative;
+  display: flex;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+  color: var(--el-text-color-primary, #303133);
+  background: var(--el-bg-color, #fff);
+}
+
+.plain-text-viewer__gutter {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  min-width: 48px;
+  height: 100%;
+  overflow: hidden;
+  border-right: 1px solid var(--el-border-color-lighter, #ebeef5);
+  color: var(--el-text-color-secondary, #909399);
+  background: var(--el-fill-color-light, #f5f7fa);
+  user-select: none;
+}
+
+.plain-text-viewer__scroller {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  color: var(--el-text-color-primary, #303133);
-  background: var(--el-bg-color, #ffffff);
   outline: none;
   scrollbar-color: var(--el-scrollbar-bg-color, #c0c4cc) transparent;
   scrollbar-gutter: stable;
-  -webkit-overflow-scrolling: touch;
 }
 
-.plain-text-viewer:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--el-color-primary-light-5, #79bbff);
-}
-
-.plain-text-viewer__row {
-  display: flex;
-  width: max-content;
-  min-width: 100%;
-  min-height: 100%;
-  align-items: stretch;
+.plain-text-viewer__spacer {
+  pointer-events: none;
 }
 
 .plain-text-viewer__line-numbers,
-.plain-text-viewer__content {
+.plain-text-viewer__content,
+.plain-text-viewer__measure {
   box-sizing: border-box;
   margin: 0;
   font-family: Consolas, "SFMono-Regular", "Liberation Mono", "Courier New", monospace;
@@ -201,28 +298,19 @@ defineExpose({ focus, scrollToTop, scrollToLine });
 }
 
 .plain-text-viewer__line-numbers {
-  position: sticky;
+  position: absolute;
+  top: 0;
+  right: 0;
   left: 0;
-  z-index: 1;
-  flex: 0 0 auto;
-  min-width: 48px;
-  padding: 12px 12px 12px 8px;
-  border-right: 1px solid var(--el-border-color-lighter, #ebeef5);
-  color: var(--el-text-color-secondary, #909399);
-  background: var(--el-fill-color-light, #f5f7fa);
+  padding: 0 12px 0 8px;
   font-variant-numeric: tabular-nums;
   text-align: right;
-  user-select: none;
+  will-change: transform;
 }
 
 .plain-text-viewer__content {
-  flex: 1 0 auto;
-  min-width: 0;
-  padding: 12px 16px;
-}
-
-.plain-text-viewer--without-line-numbers .plain-text-viewer__content {
-  min-width: 100%;
+  position: absolute;
+  color: inherit;
 }
 
 .plain-text-viewer__empty {
@@ -233,44 +321,33 @@ defineExpose({ focus, scrollToTop, scrollToLine });
   font-size: 13px;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  user-select: none;
+}
+
+.plain-text-viewer__measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .plain-text-viewer__sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
-  padding: 0;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
-  border: 0;
-}
-
-.plain-text-viewer__content::selection {
-  color: inherit;
-  background: var(--el-color-primary-light-7, #c6e2ff);
 }
 
 @media (max-width: 600px) {
   .plain-text-viewer__line-numbers,
-  .plain-text-viewer__content {
+  .plain-text-viewer__content,
+  .plain-text-viewer__measure {
     font-size: 13px;
-  }
-
-  .plain-text-viewer__line-numbers {
-    padding-right: 10px;
-    padding-left: 6px;
-  }
-
-  .plain-text-viewer__content {
-    padding-right: 12px;
-    padding-left: 12px;
   }
 }
 
 @media (forced-colors: active) {
-  .plain-text-viewer:focus-visible {
+  .plain-text-viewer:focus-within {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
