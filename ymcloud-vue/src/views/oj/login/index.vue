@@ -71,6 +71,7 @@
             登录
           </div>
           <div 
+            v-if="registerEnabled"
             class="tab-item" 
             :class="{ active: currentView === 'register' }"
             @click="switchView('register')"
@@ -88,16 +89,35 @@
 
         <!-- 表单内容区域 -->
         <div class="form-content">
+          <el-alert
+            v-if="settingLoaded && !registerEnabled"
+            title="系统暂未开放新用户注册"
+            type="info"
+            :closable="false"
+            show-icon
+            class="register-alert"
+          />
+          <el-alert
+            v-else-if="!settingLoaded && !settingLoading"
+            title="注册状态暂时无法获取，请稍后重试"
+            type="warning"
+            :closable="false"
+            class="register-alert"
+          >
+            <el-link type="primary" @click="loadSystemSetting">重新加载</el-link>
+          </el-alert>
           <transition name="form-fade" mode="out-in">
             <LoginForm 
               v-if="currentView === 'login'" 
               key="login"
+              :register-enabled="registerEnabled"
               @switchTo="switchView" 
             />
             <RegisterForm 
-              v-else-if="currentView === 'register'" 
+              v-else-if="currentView === 'register' && registerEnabled"
               key="register"
               @switchTo="switchView" 
+              @refreshSetting="loadSystemSetting"
             />
             <ForgetPasswordForm 
               v-else-if="currentView === 'forget'" 
@@ -113,8 +133,10 @@
 
 <script lang="ts" setup>
 //import
-import { ref,defineAsyncComponent } from 'vue';
+import { ref,defineAsyncComponent, onMounted } from 'vue';
 import { CircleCheck, Edit } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
+import { getPublicSystemSetting } from '@/api/api';
 const LoginForm = defineAsyncComponent(() => import('./child/LoginForm.vue'));
 const RegisterForm = defineAsyncComponent(() => import('./child/RegisterForm.vue'));
 const ForgetPasswordForm = defineAsyncComponent(() => import('./child/ForgetPasswordForm.vue'));
@@ -122,14 +144,50 @@ const ForgetPasswordForm = defineAsyncComponent(() => import('./child/ForgetPass
 //data
 type ViewType = 'login' | 'register' | 'forget';
 const currentView = ref<ViewType>('login');
+const registerEnabled = ref(false);
+const settingLoaded = ref(false);
+const settingLoading = ref(true);
 
 //methods
-const switchView = (view: ViewType) => {
+const loadSystemSetting = async () => {
+  settingLoading.value = true;
+  try {
+    const res = await getPublicSystemSetting();
+    registerEnabled.value = res.data.data.registerEnabled === true;
+    settingLoaded.value = true;
+  } catch (e) {
+    registerEnabled.value = false;
+    settingLoaded.value = false;
+    console.error(e);
+  } finally {
+    settingLoading.value = false;
+    if (!registerEnabled.value && currentView.value === 'register') {
+      currentView.value = 'login';
+    }
+  }
+};
+
+const switchView = async (view: ViewType) => {
+  if (view === 'register') {
+    await loadSystemSetting();
+    if (!registerEnabled.value) {
+      if (settingLoaded.value) ElMessage.warning('系统暂未开放新用户注册');
+      return;
+    }
+  }
   currentView.value = view;
 };
+
+onMounted(() => {
+  loadSystemSetting();
+});
 </script>
 
 <style scoped>
+.register-alert {
+  margin-bottom: 24px;
+}
+
 .login-container {
   display: flex;
   min-height: 100vh;

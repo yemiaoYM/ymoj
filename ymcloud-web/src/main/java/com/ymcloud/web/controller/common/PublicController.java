@@ -15,6 +15,8 @@ import com.ymcloud.pojo.query.oj.ContestPageQuery;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
 import com.ymcloud.pojo.query.oj.SubmissionPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.common.SystemSettingVO;
+import com.ymcloud.web.service.common.SystemSettingService;
 import com.ymcloud.pojo.vo.oj.*;
 import com.ymcloud.web.service.oj.*;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +65,18 @@ public class PublicController {
 
     @Autowired
     private LanguageEntityService languageEntityService;
+
+    @Autowired
+    private SystemSettingService systemSettingService;
+
+    /**
+     * 获取公开的系统配置
+     * @return 注册开关
+     */
+    @GetMapping("/system-setting")
+    public Result<SystemSettingVO> getSystemSetting() {
+        return Result.ok(systemSettingService.getSystemSetting());
+    }
 
     /**
      * 查询用户信息

@@ -1,5 +1,37 @@
 import request from "./request";
-import type { LoginDTO, RegisterDTO, UserDTO } from "@/type/types";
+import type { LoginDTO, RegisterDTO, UserDTO, SystemSettingDTO } from "@/type/types";
+
+/**
+ * 获取公开的系统配置
+ */
+export function getPublicSystemSetting() {
+  return request({
+    url: "/public/system-setting",
+    method: "GET",
+  })
+}
+
+/**
+ * 获取后台系统配置
+ */
+export function getAdminSystemSetting() {
+  return request({
+    url: "/admin/system-setting",
+    method: "GET",
+  })
+}
+
+/**
+ * 保存后台系统配置
+ * @param data 系统配置
+ */
+export function updateSystemSetting(data: SystemSettingDTO) {
+  return request({
+    url: "/admin/system-setting",
+    method: "PUT",
+    data
+  })
+}
 
 
 //================= OJ =====================

@@ -39,7 +39,7 @@
       </div>
     </el-form>
 
-    <div class="form-footer">
+    <div v-if="registerEnabled" class="form-footer">
       <p>还没有账户？</p>
       <el-link type="primary" @click="$emit('switchTo', 'register')">
         立即注册
@@ -55,6 +55,10 @@ import { ElMessage, ElNotification } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 import { getCaptcha } from '@/api/api';
 import type { LoginDTO } from '@/type/types';
+
+defineProps<{
+  registerEnabled: boolean
+}>();
 
 //定义事件
 const emit = defineEmits<{

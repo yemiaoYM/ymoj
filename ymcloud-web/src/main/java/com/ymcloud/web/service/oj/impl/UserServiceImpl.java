@@ -34,6 +34,7 @@ import com.ymcloud.pojo.vo.oj.UserCalendarHeatmapVO;
 import com.ymcloud.pojo.vo.oj.UserInfoVO;
 import com.ymcloud.web.service.oj.FileService;
 import com.ymcloud.web.service.oj.UserService;
+import com.ymcloud.web.service.common.SystemSettingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -84,6 +85,9 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private UserAcproblemEntityService userAcproblemEntityService;
 
+    @Autowired
+    private SystemSettingService systemSettingService;
+
     /**
      * 用户登录
      * @param loginDTO 登录请求体
@@ -130,6 +134,10 @@ public class UserServiceImpl implements UserService {
      */
     @Override
     public void register(RegisterDTO registerDTO) {
+        //关闭注册时直接拦截，避免消耗验证码或写入用户数据
+        if (!systemSettingService.isRegisterEnabled()) {
+            throw new UserException("系统暂未开放新用户注册", HttpStatus.FORBIDDEN);
+        }
         //1.验证码校验
         validateCaptcha(registerDTO.getCode(),registerDTO.getUuid());
         //2.查询是否信息已被注册

@@ -65,6 +65,7 @@ import type { RegisterDTO } from '@/type/types';
 //定义事件
 const emit = defineEmits<{
   switchTo: [view: 'login' | 'register' | 'forget']
+  refreshSetting: []
 }>();
 
 //数据
@@ -155,6 +156,7 @@ const handleRegister = async () => {
     // 注册成功后切换到登录页面
     emit('switchTo', 'login');
   } catch (e) {
+    emit('refreshSetting');
     refreshCaptcha();
     console.log(e);
   } finally {

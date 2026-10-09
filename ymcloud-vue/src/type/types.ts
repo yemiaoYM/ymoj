@@ -4,6 +4,16 @@
 import type { ProblemSource } from "@/constants/problem";
 
 /**
+ * 系统配置
+ */
+export type SystemSettingVO = {
+  /** 是否允许新用户注册 */
+  registerEnabled: boolean;
+};
+
+export type SystemSettingDTO = SystemSettingVO;
+
+/**
  * 用户实体
  */
 export type User = {
