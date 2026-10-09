@@ -220,7 +220,9 @@ public class ContestServiceImpl implements ContestService {
         List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
         problemVO.setProblemCaseList(problemCaseVOList);
         //查询题目的语言配置
-        List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(LanguageConstants.ABLE, problem.getSource());
+        List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(
+                LanguageConstants.ABLE,
+                problem.getSource().getCode());
         problemVO.setLanguageList(languageVOList);
         //查询用户该题目的通过状态
         boolean isAccepted = judgeEntityService.lambdaQuery()

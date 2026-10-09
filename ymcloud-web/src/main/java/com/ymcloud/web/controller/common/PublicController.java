@@ -10,6 +10,7 @@ import com.ymcloud.core.web.mapper.UserAcproblemMapper;
 import com.ymcloud.pojo.entity.Announcement;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Tag;
+import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.oj.ContestPageQuery;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
 import com.ymcloud.pojo.query.oj.SubmissionPageQuery;
@@ -162,7 +163,7 @@ public class PublicController {
     public Result<List<LanguageTableVO>> listLanguages(){
         log.info("获取本地编程语言列表");
         List<Language> list = languageEntityService.lambdaQuery()
-                .eq(Language::getOj, "myy")
+                .eq(Language::getOj, ProblemSource.LOCAL.getCode())
                 .list();
         List<LanguageTableVO> languages = BeanUtil.copyToList(list, LanguageTableVO.class);
         return Result.ok(languages);

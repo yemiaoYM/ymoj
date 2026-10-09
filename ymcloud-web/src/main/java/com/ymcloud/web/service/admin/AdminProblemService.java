@@ -38,8 +38,9 @@ public interface AdminProblemService {
     /**
      * 添加题目
      * @param problemDTO 题目信息
+     * @return 题目展示id
      */
-    void addProblem(ProblemDTO problemDTO);
+    String addProblem(ProblemDTO problemDTO);
 
     /**
      * 修改题目

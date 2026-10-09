@@ -17,6 +17,8 @@ import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.ProblemSource;
+import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ProblemVO;
 import com.ymcloud.pojo.vo.common.PageVO;
@@ -53,8 +55,6 @@ import java.util.Objects;
 @Slf4j
 @Service
 public class AdminProblemServiceImpl implements AdminProblemService {
-
-    private static final long MAX_TEST_CASE_FILE_SIZE = 50L * 1024 * 1024;
 
     @Value("${ymcloud.file.base-dir}")
     private String fileUploadPath;
@@ -119,9 +119,16 @@ public class AdminProblemServiceImpl implements AdminProblemService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void addProblem(ProblemDTO problemDTO) {
+    public String addProblem(ProblemDTO problemDTO) {
+        String problemId;
+        if (ProblemSource.LOCAL.equals(problemDTO.getSource())) {
+            problemId = generateLocalProblemId();
+            problemDTO.setProblemId(problemId);
+        } else {
+            problemId = problemDTO.getProblemId();
+            validateProblemId(problemId);
+        }
         //题目展示id需保证唯一
-        String problemId = problemDTO.getProblemId();
         boolean exists = problemEntityService.lambdaQuery().eq(Problem::getProblemId, problemId).exists();
         if (exists) {
             throw new ProblemException("该题目展示id已被使用");
@@ -162,6 +169,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
                     }).toList();
             problemTagEntityService.saveBatch(problemTags);
         }
+        return problemId;
     }
 
     /**
@@ -177,8 +185,17 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         if (existProblem == null) {
             throw new ProblemNotExistException();
         }
+        String problemId;
+        if (ProblemSource.LOCAL.equals(problemDTO.getSource())) {
+            problemId = ProblemSource.LOCAL.equals(existProblem.getSource())
+                    ? existProblem.getProblemId()
+                    : generateLocalProblemId();
+            problemDTO.setProblemId(problemId);
+        } else {
+            problemId = problemDTO.getProblemId();
+            validateProblemId(problemId);
+        }
         //检查题目展示id是否重复（排除当前题目）
-        String problemId = problemDTO.getProblemId();
         boolean exists = problemEntityService.lambdaQuery()
                 .eq(Problem::getProblemId, problemId)
                 .ne(Problem::getId, id)
@@ -221,6 +238,35 @@ public class AdminProblemServiceImpl implements AdminProblemService {
                         return problemTag;
                     }).toList();
             problemTagEntityService.saveBatch(problemTags);
+        }
+    }
+
+    /**
+     * 生成下一个本地题目展示id
+     * @return 本地题目展示id
+     */
+    private String generateLocalProblemId() {
+        String latestProblemId = problemEntityService.selectLatestLocalProblemIdForUpdate(ProblemSource.LOCAL);
+        long nextNumber = ProblemConstants.INITIAL_LOCAL_PROBLEM_NUMBER;
+        if (StrUtil.isNotBlank(latestProblemId)) {
+            nextNumber = Long.parseLong(latestProblemId.substring(ProblemConstants.LOCAL_PROBLEM_ID_PREFIX.length())) + 1;
+        }
+        return ProblemConstants.LOCAL_PROBLEM_ID_PREFIX + nextNumber;
+    }
+
+    /**
+     * 校验非本地题目展示id
+     * @param problemId 题目展示id
+     */
+    private void validateProblemId(String problemId) {
+        if (StrUtil.isBlank(problemId)) {
+            throw new ProblemException("题目展示id不能为空");
+        }
+        if (problemId.length() > 20) {
+            throw new ProblemException("题目展示id长度不能超过20个字符");
+        }
+        if (!problemId.matches("^[a-zA-Z0-9-]+$")) {
+            throw new ProblemException("题目展示id只能包含字母、数字和 -");
         }
     }
 
@@ -331,7 +377,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
                     throw new ProblemException("文件不能为空");
                 }
                 //检查文件大小
-                if (file.getSize() > MAX_TEST_CASE_FILE_SIZE) {
+                if (file.getSize() > ProblemConstants.MAX_TEST_CASE_FILE_SIZE) {
                     throw new ProblemException("单个文件大小不能超过50MB");
                 }
                 String filename = Paths.get(Objects.requireNonNull(file.getOriginalFilename())).getFileName().toString();

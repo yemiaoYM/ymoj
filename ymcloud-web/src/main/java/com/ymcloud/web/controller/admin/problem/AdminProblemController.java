@@ -63,14 +63,14 @@ public class AdminProblemController {
     /**
      * 新增题目
      * @param problemDTO 题目信息
-     * @return 操作结果
+     * @return 新增题目的展示id
      */
     @PreAuthorize("hasAuthority('problem:problem:add')")
     @PostMapping
-    public Result<Void> addProblem(@RequestBody @Validated ProblemDTO problemDTO) {
+    public Result<String> addProblem(@RequestBody @Validated ProblemDTO problemDTO) {
         log.info("新增题目:{}", problemDTO);
-        adminProblemService.addProblem(problemDTO);
-        return Result.ok();
+        String problemId = adminProblemService.addProblem(problemDTO);
+        return Result.ok(problemId);
     }
 
     /**

@@ -122,6 +122,7 @@ import { NFlex } from 'naive-ui';
 import { MagicStick, Check, Close, Refresh } from '@element-plus/icons-vue'
 import type { Tag, ProblemTableVO } from '@/type/types';
 import { getTagsList, getProblemTableList, getRandomProblem } from '@/api/api';
+import { ProblemSource } from '@/constants/problem';
 
 //data
 const route = useRoute();
@@ -137,10 +138,10 @@ const difficultyList = [
 ];
 const bankOptions = [
   { value: ' ', label: '全部', color: '#ffc732' },
-  { value: 'myy', label: '喵语云', color: '#626aef' },
-  { value: 'luogu', label: '洛谷', color: '#ffc732', disabled: true },
-  { value: 'atcoder', label: 'AtCoder', color: '#ffc732', disabled: true },
-  { value: 'leetcode', label: 'LeetCode', color: '#ffc732', disabled: true }
+  { value: ProblemSource.LOCAL, label: '喵语云', color: '#626aef' },
+  { value: ProblemSource.LUOGU, label: '洛谷', color: '#ffc732', disabled: true },
+  { value: ProblemSource.ATCODER, label: 'AtCoder', color: '#ffc732', disabled: true },
+  { value: ProblemSource.LEETCODE, label: 'LeetCode', color: '#ffc732', disabled: true }
 ];
 const colors = [
   { color: '#f56c6c', percentage: 20 },
@@ -152,12 +153,20 @@ const colors = [
 const tableData = ref<ProblemTableVO[]>([] as ProblemTableVO[]);
 const tagsList = ref<Tag[]>([] as Tag[]);
 
-const query = ref({
+type ProblemListQuery = {
+  pageNo: number;
+  pageSize: number;
+  keyword: string;
+  difficulty: number;
+  source: ProblemSource | ' ';
+};
+
+const query = ref<ProblemListQuery>({
   pageNo: 1,
   pageSize: 15,
   keyword: '',
   difficulty: -1,
-  source: "myy"
+  source: ProblemSource.LOCAL
 });
 
 const totalPage = ref<number>(0);
@@ -172,7 +181,10 @@ const init = () => {
   query.value.pageSize = Number(queryParams.pageSize) || 15;
   query.value.keyword = queryParams.keyword as string || '';
   query.value.difficulty = Number(queryParams.difficulty) || -1;
-  query.value.source = queryParams.source as string || "myy";
+  const source = queryParams.source as ProblemSource | ' ';
+  query.value.source = source === ' ' || Object.values(ProblemSource).includes(source)
+    ? source
+    : ProblemSource.LOCAL;
 }
 //初始化
 init();
@@ -245,7 +257,7 @@ const reset = () => {
   query.value.pageSize = 15;
   query.value.keyword = '';
   query.value.difficulty = -1;
-  query.value.source = "myy";
+  query.value.source = ProblemSource.LOCAL;
   router.push({ name: 'ProblemList' });
 }
 //监听路由变化

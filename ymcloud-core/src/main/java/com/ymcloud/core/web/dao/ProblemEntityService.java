@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.Problem;
+import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 
 
@@ -15,6 +16,13 @@ import com.ymcloud.pojo.vo.oj.ProblemTableVO;
  * @Description: ProblemEntityService
  */
 public interface ProblemEntityService extends IService<Problem> {
+    /**
+     * 查询并锁定当前最大的本地题目展示id
+     * @param source 题目来源
+     * @return 本地题目展示id
+     */
+    String selectLatestLocalProblemIdForUpdate(ProblemSource source);
+
     /**
      * 题单列表分页查询
      * @param page   分页

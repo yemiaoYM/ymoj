@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.mapper.ProblemMapper;
 import com.ymcloud.pojo.entity.Problem;
+import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,15 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ProblemEntityServiceImpl extends ServiceImpl<ProblemMapper, Problem> implements ProblemEntityService {
+
+    /**
+     * 查询并锁定当前最大的本地题目展示id
+     * @return 本地题目展示id
+     */
+    @Override
+    public String selectLatestLocalProblemIdForUpdate(ProblemSource source) {
+        return getBaseMapper().selectLatestLocalProblemIdForUpdate(source);
+    }
 
     /**
      * 题单列表分页查询

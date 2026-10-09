@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.ymcloud.pojo.enums.ProblemSource;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -33,7 +34,7 @@ public class Problem {
     @Schema(description="题面样例")
     private String examples;
     @Schema(description="题目来源")
-    private String source;
+    private ProblemSource source;
     @Schema(description="难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上")
     private Integer difficulty;
     @Schema(description="评测模式：0=ACM，1=OI")

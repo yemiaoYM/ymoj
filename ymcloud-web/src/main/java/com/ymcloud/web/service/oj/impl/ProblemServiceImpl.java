@@ -21,6 +21,7 @@ import com.ymcloud.core.web.dao.TagEntityService;
 import com.ymcloud.core.web.mapper.LanguageMapper;
 import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;
+import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
 import com.ymcloud.pojo.query.oj.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
@@ -115,7 +116,9 @@ public class ProblemServiceImpl implements ProblemService {
         //查询题目的语言配置
         //题目的语言选项可用语言的oj来源决定
         //直接使用sql语言来优化性能
-        List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(LanguageConstants.ABLE, problem.getSource());
+        List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(
+                LanguageConstants.ABLE,
+                problem.getSource().getCode());
         problemVO.setLanguageList(languageVOList);
         //查询用户该题目的通过状态
         boolean isAccepted = judgeEntityService.lambdaQuery()

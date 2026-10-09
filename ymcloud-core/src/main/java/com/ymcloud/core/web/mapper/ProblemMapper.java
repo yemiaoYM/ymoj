@@ -2,6 +2,7 @@ package com.ymcloud.core.web.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ymcloud.pojo.entity.Problem;
+import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 import org.apache.ibatis.annotations.Mapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -19,6 +20,13 @@ import org.apache.ibatis.annotations.Param;
 public interface ProblemMapper extends BaseMapper<Problem> {
 
     /**
+     * 查询并锁定当前最大的本地题目展示id
+     * @param source 题目来源
+     * @return 本地题目展示id
+     */
+    String selectLatestLocalProblemIdForUpdate(@Param("source") ProblemSource source);
+
+    /**
      * 题单列表分页查询
      * @param page   分页
      * @param keyword  题目/题号 支持模糊查询
@@ -28,7 +36,7 @@ public interface ProblemMapper extends BaseMapper<Problem> {
      */
     Page<ProblemTableVO> pageQuery(
             IPage<ProblemTableVO> page,
-            @Param("keyword")       String keyword,
+            @Param("keyword")     String keyword,
             @Param("difficulty")  Integer difficulty,
             @Param("source")      String source
     );

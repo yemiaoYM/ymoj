@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit;
  * @ClassName: DockerTest
  * @Author: Yemiao
  * @CreateTime: 2025-08-27  13:53
- * @Description: docker²âÊÔ
+ * @Description: dockeræµ‹è¯•
  */
 @SpringBootTest
 public class DockerTest {
@@ -93,11 +93,11 @@ public class DockerTest {
 //            String inputFile = hostTestCaseDir+"/"+i+".in";
 //            try{
 //                String in=FileUtils.readFileString(inputFile);
-//                System.out.println("[µÚ"+i+"¸ö]²âÊÔÑùÀý¿ªÊ¼ÆÀ²â...");
+//                System.out.println("[ç¬¬"+i+"ä¸ª]æµ‹è¯•æ ·ä¾‹å¼€å§‹è¯„æµ‹...");
 //                CodeRunResult execute = sandBox.execute(container, in);
-//                System.out.println("[µÚ"+i+"¸ö]²âÊÔÑùÀýµÄ½á¹ûÎª£º"+execute);
+//                System.out.println("[ç¬¬"+i+"ä¸ª]æµ‹è¯•æ ·ä¾‹çš„ç»“æžœä¸ºï¼š"+execute);
 //            } catch (Exception e){
-//                System.out.println("ÆÀ²â³öÏÖÎÊÌâ"+e);
+//                System.out.println("è¯„æµ‹å‡ºçŽ°é—®é¢˜"+e);
 //            }
 //        }
 

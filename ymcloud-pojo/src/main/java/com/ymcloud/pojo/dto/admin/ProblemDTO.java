@@ -1,6 +1,7 @@
 package com.ymcloud.pojo.dto.admin;
 
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
+import com.ymcloud.pojo.enums.ProblemSource;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
@@ -19,9 +20,7 @@ public class ProblemDTO {
     /**
      * 题目展示id
      */
-    @NotBlank(message = "题目展示id不能为空")
     @Size(max = 20, message = "题目展示id长度不能超过20个字符")
-    @Pattern(regexp = "^[a-zA-Z0-9-]+$", message = "题目展示id只能包含字母、数字和 -")
     private String problemId;
 
     /**
@@ -54,9 +53,8 @@ public class ProblemDTO {
     /**
      * 题目来源
      */
-    @NotBlank(message = "请选择题目来源")
-    @Size(max = 255, message = "题目来源长度不能超过255个字符")
-    private String source;
+    @NotNull(message = "请选择题目来源")
+    private ProblemSource source;
 
     /**
      * 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上

@@ -9,7 +9,7 @@ server:
     port: 9091
     address: 127.0.0.1
     tomcat:
-        # 每组测试用例包含.in和.out两个multipart部件
+        # 上传文件数列控制
         max-part-count: 100
 spring:
     application:

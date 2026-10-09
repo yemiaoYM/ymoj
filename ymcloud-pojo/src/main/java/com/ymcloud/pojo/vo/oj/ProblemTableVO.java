@@ -1,6 +1,7 @@
 package com.ymcloud.pojo.vo.oj;
 
 import com.ymcloud.pojo.entity.Tag;
+import com.ymcloud.pojo.enums.ProblemSource;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -27,7 +28,7 @@ public class ProblemTableVO implements Serializable {
     /**
      * 题目来源
      */
-    private String source;
+    private ProblemSource source;
     /**
      * 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上
      */

@@ -1,6 +1,7 @@
 /**
  * types 管理项目类型字段
  */
+import type { ProblemSource } from "@/constants/problem";
 
 /**
  * 用户实体
@@ -230,7 +231,7 @@ export type ProblemVO = {
   /** 输出描述 */
   output: string
   /** 题目来源，例如 洛谷、ICPC 区域赛 */
-  source: string
+  source: ProblemSource
   /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
   difficulty: number
   /** 评测模式：0=ACM，1=OI */
@@ -300,7 +301,7 @@ export type ProblemTableVO = {
   /** 题目描述内容（题干） */
   title: string;
   /** 题目来源 */
-  source: string|null;
+  source: ProblemSource|null;
   /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
   difficulty: number;
   /** 标签 */
@@ -336,7 +337,7 @@ export type AdminProblemVO = {
   /** 题面样例 */
   examples?: string;
   /** 题目来源 */
-  source?: string;
+  source?: ProblemSource;
   /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
   difficulty: number;
   /** 评测模式：0=ACM，1=OI */
@@ -422,7 +423,7 @@ export type ProblemDTO = {
   /** 题面样例 */
   examples: string;
   /** 题目来源 */
-  source: string;
+  source: ProblemSource;
   /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
   difficulty: number;
   /** 评测模式：0=ACM，1=OI */

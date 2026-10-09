@@ -16,10 +16,20 @@
           label-width="auto"
           style="width: 100%"
         >
+          <el-form-item label="来源" prop="source">
+            <el-select v-model="problem.source" style="width: 200px">
+              <el-option :value="ProblemSource.LOCAL" label="本地" />
+              <el-option :value="ProblemSource.LUOGU" label="洛谷" />
+              <el-option :value="ProblemSource.ATCODER" label="AtCoder" />
+              <el-option :value="ProblemSource.CODEFORCES" label="Codeforces" />
+              <el-option :value="ProblemSource.LEETCODE" label="LeetCode" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="题目展示id" prop="problemId">
             <el-input
               v-model="problem.problemId"
-              placeholder="请输入题目展示id"
+              :disabled="problem.source===ProblemSource.LOCAL"
+              :placeholder="problem.source===ProblemSource.LOCAL?'新增后由系统自动生成':'请输入题目展示id'"
             />
           </el-form-item>
           <el-form-item label="标题" prop="title">
@@ -40,14 +50,6 @@
               :max="512"
               :step="16"
             />
-          </el-form-item>
-          <el-form-item label="来源" prop="source">
-            <el-select v-model="problem.source" style="width: 200px">
-              <el-option value="myy" label="本地" />
-              <el-option value="luogu" label="洛谷" disabled />
-              <el-option value="atcoder" label="AtCoder" disabled />
-              <el-option value="codeforces" label="Codeforces" disabled />
-            </el-select>
           </el-form-item>
           <el-form-item label="权限" prop="visibility">
             <el-select v-model="problem.visibility" style="width: 200px">
@@ -82,6 +84,7 @@
               multiple-limit="5"
               placeholder="请选择标签"
               clearable
+              filterable
               style="width: 450px"
             >
               <el-option
@@ -202,6 +205,7 @@ import { ElMessage } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/api/api";
 import type { Tag } from "@/type/types";
+import { ProblemSource } from "@/constants/problem";
 //异步导入markdown
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/MarkdownEidt.vue")
@@ -218,7 +222,9 @@ const tagList = ref<Tag[]>([] as Tag[]);
 
 //验证题目展示id格式
 const validateProblemId = (rule: any, value: string, callback: any) => {
-  if (!value) {
+  if (problem.value.source === ProblemSource.LOCAL) {
+    callback();
+  } else if (!value) {
     callback(new Error("题目展示id不能为空"));
   } else if (value.length > 20) {
     callback(new Error("题目展示id长度不能超过20个字符"));
@@ -263,7 +269,6 @@ const validateTagList = (rule: any, value: any[], callback: any) => {
 //表单验证规则
 const rules = {
   problemId: [
-    { required: true, message: "题目展示id不能为空", trigger: "blur" },
     { validator: validateProblemId, trigger: "blur" },
   ],
   title: [
@@ -351,7 +356,7 @@ const problem = ref({
   content: "请输入题干",
   input: "请输入输入描述",
   output: "请输入输出描述",
-  source: "myy",
+  source: ProblemSource.LOCAL,
   difficulty: 0,
   mode: 0,
   visibility: 1,
@@ -417,6 +422,7 @@ const handleSubmitProblem = () => {
           } else {
             //新增模式成功后重置表单
             resetForm();
+            problem.value.problemId = res.data.data;
           }
         }).catch((e) => {
           console.error(e);
@@ -445,7 +451,7 @@ const resetForm = () => {
     content: "请输入题干",
     input: "请输入输入描述",
     output: "请输入输出描述",
-    source: "myy",
+    source: ProblemSource.LOCAL,
     difficulty: 0,
     mode: 0,
     visibility: 1,
