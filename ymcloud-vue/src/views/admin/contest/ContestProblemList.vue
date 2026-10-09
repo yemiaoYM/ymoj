@@ -10,8 +10,23 @@
         
         <!-- 操作区域 -->
         <n-flex :size="10" align="center" style="padding-bottom: 15px;">
-          <el-button plain type="primary" :icon="Plus" @click="handleAddProblem">从公开题库添加题目</el-button>
-          <el-button plain type="danger" :icon="Delete" :disabled="contestProblemIds.length === 0" @click="handleDeleteProblem">
+          <el-button
+            v-permission="['contest:problem:add']"
+            plain
+            type="primary"
+            :icon="Plus"
+            @click="handleAddProblem"
+          >
+            从公开题库添加题目
+          </el-button>
+          <el-button
+            v-permission="['contest:problem:remove']"
+            plain
+            type="danger"
+            :icon="Delete"
+            :disabled="contestProblemIds.length === 0"
+            @click="handleDeleteProblem"
+          >
             移除选中题目
           </el-button>
         </n-flex>
@@ -43,7 +58,8 @@
           <el-table-column label="操作" width="200" align="center">
             <template #default="scope">
               <n-flex :size="5" justify="center">
-                <el-button 
+                <el-button
+                  v-permission="['contest:problem:edit']"
                   class="operation-button" 
                   type="primary" 
                   size="small" 
@@ -53,7 +69,8 @@
                 >
                   编辑
                 </el-button>
-                <el-button 
+                <el-button
+                  v-permission="['contest:problem:remove']"
                   class="operation-button" 
                   type="danger" 
                   size="small" 
@@ -143,7 +160,12 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="addProblemDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="confirmAddProblems" :disabled="problemIds.length === 0">
+          <el-button
+            v-permission="['contest:problem:add']"
+            type="primary"
+            @click="confirmAddProblems"
+            :disabled="problemIds.length === 0"
+          >
             添加选中题目 ({{ problemIds.length }})
           </el-button>
         </span>
@@ -186,7 +208,7 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="editProblemDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="confirmEditProblem">保存</el-button>
+          <el-button v-permission="['contest:problem:edit']" type="primary" @click="confirmEditProblem">保存</el-button>
         </span>
       </template>
     </el-dialog>

@@ -133,7 +133,7 @@
 
 <script lang="ts" setup>
 //import
-import { ref,defineAsyncComponent, onMounted } from 'vue';
+import { ref, defineAsyncComponent, onMounted } from 'vue';
 import { CircleCheck, Edit } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { getPublicSystemSetting } from '@/api/api';
@@ -171,7 +171,9 @@ const switchView = async (view: ViewType) => {
   if (view === 'register') {
     await loadSystemSetting();
     if (!registerEnabled.value) {
-      if (settingLoaded.value) ElMessage.warning('系统暂未开放新用户注册');
+      if (settingLoaded.value) {
+        ElMessage.warning('系统暂未开放新用户注册');
+      }
       return;
     }
   }
@@ -185,6 +187,9 @@ onMounted(() => {
 
 <style scoped>
 .register-alert {
+  width: 100%;
+  max-width: 400px;
+  flex-shrink: 0;
   margin-bottom: 24px;
 }
 
@@ -462,8 +467,9 @@ onMounted(() => {
 .form-content {
   min-height: 500px;
   display: flex;
-  align-items: flex-start;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 /* 过渡动画 */

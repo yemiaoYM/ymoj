@@ -30,7 +30,7 @@ public class CommonController {
      * 获取首页统计数据
      * @return 统计数据
      */
-    @PreAuthorize("hasAnyRole('ADMIN','PROBLEM_ADMIN')")
+    @PreAuthorize("@ss.hasPermi('admin:access')")
     @GetMapping("/dashboard/stats")
     public Result<DashboardStatsVO> getDashboardStats() {
         log.info("获取管理员首页统计数据");
@@ -42,7 +42,7 @@ public class CommonController {
      * 获取最近两周提交数据折线图
      * @return 折线图数据
      */
-    @PreAuthorize("hasAnyRole('ADMIN','PROBLEM_ADMIN')")
+    @PreAuthorize("@ss.hasPermi('admin:access')")
     @GetMapping("/dashboard/submission-chart")
     public Result<SubmissionChartVO> getSubmissionChart() {
         log.info("获取最近两周提交数据折线图");

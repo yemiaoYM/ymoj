@@ -33,7 +33,7 @@ public class UserOnlineController {
      * 查询在线用户列表
      * @return 在线用户列表
      */
-    @PreAuthorize("hasAuthority('monitor:online:list')")
+    @PreAuthorize("@ss.hasPermi('monitor:online:list')")
     @GetMapping("/list")
     public Result<List<UserOnlineVO>> list() {
         log.info("查询在线用户列表");
@@ -51,7 +51,7 @@ public class UserOnlineController {
      * 删除在线用户
      * @param token 会话编号
      */
-    @PreAuthorize("hasAuthority('monitor:online:forceLogout')")
+    @PreAuthorize("@ss.hasPermi('monitor:online:forceLogout')")
     @DeleteMapping("/{token}")
     public Result<Void> forceLogout(@PathVariable("token") String token) {
         log.info("删除在线用户: {}", token);

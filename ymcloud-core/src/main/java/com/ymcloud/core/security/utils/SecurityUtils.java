@@ -4,6 +4,7 @@ import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.UserStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -79,8 +80,22 @@ public class SecurityUtils {
     /**
      * 判断是否为超级管理员
      */
-    public static Boolean isSuperAdmin(Long userId){
-        return userId == 1L;
+    public static Boolean isSuperAdmin(Long userId) {
+        return Long.valueOf(1L).equals(userId);
+    }
+
+    /**
+     * 判断认证用户是否为可用的超级管理员
+     * @param authentication 认证信息
+     * @return 是否为超级管理员
+     */
+    public static boolean isSuperAdmin(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || !(authentication.getPrincipal() instanceof LoginUser loginUser)) {
+            return false;
+        }
+        User user = loginUser.getUser();
+        return user != null && isSuperAdmin(user.getId()) && user.getStatus() == UserStatus.OK;
     }
 
     /**

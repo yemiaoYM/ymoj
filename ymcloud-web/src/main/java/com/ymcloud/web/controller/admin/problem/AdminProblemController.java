@@ -39,7 +39,7 @@ public class AdminProblemController {
      * @param pageQuery 查询条件
      * @return 题目列表
      */
-    @PreAuthorize("hasAuthority('problem:problem:list')")
+    @PreAuthorize("@ss.hasPermi('problem:problem:list')")
     @GetMapping("/list")
     public Result<PageVO<Problem>> queryList(@Validated AdminProblemPageQuery pageQuery) {
         log.info("查询题目列表:{}", pageQuery);
@@ -52,7 +52,7 @@ public class AdminProblemController {
      * @param id 题目ID
      * @return 题目信息
      */
-    @PreAuthorize("hasAuthority('problem:problem:query')")
+    @PreAuthorize("@ss.hasPermi('problem:problem:query')")
     @GetMapping("/{id}")
     public Result<ProblemVO> getProblemById(@PathVariable("id") Long id) {
         log.info("根据ID查询题目:{}", id);
@@ -65,7 +65,7 @@ public class AdminProblemController {
      * @param problemDTO 题目信息
      * @return 新增题目的展示id
      */
-    @PreAuthorize("hasAuthority('problem:problem:add')")
+    @PreAuthorize("@ss.hasPermi('problem:problem:add')")
     @PostMapping
     public Result<String> addProblem(@RequestBody @Validated ProblemDTO problemDTO) {
         log.info("新增题目:{}", problemDTO);
@@ -79,7 +79,7 @@ public class AdminProblemController {
      * @param problemDTO 题目信息
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('problem:problem:edit')")
+    @PreAuthorize("@ss.hasPermi('problem:problem:edit')")
     @PutMapping("/{id}")
     public Result<Void> updateProblem(@PathVariable("id") Long id, @Validated @RequestBody ProblemDTO problemDTO) {
         log.info("修改题目:{}, 数据:{}", id, problemDTO);
@@ -92,7 +92,7 @@ public class AdminProblemController {
      * @param ids 题目ID列表
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('problem:problem:remove')")
+    @PreAuthorize("@ss.hasPermi('problem:problem:remove')")
     @DeleteMapping("/{ids}")
     public Result<Void> deleteProblemById(@PathVariable("ids") List<Long> ids) {
         log.info("根据ID删除题目:{}", ids);
@@ -106,7 +106,7 @@ public class AdminProblemController {
      * @param visibility 可见性：1=公开，2=私有，3=比赛专用
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('problem:problem:edit')")
+    @PreAuthorize("@ss.hasPermi('problem:problem:edit')")
     @PutMapping("/{id}/visibility")
     public Result<Void> updateProblemVisibility(@PathVariable("id") Long id, @RequestParam("visibility") Integer visibility) {
         log.info("修改题目可见性: id={}, visibility={}", id, visibility);
@@ -119,7 +119,7 @@ public class AdminProblemController {
      * @param problemId 题目ID
      * @return 测试样例文件列表
      */
-    @PreAuthorize("hasAuthority('problem:testcase:query')")
+    @PreAuthorize("@ss.hasPermi('problem:testcase:query')")
     @GetMapping("/{problemId}/testcases")
     public Result<List<ProblemCaseInfo>> getTestCaseFiles(@PathVariable("problemId") Long problemId) {
         log.info("获取题目测试样例文件列表: problemId={}", problemId);
@@ -133,7 +133,7 @@ public class AdminProblemController {
      * @param file 测试样例文件
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('problem:testcase:add')")
+    @PreAuthorize("@ss.hasPermi('problem:testcase:add')")
     @PostMapping("/{problemId}/testcases/upload")
     public Result<Void> uploadTestCaseFile(@PathVariable("problemId") Long problemId,
                                            @RequestParam("file") MultipartFile[] file) {
@@ -148,7 +148,7 @@ public class AdminProblemController {
      * @param fileName 文件名
      * @return 文件资源
      */
-    @PreAuthorize("hasAuthority('problem:testcase:query')")
+    @PreAuthorize("@ss.hasPermi('problem:testcase:query')")
     @GetMapping("/{problemId}/testcases/download")
     public ResponseEntity<Resource> downloadTestCaseFile(@PathVariable("problemId") Long problemId,
                                                          @RequestParam("fileName") String fileName) {
@@ -162,7 +162,7 @@ public class AdminProblemController {
      * @param fileNames 文件名数组
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('problem:testcase:remove')")
+    @PreAuthorize("@ss.hasPermi('problem:testcase:remove')")
     @DeleteMapping("/{problemId}/testcases")
     public Result<Void> deleteTestCaseFiles(@PathVariable("problemId") Long problemId,
                                             @RequestBody List<String> fileNames) {

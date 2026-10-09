@@ -22,6 +22,8 @@ public class Role {
     private String description;
     @Schema(description="角色状态：0=禁用，1=启用")
     private Integer status;
+    @Schema(description="是否为系统内置角色")
+    private Boolean builtIn;
     @Schema(description="创建时间")
     private LocalDateTime createdTime;
     @Schema(description="更新时间")

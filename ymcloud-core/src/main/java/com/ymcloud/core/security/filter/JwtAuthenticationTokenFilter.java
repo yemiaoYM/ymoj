@@ -1,6 +1,7 @@
 package com.ymcloud.core.security.filter;
 
 import com.ymcloud.core.security.domain.LoginUser;
+import com.ymcloud.core.security.service.AuthorizationService;
 import com.ymcloud.core.security.service.TokenService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -30,16 +31,25 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
     @Autowired
     private TokenService tokenService;
 
+    @Autowired
+    private AuthorizationService authorizationService;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         //先获取loginUser
         LoginUser loginUser = tokenService.getLoginUser(request);
         //loginUser不为空，且当前没有认证信息（防止重复）
-        if(loginUser != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            log.info("当前登录用户：{}", loginUser);
+        if (loginUser != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (!authorizationService.refreshAuthorization(loginUser)) {
+                tokenService.delLoginUser(loginUser.getToken());
+                filterChain.doFilter(request, response);
+                return;
+            }
+            log.debug("当前登录用户：{}", loginUser.getUsername());
             tokenService.verifyToken(loginUser);
             //把loginUser封装为Spring Security的认证对象
-            UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities());
+            UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+                    loginUser, null, loginUser.getAuthorities());
             //设置认证详细
             authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             //把认证信息写入上下文，Spring Security识别已经登录

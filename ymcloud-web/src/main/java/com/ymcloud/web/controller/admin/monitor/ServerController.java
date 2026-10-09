@@ -22,7 +22,7 @@ public class ServerController {
      * 获取服务器基本信息
      */
     @GetMapping()
-    @PreAuthorize("hasAuthority('monitor:server:list')")
+    @PreAuthorize("@ss.hasPermi('monitor:server:list')")
     public Result<Server> getInfo(){
         try {
             Server server = new Server();

@@ -1,9 +1,10 @@
 package com.ymcloud.web;
 
-import com.ymcloud.common.constant.HttpStatus;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.user.UserException;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.core.security.service.AuthorizationService;
 import com.ymcloud.core.web.dao.UserEntityService;
 import com.ymcloud.pojo.dto.RegisterDTO;
 import com.ymcloud.pojo.entity.User;
@@ -34,6 +35,9 @@ public class UserRegistrationSettingTest {
 
     @Mock
     private RedisCache redisCache;
+
+    @Mock
+    private AuthorizationService authorizationService;
 
     @InjectMocks
     private UserServiceImpl userService;

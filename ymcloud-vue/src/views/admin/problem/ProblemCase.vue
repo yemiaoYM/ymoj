@@ -14,6 +14,7 @@
         <!-- 操作区域 -->
         <n-flex :size="10" align="center" style="padding-bottom: 15px;">
           <el-upload
+            v-permission="['problem:testcase:add']"
             :http-request="uploadFiles"
             :before-upload="beforeUpload"
             :show-file-list="false"
@@ -25,7 +26,15 @@
               上传测试用例
             </el-button>
           </el-upload>
-          <el-button type="danger" :icon="Delete" :disabled="selectedFiles.length === 0" @click="handleBatchDelete">批量删除</el-button>
+          <el-button
+            v-permission="['problem:testcase:remove']"
+            type="danger"
+            :icon="Delete"
+            :disabled="selectedFiles.length === 0"
+            @click="handleBatchDelete"
+          >
+            批量删除
+          </el-button>
           <el-button :icon="Refresh" @click="refreshTestCases">刷新</el-button>
         </n-flex>
 
@@ -98,6 +107,7 @@
                 查看
               </el-button>
               <el-button
+                v-permission="['problem:testcase:remove']"
                 type="danger"
                 :icon="Delete"
                 @click="handleDeletePair(scope.row)"

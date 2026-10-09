@@ -79,6 +79,8 @@ export type UserDTO = {
  * 用户基本信息
  */
 export type UserProfile = {
+  /** 用户ID */
+  id: number;
   username: string;
   nickname: string;
   sex: string;

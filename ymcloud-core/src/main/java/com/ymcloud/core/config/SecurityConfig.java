@@ -4,10 +4,13 @@ import com.ymcloud.core.security.filter.AuthenticationEntryPointImpl;
 import com.ymcloud.core.security.filter.CustomAccessDeniedHandler;
 import com.ymcloud.core.security.filter.JwtAuthenticationTokenFilter;
 import com.ymcloud.core.security.filter.LogoutSuccessHandlerImpl;
+import com.ymcloud.core.security.service.PermissionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -27,6 +30,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  */
 @Configuration
 @EnableMethodSecurity(securedEnabled = true)
+@Import(PermissionService.class)
 public class SecurityConfig {
 
     /**
@@ -49,6 +53,9 @@ public class SecurityConfig {
      */
     @Autowired
     private LogoutSuccessHandlerImpl logoutSuccessHandler;
+
+    @Autowired
+    private PermissionService permissionService;
 
     /**
      * 强散列哈希加密实现
@@ -79,6 +86,8 @@ public class SecurityConfig {
            request.requestMatchers("/login","/register","/captchaImage","/forget-code","/forget-password").permitAll()
                    .requestMatchers("/public/**").permitAll()
                    .requestMatchers("/files/public/**").permitAll()
+                   .requestMatchers("/admin/**").access((authentication, context) ->
+                           new AuthorizationDecision(permissionService.hasPermi(authentication.get(), "admin:access")))
                    // 除上面外的所有请求全部需要鉴权认证
                    .anyRequest().authenticated();
         });

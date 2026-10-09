@@ -125,6 +125,7 @@
       </n-flex>
       <template #footer>
         <el-button
+          v-permission="mode === 'edit' ? ['contest:contest:edit'] : ['contest:contest:add']"
           size="large"
           type="primary"
           :loading="loading"

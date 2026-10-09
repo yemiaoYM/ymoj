@@ -1,5 +1,6 @@
 package com.ymcloud.web;
 
+import com.ymcloud.core.security.service.PermissionService;
 import com.ymcloud.pojo.dto.admin.SystemSettingDTO;
 import com.ymcloud.pojo.vo.common.SystemSettingVO;
 import com.ymcloud.web.controller.admin.common.AdminSystemSettingController;
@@ -10,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,7 +36,7 @@ public class SystemSettingPermissionTest {
     void setup() {
         systemSettingService = mock(SystemSettingService.class);
         context = new AnnotationConfigApplicationContext();
-        context.register(MethodSecurityConfig.class, AdminSystemSettingController.class);
+        context.register(MethodSecurityConfig.class, AdminSystemSettingController.class, PermissionService.class);
         context.registerBean(SystemSettingService.class, () -> systemSettingService);
         context.refresh();
         controller = context.getBean(AdminSystemSettingController.class);
@@ -50,7 +50,7 @@ public class SystemSettingPermissionTest {
 
     @Test
     void anonymousAndOrdinaryUsersCannotReadOrWriteSettings() {
-        assertThrows(AuthenticationCredentialsNotFoundException.class, () -> controller.getSystemSetting());
+        assertThrows(AccessDeniedException.class, () -> controller.getSystemSetting());
         SecurityContextHolder.getContext().setAuthentication(new TestingAuthenticationToken("user", "", "ROLE_USER"));
         assertThrows(AccessDeniedException.class, () -> controller.getSystemSetting());
         assertThrows(AccessDeniedException.class, () -> controller.updateSystemSetting(new SystemSettingDTO()));

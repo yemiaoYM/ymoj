@@ -37,6 +37,11 @@ export const useUserStore = defineStore('userInfo', () => {
     })
 
     /**
+     * 超级管理员固定为ID为1的用户
+     */
+    const isSuperAdmin = computed(() => user.value.id === 1);
+
+    /**
      * 判断用户是否拥有任意一个角色
      */
     const hasAnyRole=(roles:string[]):boolean=>{
@@ -52,6 +57,9 @@ export const useUserStore = defineStore('userInfo', () => {
     const hasEveryPermission=(permissions:string[]):boolean=>{
         if(isNull(user.value)){
             return false;
+        }
+        if (isSuperAdmin.value && user.value.permissions?.includes('*:*:*')) {
+            return true;
         }
         return hasEveryValue(user.value.permissions,permissions);
     }
@@ -98,11 +106,11 @@ export const useUserStore = defineStore('userInfo', () => {
     /**
      * 异步获取当前用户信息
      */
-    const getUserInfo=async ()=>{
-        if(refreshUser.value){
+    const getUserInfo = async (force = false) => {
+        if (force || refreshUser.value) {
             try {
-                const res=await getUserProfile();
-                user.value=res.data.data;
+                const res = await getUserProfile();
+                user.value = res.data.data;
             } catch (error) {
                 throw error;
             }
@@ -137,6 +145,7 @@ export const useUserStore = defineStore('userInfo', () => {
         token,
         isLogin,
         refreshUser,
+        isSuperAdmin,
         doLogin,
         getUserInfo,
         doLogout,

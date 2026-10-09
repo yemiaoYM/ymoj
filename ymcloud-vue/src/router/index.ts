@@ -50,24 +50,28 @@ router.beforeEach(async (to, from, next) => {
     } else if(isWhiteList(to.path)){
       return next();
     } else{
-      try{
-        if (userStore.refreshUser) {
-          await userStore.getUserInfo();
-        }
-        if (isAdmin && !permissionStore.isRoutesLoaded) {
-          const siderRouters = await permissionStore.generateSidebarRouters();
-          siderRouters.forEach((r: any) => router.addRoute(r));
-          permissionStore.setRoutesLoaded(true);
-          return next({ ...to, replace: true });
+      try {
+        await userStore.getUserInfo(true);
+        if (isAdmin) {
+          if (!userStore.hasEveryPermission(['admin:access'])) {
+            permissionStore.resetRoutes();
+            return next({ path: '/' });
+          }
+          const oldSignature = permissionStore.routeSignature;
+          await permissionStore.generateSidebarRouters();
+          if (oldSignature !== permissionStore.routeSignature) {
+            return next({ ...to, replace: true });
+          }
         }
         return next();
-      }catch(e){
+      } catch (e) {
         await userStore.doLogout();
         return next({ path: loginPath });
       }
     }
   } else {
     //没有token
+    permissionStore.resetRoutes();
     if (!requireLogin || isWhiteList(to.path)) {
       //在免登录白名单或者不需要登录，直接进入
       return next();

@@ -186,6 +186,7 @@
       </n-flex>
       <template #footer>
         <el-button
+          v-permission="mode === 'edit' ? ['problem:problem:edit'] : ['problem:problem:add']"
           size="large"
           type="primary"
           :loading="loading"

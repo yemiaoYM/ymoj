@@ -45,10 +45,17 @@
 
         <!-- 操作区域 -->
         <n-flex :size="10" align="center" style="padding-bottom: 15px">
-          <el-button plain type="primary" :icon="Plus" @click="handleAdd"
-            >新增</el-button
-          >
           <el-button
+            v-permission="['announcement:announcement:add']"
+            plain
+            type="primary"
+            :icon="Plus"
+            @click="handleAdd"
+          >
+            新增
+          </el-button>
+          <el-button
+            v-permission="['announcement:announcement:query', 'announcement:announcement:edit']"
             plain
             type="success"
             :icon="Edit"
@@ -57,6 +64,7 @@
             >修改</el-button
           >
           <el-button
+            v-permission="['announcement:announcement:remove']"
             plain
             type="danger"
             :icon="Delete"
@@ -89,6 +97,7 @@
           <el-table-column label="置顶" width="80" align="center">
             <template #default="scope">
               <el-switch
+                :disabled="!userStore.hasEveryPermission(['announcement:announcement:edit'])"
                 v-model="scope.row.pinned"
                 @change="handlePinnedChange(scope.row)"
               />
@@ -97,6 +106,7 @@
           <el-table-column label="状态" width="80" align="center">
             <template #default="scope">
               <el-switch
+                :disabled="!userStore.hasEveryPermission(['announcement:announcement:edit'])"
                 v-model="scope.row.status"
                 @change="handleStatusChange(scope.row)"
               />
@@ -132,6 +142,7 @@
             <template #default="scope">
               <n-flex :size="0" justify="center">
                 <el-button
+                  v-permission="['announcement:announcement:query', 'announcement:announcement:edit']"
                   class="operation-button"
                   type="primary"
                   size="small"
@@ -142,6 +153,7 @@
                   编辑
                 </el-button>
                 <el-button
+                  v-permission="['announcement:announcement:remove']"
                   class="operation-button"
                   type="danger"
                   size="small"
@@ -203,6 +215,7 @@
         </el-form-item>
         <el-form-item label="置顶状态" prop="pinned">
           <el-switch
+            :disabled="!userStore.hasEveryPermission([currentAnnouncementId === null ? 'announcement:announcement:add' : 'announcement:announcement:edit'])"
             v-model="announcementForm.pinned"
             active-text="置顶"
             inactive-text="不置顶"
@@ -210,6 +223,7 @@
         </el-form-item>
         <el-form-item label="显示状态" prop="status">
           <el-switch
+            :disabled="!userStore.hasEveryPermission([currentAnnouncementId === null ? 'announcement:announcement:add' : 'announcement:announcement:edit'])"
             v-model="announcementForm.status"
             active-text="显示"
             inactive-text="隐藏"
@@ -227,9 +241,14 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitForm" :loading="submitLoading"
-            >确定</el-button
+          <el-button
+            v-permission="currentAnnouncementId === null ? ['announcement:announcement:add'] : ['announcement:announcement:edit']"
+            type="primary"
+            @click="submitForm"
+            :loading="submitLoading"
           >
+            确定
+          </el-button>
         </span>
       </template>
     </el-dialog>
@@ -238,6 +257,7 @@
 
 <script lang="ts" setup>
 //import
+import { useUserStore } from "@/stores/user";
 import { ref, onMounted, reactive, nextTick, defineAsyncComponent } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Search, Refresh, Plus, Edit, Delete } from "@element-plus/icons-vue";
@@ -257,6 +277,7 @@ const MarkdownEidt = defineAsyncComponent(
 );
 
 //data
+const userStore = useUserStore();
 const announcementList = ref<Announcement[]>([]);
 const announcementIds = ref<number[]>([]);
 const total = ref<number>(0);

@@ -25,7 +25,7 @@ public class AdminSystemSettingController {
      * 查询系统配置
      * @return 系统配置
      */
-    @PreAuthorize("hasAuthority('system:setting:list')")
+    @PreAuthorize("@ss.hasPermi('system:setting:list')")
     @GetMapping
     public Result<SystemSettingVO> getSystemSetting() {
         log.info("查询系统配置");
@@ -37,7 +37,7 @@ public class AdminSystemSettingController {
      * @param systemSettingDTO 系统配置
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('system:setting:edit')")
+    @PreAuthorize("@ss.hasPermi('system:setting:edit')")
     @PutMapping
     public Result<Void> updateSystemSetting(@Validated @RequestBody SystemSettingDTO systemSettingDTO) {
         log.info("修改系统配置:{}", systemSettingDTO);

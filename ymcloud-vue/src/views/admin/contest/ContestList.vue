@@ -17,8 +17,23 @@
         
         <!-- 操作区域 -->
         <n-flex :size="10" align="center" style="padding-bottom: 15px;">
-          <el-button plain type="primary" :icon="Plus" @click="handleAdd">创建比赛</el-button>
-          <el-button plain type="danger" :icon="Delete" :disabled="contestIds.length === 0" @click="handleDelete">
+          <el-button
+            v-permission="['contest:contest:add']"
+            plain
+            type="primary"
+            :icon="Plus"
+            @click="handleAdd"
+          >
+            创建比赛
+          </el-button>
+          <el-button
+            v-permission="['contest:contest:remove']"
+            plain
+            type="danger"
+            :icon="Delete"
+            :disabled="contestIds.length === 0"
+            @click="handleDelete"
+          >
             删除
           </el-button>
         </n-flex>
@@ -50,6 +65,7 @@
             <template #default="scope">
               <el-select
                 :model-value="scope.row.visibility"
+                :disabled="!userStore.hasEveryPermission(['contest:contest:edit'])"
                 @change="(value: number) => handleVisibilityChange(scope.row, value)"
                 style="width: 80px;"
               >
@@ -61,7 +77,8 @@
           <el-table-column label="操作" width="260" align="center">
             <template #default="scope">
               <n-flex :size="0" justify="center">
-                <el-button 
+                <el-button
+                  v-permission="['contest:contest:query', 'contest:contest:edit']"
                   class="operation-button" 
                   type="primary" 
                   size="small" 
@@ -71,7 +88,8 @@
                 >
                   编辑
                 </el-button>
-                <el-button 
+                <el-button
+                  v-permission="['contest:problem:list']"
                   class="operation-button" 
                   type="info" 
                   size="small" 
@@ -81,7 +99,8 @@
                 >
                   管理题目
                 </el-button>
-                <el-button 
+                <el-button
+                  v-permission="['contest:contest:add']"
                   class="operation-button" 
                   type="success" 
                   size="small" 
@@ -91,7 +110,8 @@
                 >
                   克隆
                 </el-button>
-                <el-button 
+                <el-button
+                  v-permission="['contest:contest:remove']"
                   class="operation-button" 
                   type="danger" 
                   size="small" 
@@ -126,6 +146,7 @@
 
 <script lang="ts" setup>
 //import
+import { useUserStore } from '@/stores/user';
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, CopyDocument, List } from '@element-plus/icons-vue';
@@ -138,6 +159,7 @@ import {
 } from '@/api/api';
 
 //data
+const userStore = useUserStore();
 const router = useRouter();
 const contestList = ref<any[]>([]);
 const contestIds = ref<number[]>([]);

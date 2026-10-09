@@ -27,7 +27,16 @@
         <el-table-column prop="loginDateTime" label="登录时间" align="center" />
         <el-table-column label="操作" align="center">
           <template #default="scope">
-            <el-button type="primary" size="small" text :icon="Delete" @click="handleForceOffline(scope.row)">强制下线</el-button>
+            <el-button
+              v-permission="['monitor:online:forceLogout']"
+              type="primary"
+              size="small"
+              text
+              :icon="Delete"
+              @click="handleForceOffline(scope.row)"
+            >
+              强制下线
+            </el-button>
           </template>
         </el-table-column>
       </el-table>

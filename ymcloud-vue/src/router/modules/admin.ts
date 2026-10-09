@@ -37,7 +37,7 @@ export const dynamicRoutes = [
   {
     path: '/admin/problem',
     component: Layout,
-    permissions: ['problem:problem:edit'],
+    permissions: ['problem:problem:query', 'problem:problem:edit'],
     children: [
       {
         path: 'edit/:id(\\d+)',
@@ -51,7 +51,7 @@ export const dynamicRoutes = [
   {
     path: '/admin/contest',
     component: Layout,
-    permissions: ['contest:contest:edit'],
+    permissions: ['contest:contest:query', 'contest:contest:edit'],
     children: [
       {
         path: 'edit/:id(\\d+)',

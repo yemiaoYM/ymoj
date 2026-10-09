@@ -7,6 +7,7 @@
           <span style="font-size: 18px; font-weight: 600; color: #409eff;">标签管理</span>
           <n-flex :size="12" align="center">
             <el-button
+              v-permission="['problem:tag:add']"
               type="primary"
               @click="openTagDialog('add', null)"
               :icon="Plus"
@@ -14,6 +15,7 @@
               添加标签
             </el-button>
             <el-button
+              v-permission="['problem:tag:add']"
               type="warning"
               @click="openTagClassificationDialog('add', null)"
               :icon="FolderAdd"
@@ -59,6 +61,7 @@
               
               <n-flex :size="8" v-if="tagsAndClassification.classification">
                 <el-button
+                  v-permission="['problem:tag:edit']"
                   type="primary"
                   size="small"
                   :icon="Edit"
@@ -66,6 +69,7 @@
                   @click="openTagClassificationDialog('update', tagsAndClassification.classification)"
                 />
                 <el-button
+                  v-permission="['problem:tag:remove']"
                   type="danger"
                   size="small"
                   :icon="Delete"
@@ -79,6 +83,7 @@
           <!-- 标签内容区 -->
           <n-flex :size="8" style="min-height: 40px;" align="flex-start">
             <el-button
+              v-permission="['problem:tag:add']"
               size="small"
               type="primary"
               plain
@@ -93,11 +98,11 @@
               :key="tagIndex"
               :color="tag.color"
               effect="dark"
-              closable
+              :closable="userStore.hasEveryPermission(['problem:tag:remove'])"
               size="default"
               style="cursor: pointer; margin: 2px;"
               @close="deleteTag(tag)"
-              @click="openTagDialog('update', tag)"
+              @click="userStore.hasEveryPermission(['problem:tag:edit']) && openTagDialog('update', tag)"
             >
               {{ tag.name }}
             </el-tag>
@@ -141,7 +146,12 @@
       <template #footer>
         <n-flex justify="end" :size="12">
           <el-button @click="addTagDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="upsertTag" :loading="upsertTagLoading">
+          <el-button
+            v-permission="tag.id ? ['problem:tag:edit'] : ['problem:tag:add']"
+            type="primary"
+            @click="upsertTag"
+            :loading="upsertTagLoading"
+          >
             {{ upsertTagBtn }}
           </el-button>
         </n-flex>
@@ -178,7 +188,12 @@
       <template #footer>
         <n-flex justify="end" :size="12">
           <el-button @click="addTagClassificationDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="upsertTagClassification" :loading="upsertTagClassificationLoading">
+          <el-button
+            v-permission="tagClassification.id ? ['problem:tag:edit'] : ['problem:tag:add']"
+            type="primary"
+            @click="upsertTagClassification"
+            :loading="upsertTagClassificationLoading"
+          >
             {{ tagClassification.id ? '更新' : '添加' }}
           </el-button>
         </n-flex>
@@ -189,6 +204,7 @@
 
 <script lang="ts" setup>
 //import
+import { useUserStore } from '@/stores/user';
 import { ref, reactive, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Edit, Delete, Folder, Document, FolderAdd } from '@element-plus/icons-vue';
@@ -204,6 +220,7 @@ import {
 } from '@/api/api';
 
 //data
+const userStore = useUserStore();
 const getTagListLoading = ref<boolean>(false);
 const upsertTagLoading = ref<boolean>(false);
 const upsertTagClassificationLoading = ref<boolean>(false);
@@ -369,13 +386,13 @@ const deleteTag = (tagData: any) => {
   ).then(async () => {
     try {
       const res = await deleteAdminTag(tagData.id);
-        ElMessage.success(res.data.msg);
-        init(); // 重新加载数据
-      } catch (e) {
-        console.log(e);
-      } finally {
-        upsertTagClassificationLoading.value = false;
-      }
+      ElMessage.success(res.data.msg);
+      init(); //重新加载数据
+    } catch (e) {
+      console.log(e);
+    } finally {
+      upsertTagClassificationLoading.value = false;
+    }
   }).catch(() => {});
 };
 //删除标签分类

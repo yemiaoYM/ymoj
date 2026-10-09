@@ -7,12 +7,15 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.user.UserException;
 import com.ymcloud.common.exception.user.UserNotExistsException;
+import com.ymcloud.core.security.service.AuthorizationService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.UserEntityService;
+import com.ymcloud.core.web.dao.UserRoleEntityService;
 import com.ymcloud.pojo.dto.admin.ResetUserPasswordDTO;
 import com.ymcloud.pojo.dto.admin.UpdateUserStatusDTO;
 import com.ymcloud.pojo.dto.admin.UserDTO;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.entity.UserRole;
 import com.ymcloud.pojo.query.admin.AdminUserPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminUserService;
@@ -34,6 +37,12 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     @Autowired
     private UserEntityService userEntityService;
+
+    @Autowired
+    private UserRoleEntityService userRoleEntityService;
+
+    @Autowired
+    private AuthorizationService authorizationService;
 
     /**
      * 查询用户列表
@@ -93,6 +102,9 @@ public class AdminUserServiceImpl implements AdminUserService {
         if(size != ids.size()){
             throw new UserException("删除用户失败，请稍后再试");
         }
+        userRoleEntityService.lambdaUpdate()
+                .in(UserRole::getUserId, ids)
+                .remove();
     }
 
     /**
@@ -152,6 +164,7 @@ public class AdminUserServiceImpl implements AdminUserService {
      * @param user 用户
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void addUser(UserDTO user) {
         if(StrUtil.isBlank(user.getPassword())){
             throw new UserException("密码不能为空",HttpStatus.BAD_REQUEST);
@@ -172,6 +185,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (!ok) {
             throw new UserException("新增用户失败，请稍后再试");
         }
+        authorizationService.assignDefaultRole(newUser.getId());
     }
 
     /**

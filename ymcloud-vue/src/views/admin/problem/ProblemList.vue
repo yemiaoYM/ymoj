@@ -35,9 +35,32 @@
         
         <!-- 操作区域 -->
         <n-flex :size="10" align="center" style="padding-bottom: 15px;">
-          <el-button plain type="primary" :icon="Plus" @click="handleAdd">创建</el-button>
-          <el-button plain type="success" :icon="Plus" @click="handleAddRemote">添加远程OJ题目</el-button>
-          <el-button plain type="danger" :icon="Delete" :disabled="problemIds.length === 0" @click="handleDelete">
+          <el-button
+            v-permission="['problem:problem:add']"
+            plain
+            type="primary"
+            :icon="Plus"
+            @click="handleAdd"
+          >
+            创建
+          </el-button>
+          <el-button
+            v-permission="['problem:problem:add']"
+            plain
+            type="success"
+            :icon="Plus"
+            @click="handleAddRemote"
+          >
+            添加远程OJ题目
+          </el-button>
+          <el-button
+            v-permission="['problem:problem:remove']"
+            plain
+            type="danger"
+            :icon="Delete"
+            :disabled="problemIds.length === 0"
+            @click="handleDelete"
+          >
             删除
           </el-button>
         </n-flex>
@@ -55,6 +78,7 @@
             <template #default="scope">
               <el-select
                 :model-value="scope.row.visibility"
+                :disabled="!userStore.hasEveryPermission(['problem:problem:edit'])"
                 @change="(value: number) => handleVisibilityChange(scope.row, value)"
                 style="width: 100px;"
               >
@@ -67,7 +91,8 @@
           <el-table-column label="操作" width="200" align="center">
             <template #default="scope">
               <n-flex :size="0" justify="center">
-                <el-button 
+                <el-button
+                  v-permission="['problem:problem:query', 'problem:problem:edit']"
                   class="operation-button" 
                   type="primary" 
                   size="small" 
@@ -77,7 +102,8 @@
                 >
                   编辑
                 </el-button>
-                <el-button 
+                <el-button
+                  v-permission="['problem:testcase:query']"
                   class="operation-button" 
                   type="info" 
                   size="small" 
@@ -87,7 +113,8 @@
                 >
                   测试用例
                 </el-button>
-                <el-button 
+                <el-button
+                  v-permission="['problem:problem:remove']"
                   class="operation-button" 
                   type="danger" 
                   size="small" 
@@ -123,6 +150,7 @@
 
 <script lang="ts" setup>
 //import
+import { useUserStore } from '@/stores/user';
 import { ref, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, DocumentCopy } from '@element-plus/icons-vue';
@@ -135,6 +163,7 @@ import {
 } from '@/api/api';
 
 //data
+const userStore = useUserStore();
 const router = useRouter();
 const route = useRoute();
 const problemList = ref<AdminProblemVO[]>([] as AdminProblemVO[]);

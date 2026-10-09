@@ -31,9 +31,9 @@ public class MenuController {
      * 获取动态路由菜单
      * @return 路由菜单
      */
-    @PreAuthorize("hasAnyRole('ADMIN','PROBLEM_ADMIN')")
+    @PreAuthorize("@ss.hasPermi('admin:access')")
     @GetMapping
-    public Result<List<RouterVo>> getMenus(){
+    public Result<List<RouterVo>> getMenus() {
         log.info("获取路由菜单");
         List<RouterVo> routers = menuService.selectMenuTree();
         return Result.ok(routers);

@@ -34,7 +34,7 @@ public class AdminAnnouncementController {
      * @param pageQuery 查询条件
      * @return 公告列表
      */
-    @PreAuthorize("hasAuthority('announcement:announcement:list')")
+    @PreAuthorize("@ss.hasPermi('announcement:announcement:list')")
     @GetMapping("/list")
     public Result<PageVO<Announcement>> queryList(@Validated AdminAnnouncementPageQuery pageQuery) {
         log.info("查询公告列表:{}", pageQuery);
@@ -47,7 +47,7 @@ public class AdminAnnouncementController {
      * @param id 公告ID
      * @return 公告信息
      */
-    @PreAuthorize("hasAuthority('announcement:announcement:query')")
+    @PreAuthorize("@ss.hasPermi('announcement:announcement:query')")
     @GetMapping("/{id}")
     public Result<Announcement> getAnnouncementById(@PathVariable("id") Long id) {
         log.info("根据ID查询公告:{}", id);
@@ -60,7 +60,7 @@ public class AdminAnnouncementController {
      * @param announcementDTO 公告信息
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('announcement:announcement:add')")
+    @PreAuthorize("@ss.hasPermi('announcement:announcement:add')")
     @PostMapping
     public Result<Void> addAnnouncement(@Validated @RequestBody AnnouncementDTO announcementDTO) {
         log.info("新增公告:{}", announcementDTO);
@@ -74,7 +74,7 @@ public class AdminAnnouncementController {
      * @param announcementDTO 公告信息
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('announcement:announcement:edit')")
+    @PreAuthorize("@ss.hasPermi('announcement:announcement:edit')")
     @PutMapping("/{id}")
     public Result<Void> updateAnnouncement(@PathVariable("id") Long id, @Validated @RequestBody AnnouncementDTO announcementDTO) {
         log.info("修改公告:{}, 数据:{}", id, announcementDTO);
@@ -87,7 +87,7 @@ public class AdminAnnouncementController {
      * @param ids 公告ID列表
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('announcement:announcement:remove')")
+    @PreAuthorize("@ss.hasPermi('announcement:announcement:remove')")
     @DeleteMapping("/{ids}")
     public Result<Void> deleteAnnouncementById(@PathVariable("ids") List<Long> ids) {
         log.info("根据ID删除公告:{}", ids);
@@ -101,7 +101,7 @@ public class AdminAnnouncementController {
      * @param status 状态：true=可见，false=不可见
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('announcement:announcement:edit')")
+    @PreAuthorize("@ss.hasPermi('announcement:announcement:edit')")
     @PutMapping("/{id}/status")
     public Result<Void> updateAnnouncementStatus(@PathVariable("id") Long id, @RequestParam("status") Boolean status) {
         log.info("修改公告状态: id={}, status={}", id, status);
@@ -115,7 +115,7 @@ public class AdminAnnouncementController {
      * @param pinned 置顶状态：true=置顶，false=不置顶
      * @return 操作结果
      */
-    @PreAuthorize("hasAuthority('announcement:announcement:edit')")
+    @PreAuthorize("@ss.hasPermi('announcement:announcement:edit')")
     @PutMapping("/{id}/pinned")
     public Result<Void> updateAnnouncementPinned(@PathVariable("id") Long id, @RequestParam("pinned") Boolean pinned) {
         log.info("修改公告置顶状态: id={}, pinned={}", id, pinned);

@@ -1,6 +1,5 @@
 package com.ymcloud.web.service.common.impl;
 
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.ymcloud.common.constant.SystemSettingConstants;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.core.web.dao.SystemSettingEntityService;
@@ -31,8 +30,9 @@ public class SystemSettingServiceImpl implements SystemSettingService {
     @Override
     public boolean isRegisterEnabled() {
         //实时读取数据库，保证保存后所有服务实例立即使用最新配置
-        SystemSetting setting = systemSettingEntityService.getOne(Wrappers.<SystemSetting>lambdaQuery()
-                .eq(SystemSetting::getSettingKey, SystemSettingConstants.REGISTER_ENABLED));
+        SystemSetting setting = systemSettingEntityService.lambdaQuery()
+                .eq(SystemSetting::getSettingKey, SystemSettingConstants.REGISTER_ENABLED)
+                .one();
         if (setting == null) {
             throw new ServiceException("注册配置未初始化，请联系管理员");
         }
@@ -49,9 +49,10 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         if (systemSettingDTO == null || systemSettingDTO.getRegisterEnabled() == null) {
             throw new ServiceException("请选择是否允许注册");
         }
-        boolean success = systemSettingEntityService.update(Wrappers.<SystemSetting>lambdaUpdate()
+        boolean success = systemSettingEntityService.lambdaUpdate()
                 .eq(SystemSetting::getSettingKey, SystemSettingConstants.REGISTER_ENABLED)
-                .set(SystemSetting::getSettingValue, systemSettingDTO.getRegisterEnabled().toString()));
+                .set(SystemSetting::getSettingValue, systemSettingDTO.getRegisterEnabled().toString())
+                .update();
         if (!success) {
             throw new ServiceException("保存系统配置失败，请稍后再试");
         }

@@ -28,6 +28,10 @@ public class Auth {
     private String component;
     @Schema(description="前端菜单图标")
     private String icon;
+    @Schema(description="权限类型：M=目录，C=页面，F=操作")
+    private String type;
+    @Schema(description="是否为系统内置权限")
+    private Boolean builtIn;
     @Schema(description="权限状态：0=禁用，1=启用")
     private Integer status;
     @Schema(description="创建时间")

@@ -100,7 +100,7 @@
               <el-dropdown-menu>
                 <el-dropdown-item @click="toUserHome">我的首页</el-dropdown-item>
                 <el-dropdown-item @click="toSetting">我的设置</el-dropdown-item>
-                <el-dropdown-item v-if="userStore.hasAnyRole(['ADMIN','PROBLEM_ADMIN'])" @click="toAdmin">后端管理</el-dropdown-item>
+                <el-dropdown-item v-if="userStore.hasEveryPermission(['admin:access'])" @click="toAdmin">后端管理</el-dropdown-item>
                 <el-dropdown-item divided @click="LoginOut">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>

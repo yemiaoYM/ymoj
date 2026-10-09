@@ -18,6 +18,7 @@ import com.ymcloud.common.utils.MailUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.context.AuthenticationContextHolder;
 import com.ymcloud.core.security.domain.LoginUser;
+import com.ymcloud.core.security.service.AuthorizationService;
 import com.ymcloud.core.security.service.TokenService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
@@ -32,9 +33,9 @@ import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.pojo.vo.oj.UserCalendarHeatmapVO;
 import com.ymcloud.pojo.vo.oj.UserInfoVO;
+import com.ymcloud.web.service.common.SystemSettingService;
 import com.ymcloud.web.service.oj.FileService;
 import com.ymcloud.web.service.oj.UserService;
-import com.ymcloud.web.service.common.SystemSettingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -88,6 +89,9 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private SystemSettingService systemSettingService;
 
+    @Autowired
+    private AuthorizationService authorizationService;
+
     /**
      * 用户登录
      * @param loginDTO 登录请求体
@@ -133,34 +137,39 @@ public class UserServiceImpl implements UserService {
      * @param registerDTO 注册请求体
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void register(RegisterDTO registerDTO) {
         //关闭注册时直接拦截，避免消耗验证码或写入用户数据
         if (!systemSettingService.isRegisterEnabled()) {
             throw new UserException("系统暂未开放新用户注册", HttpStatus.FORBIDDEN);
         }
         //1.验证码校验
-        validateCaptcha(registerDTO.getCode(),registerDTO.getUuid());
+        validateCaptcha(registerDTO.getCode(), registerDTO.getUuid());
         //2.查询是否信息已被注册
-        String username=registerDTO.getUsername().trim();
-        String password=registerDTO.getPassword();
-        String rePassword=registerDTO.getRePassword();
-        String email=registerDTO.getEmail().trim();
+        String username = registerDTO.getUsername().trim();
+        String password = registerDTO.getPassword();
+        String rePassword = registerDTO.getRePassword();
+        String email = registerDTO.getEmail().trim();
         //1.1用户输入的两次密码不同
-        if(!StrUtil.equals(password,rePassword)){
+        if (!StrUtil.equals(password, rePassword)) {
             throw new UserException("两次密码不同，请检查输入");
         }
         //2.2用户名也是唯一字段，查询是否已存在
-        if(userEntityService.lambdaQuery().eq(User::getUsername,username).exists()){
+        if (userEntityService.lambdaQuery()
+                .eq(User::getUsername, username)
+                .exists()) {
             throw new UserException("该用户名已被注册");
         }
         //2.3校验email是否被注册过
-        if(userEntityService.lambdaQuery().eq(User::getEmail,email).exists()){
+        if (userEntityService.lambdaQuery()
+                .eq(User::getEmail, email)
+                .exists()) {
             throw new UserException("该邮箱已被其他用户使用");
         }
         //3.生成加密密码
-        String encodePassword= SecurityUtils.encryptPassword(password);
+        String encodePassword = SecurityUtils.encryptPassword(password);
         //4.构造User实体
-        User user=new User();
+        User user = new User();
         user.setUsername(username);
         user.setPassword(encodePassword);
         user.setEmail(email);
@@ -168,9 +177,10 @@ public class UserServiceImpl implements UserService {
         user.setSignature("<p>这个家伙很懒，什么也没写…<p>");
         //5.插入新用户
         boolean save = userEntityService.save(user);
-        if(!save){
+        if (!save) {
             throw new UserException("系统注册失败，请稍后再试");
         }
+        authorizationService.assignDefaultRole(user.getId());
     }
 
     /**

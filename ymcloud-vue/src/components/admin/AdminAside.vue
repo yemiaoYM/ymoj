@@ -52,7 +52,7 @@ const menuStyle=computed(()=>{
     display: isHidden.value ? 'none' : 'block'
   }
 });
-const menus = ref(permissionStore.sidebarRouters);
+const menus = computed(() => permissionStore.sidebarRouters);
 
 // menus.value=[
 // {
