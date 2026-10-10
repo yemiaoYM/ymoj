@@ -90,3 +90,9 @@ logs/
 
 # 其他临时文件
 release/
+
+### 本地规范与待审批文件 ###
+# AGENTS.md 仅供本地使用，禁止提交到仓库（包含子目录）
+AGENTS.md
+# 迁移文件经用户逐项审批后才允许提交
+/sql/migrations/
