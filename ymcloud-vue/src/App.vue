@@ -2,14 +2,40 @@
   <div>
     <el-config-provider :message="messageConfig" :locale="zhCn">
       <router-view />
+      <div v-if="appStore.initialLoadError" class="page-state">
+        <el-card class="page-state-card" shadow="never">
+          <el-result
+            icon="warning"
+            title="页面加载失败"
+            sub-title="暂时无法连接服务，请稍后重试。"
+          >
+            <template #extra>
+              <el-button
+                type="primary"
+                :icon="Refresh"
+                :loading="appStore.initialLoading"
+                @click="handleRetry"
+              >
+                重新加载
+              </el-button>
+            </template>
+          </el-result>
+        </el-card>
+      </div>
     </el-config-provider>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, nextTick, reactive } from "vue";
+import { onMounted, nextTick, reactive, watch } from "vue";
 import { LOGO, MOTTO } from "@/constants/logo";
 import zhCn from "element-plus/dist/locale/zh-cn.mjs";
+import { Refresh } from "@element-plus/icons-vue";
+import { useRouter } from "vue-router";
+import { useAppStore } from "@/stores/app";
+
+const router = useRouter();
+const appStore = useAppStore();
 
 //消息配置
 const messageConfig = reactive({
@@ -19,18 +45,55 @@ const messageConfig = reactive({
 });
 
 //methods
+const handleRetry = async () => {
+  if (appStore.initialLoading) {
+    return;
+  }
+  try {
+    const path = appStore.retryPath
+      || window.location.pathname + window.location.search + window.location.hash;
+    await router.replace(path);
+  } catch (e) {
+    console.error(e);
+  }
+};
+
 const removeLoader = () => {
   document.getElementById("app-loader")?.remove();
 };
+//首次导航结束后移除项目原有启动动画，正常切换页面不显示额外加载画面
+watch(() => appStore.initialLoading, loading => {
+  if (!loading) {
+    removeLoader();
+  }
+});
 onMounted(async () => {
   await nextTick();
-  removeLoader();
+  if (!appStore.initialLoading) {
+    removeLoader();
+  }
   console.log(LOGO);
   console.log(MOTTO);
 });
 </script>
 
 <style>
+.page-state {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--el-fill-color-light);
+}
+
+.page-state-card {
+  width: 100%;
+  max-width: 520px;
+}
+
 /* color palette from <https://github.com/vuejs/theme> */
 :root {
   --vt-c-white: #ffffff;

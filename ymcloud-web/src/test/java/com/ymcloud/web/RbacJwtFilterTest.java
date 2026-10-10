@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -66,6 +67,7 @@ public class RbacJwtFilterTest {
         });
         verify(tokenService).verifyToken(login);
     }
+
     @Test
     void revokedAccountInvalidatesTokenAndDoesNotAuthenticate() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -78,5 +80,59 @@ public class RbacJwtFilterTest {
         verify(tokenService).delLoginUser("mock-token");
         verify(tokenService, never()).verifyToken(any());
         verify(chain).doFilter(any(), any());
+    }
+
+    @Test
+    void redisReadTimeoutReturnsServiceUnavailableWithoutDeletingSession() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        when(tokenService.getLoginUser(request)).thenThrow(new QueryTimeoutException("Redis command timed out"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+        filter.doFilter(request, response, chain);
+        assertEquals(200, response.getStatus());
+        assertTrue(response.getContentAsString().contains("\"code\":503"));
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(tokenService, never()).delLoginUser(anyString());
+        verifyNoInteractions(authorizationService, chain);
+    }
+
+    @Test
+    void redisRenewalTimeoutDoesNotDeleteSessionOrAllowRequest() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        LoginUser login = loginUser();
+        when(tokenService.getLoginUser(request)).thenReturn(login);
+        when(authorizationService.refreshAuthorization(login)).thenReturn(true);
+        doThrow(new QueryTimeoutException("Redis command timed out")).when(tokenService).verifyToken(login);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+        filter.doFilter(request, response, chain);
+        assertTrue(response.getContentAsString().contains("\"code\":503"));
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verify(tokenService, never()).delLoginUser(anyString());
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void authorizationDatabaseTimeoutDoesNotDeleteSessionOrAllowRequest() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        LoginUser login = loginUser();
+        when(tokenService.getLoginUser(request)).thenReturn(login);
+        when(authorizationService.refreshAuthorization(login)).thenThrow(new QueryTimeoutException("Database timed out"));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+        filter.doFilter(request, response, chain);
+        assertTrue(response.getContentAsString().contains("\"code\":503"));
+        verify(tokenService, never()).delLoginUser(anyString());
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void controllerDatabaseErrorsAreNotReportedAsAuthenticationServiceErrors() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        FilterChain chain = mock(FilterChain.class);
+        QueryTimeoutException timeout = new QueryTimeoutException("Controller database timed out");
+        doThrow(timeout).when(chain).doFilter(any(), any());
+        assertSame(timeout, assertThrows(QueryTimeoutException.class,
+                () -> filter.doFilter(request, new MockHttpServletResponse(), chain)));
     }
 }

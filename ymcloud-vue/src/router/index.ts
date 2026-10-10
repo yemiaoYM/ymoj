@@ -1,7 +1,10 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHistory, START_LOCATION } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 import { usePermissionStore } from '@/stores/permission';
+import { useAppStore } from '@/stores/app';
 import { isPathMatch } from '@/utils/utils';
+import { isAxiosError, type AxiosResponse } from 'axios';
+import { ElMessage } from 'element-plus';
 //模块化路由
 import ojRoutes from '@/router/modules/oj';
 import adminRoutes from '@/router/modules/admin';
@@ -32,6 +35,13 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
+  const appStore = useAppStore();
+  const initialNavigation = from === START_LOCATION;
+  //首次进入还没有可显示的页面，普通导航保留当前页面
+  if (initialNavigation) {
+    appStore.initialLoading = true;
+    appStore.retryPath = to.fullPath;
+  }
   //设置标题
   to.meta.title && (document.title = to.meta.title + " - YMOJ");
   //获取用户信息
@@ -65,8 +75,16 @@ router.beforeEach(async (to, from, next) => {
         }
         return next();
       } catch (e) {
-        await userStore.doLogout();
-        return next({ path: loginPath });
+        const response = isAxiosError(e) ? e.response : e as AxiosResponse<{ code?: number }> | undefined;
+        //仅明确未授权时退出登录，网络或服务异常保留令牌并取消本次导航
+        if (response?.data?.code === 401 || response?.status === 401) {
+          await userStore.doLogout();
+          return next({ path: loginPath });
+        }
+        if (initialNavigation) {
+          appStore.initialLoadError = true;
+        }
+        return next(false);
       }
     }
   } else {
@@ -79,6 +97,27 @@ router.beforeEach(async (to, from, next) => {
       //否则全部重定向到登录页
       return next(`${loginPath}?redirect=${to.fullPath}`);
     }
+  }
+});
+
+router.afterEach((to, from, failure) => {
+  if (from === START_LOCATION) {
+    const appStore = useAppStore();
+    appStore.initialLoading = false;
+    if (!failure) {
+      appStore.initialLoadError = false;
+    }
+  }
+});
+
+router.onError((error, to, from) => {
+  if (from === START_LOCATION) {
+    const appStore = useAppStore();
+    appStore.initialLoading = false;
+    appStore.initialLoadError = true;
+    appStore.retryPath = to.fullPath;
+  } else {
+    ElMessage.error('页面加载失败，请稍后重试');
   }
 });
 

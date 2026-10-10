@@ -89,6 +89,11 @@ public class HttpStatus {
     public static final int NOT_IMPLEMENTED = 501;
 
     /**
+     * 服务暂时不可用
+     */
+    public static final int SERVICE_UNAVAILABLE = 503;
+
+    /**
      * 系统警告消息
      */
     public static final int WARN = 601;

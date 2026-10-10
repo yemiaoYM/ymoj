@@ -1,15 +1,20 @@
 package com.ymcloud.core.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.lettuce.core.ClientOptions;
+import io.lettuce.core.SocketOptions;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.data.redis.LettuceClientConfigurationBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+import java.time.Duration;
 
 /**
  * @PackageName: com.ymcloud.core.config
@@ -21,6 +26,53 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Configuration
 @Slf4j
 public class RedisConfig {
+
+    /**
+     * Redis连接保活，及时发现空闲连接失效
+     * @return Lettuce客户端配置
+     */
+    @Bean
+    public LettuceClientConfigurationBuilderCustomizer lettuceSocketCustomizer() {
+        return builder -> {
+            ClientOptions options = builder.build().getClientOptions().orElseGet(ClientOptions::create);
+            SocketOptions socketOptions = options.getSocketOptions().mutate()
+                    .keepAlive(SocketOptions.KeepAliveOptions.builder()
+                            .enable()
+                            .idle(Duration.ofSeconds(30))
+                            .interval(Duration.ofSeconds(10))
+                            .count(3)
+                            .build())
+                    .build();
+            builder.clientOptions(options.mutate()
+                    .socketOptions(socketOptions)
+                    .build());
+        };
+    }
+
+    /**
+     * 开发环境快速返回连接故障，避免超过前端请求等待时间
+     * @return 开发环境连接超时配置
+     */
+    @Bean
+    @Profile("dev")
+    public LettuceClientConfigurationBuilderCustomizer lettuceDevTimeoutCustomizer() {
+        return builder -> {
+            ClientOptions options = builder.build().getClientOptions().orElseGet(ClientOptions::create);
+            Duration timeout = Duration.ofSeconds(2);
+            if (builder.build().getCommandTimeout().compareTo(timeout) > 0) {
+                builder.commandTimeout(timeout);
+            }
+            SocketOptions socketOptions = options.getSocketOptions();
+            if (socketOptions.getConnectTimeout().compareTo(timeout) > 0) {
+                builder.clientOptions(options.mutate()
+                        .socketOptions(socketOptions.mutate()
+                                .keepAlive(socketOptions.getKeepAlive())
+                                .connectTimeout(timeout)
+                                .build())
+                        .build());
+            }
+        };
+    }
 
     /**
      * redis配置

@@ -12,6 +12,7 @@ import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.common.utils.ServletUtils;
 import com.ymcloud.core.security.domain.LoginUser;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import jakarta.servlet.http.HttpServletRequest;
@@ -56,6 +57,9 @@ public class TokenService {
     @Autowired
     private RedisCache redisCache;
 
+    @Autowired
+    private RedisSessionService redisSessionService;
+
     /**
      * 获取用户身份信息
      * @param request
@@ -64,18 +68,23 @@ public class TokenService {
     public LoginUser getLoginUser(HttpServletRequest request) {
         //获取请求携带的令牌
         String token = getToken(request);
-        if (StrUtil.isNotEmpty(token)) {
-            try {
-                Claims claims = parseToken(token);
-                //解析对应的权限以及用户信息
-                String uuid = (String)claims.get(Constants.LOGIN_USER_KEY);
-                String userKey = getTokenKey(uuid);
-                return redisCache.getCacheObject(userKey);
-            }catch (Exception e) {
-                log.error("获取用户信息异常{}", e.getMessage());
-            }
+        if (StrUtil.isEmpty(token)) {
+            return null;
         }
-        return null;
+        String uuid;
+        try {
+            Claims claims = parseToken(token);
+            uuid = claims.get(Constants.LOGIN_USER_KEY, String.class);
+        } catch (JwtException | IllegalArgumentException e) {
+            log.warn("令牌解析失败，请求URI：{}", request.getRequestURI());
+            return null;
+        }
+        if (StrUtil.isBlank(uuid)) {
+            return null;
+        }
+        //缓存读取失败应作为服务异常处理，不能误判为令牌失效
+        String userKey = getTokenKey(uuid);
+        return redisSessionService.getLoginUser(userKey);
     }
 
     /**

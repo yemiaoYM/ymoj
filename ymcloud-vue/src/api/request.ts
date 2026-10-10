@@ -41,6 +41,10 @@ service.interceptors.response.use(
     if(res.code === 500 && showErrorMessage){
       ElMessage.error(res.msg);
     }
+    //依赖服务临时异常，保留登录令牌供恢复后重试
+    if(res.code === 503 && showErrorMessage){
+      ElMessage.error(res.msg);
+    }
     //未登录
     if(res.code === 401){
       if (showErrorMessage) ElMessage.error(res.msg);
