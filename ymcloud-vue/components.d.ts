@@ -82,6 +82,7 @@ declare module 'vue' {
     ElUpload: typeof import('element-plus/es')['ElUpload']
     InfoCard: typeof import('./src/components/admin/InfoCard.vue')['default']
     Layout: typeof import('./src/components/oj/Layout.vue')['default']
+    LegalAgreement: typeof import('./src/components/common/LegalAgreement.vue')['default']
     MarkdownEidt: typeof import('./src/components/common/MarkdownEidt.vue')['default']
     MarkdownPreview: typeof import('./src/components/common/MarkdownPreview.vue')['default']
     NButton: typeof import('naive-ui')['NButton']

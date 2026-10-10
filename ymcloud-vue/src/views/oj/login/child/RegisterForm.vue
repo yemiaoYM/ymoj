@@ -31,8 +31,9 @@
 
       <div class="form-options">
         <el-checkbox v-model="agree" :class="{ shake: !agree && shakeCheckbox }">
-          我已阅读并同意用户协议和隐私政策
+          我已阅读并同意
         </el-checkbox>
+        <LegalAgreement />
       </div>
 
       <div class="form-buttons">
@@ -61,6 +62,7 @@ import { ElMessage, ElNotification } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 import { getCaptcha } from '@/api/api';
 import type { RegisterDTO } from '@/type/types';
+import LegalAgreement from '@/components/common/LegalAgreement.vue';
 
 //定义事件
 const emit = defineEmits<{
@@ -134,7 +136,7 @@ const handleRegister = async () => {
     if (!agree.value) {
       shakeCheckbox.value = true;
       setTimeout(() => (shakeCheckbox.value = false), 500);
-      ElMessage.warning('请同意用户协议');
+      ElMessage.warning('请阅读并同意用户协议和隐私政策');
       return;
     }
 
@@ -242,7 +244,15 @@ const refreshCaptcha = () => {
 }
 
 .form-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
   margin-bottom: 24px;
+}
+
+.form-options .el-checkbox {
+  margin-right: 0;
 }
 
 .form-buttons {

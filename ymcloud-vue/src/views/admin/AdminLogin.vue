@@ -11,6 +11,7 @@
           :rules="rules"
           :hide-required-asterisk="true"
           style="width: 100%;height: 100%;"
+          @submit.prevent="handleLogin"
         >
           <el-form-item prop="username">
             <el-input
@@ -42,6 +43,7 @@
                 :prefix-icon="Key"
                 size="large"
                 style="flex: 1"
+                @keydown.enter.prevent="handleCaptchaEnter"
               />
               <el-image
                 lazy
@@ -53,25 +55,35 @@
           </el-form-item>
 
           <el-form-item>
-            <el-button style="width: 100%;" size="large" type="primary" @click="handleLogin" :loading="loading">
+            <el-button
+              style="width: 100%;"
+              size="large"
+              type="primary"
+              native-type="submit"
+              :loading="loading"
+            >
               登录
             </el-button>
           </el-form-item>
         </el-form>
+        <div class="agreement-links">
+          <LegalAgreement />
+        </div>
       </el-card>
     </n-flex>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref,onMounted } from 'vue'
-import { User, Lock, Key } from '@element-plus/icons-vue'
+import { ref, onMounted } from 'vue';
+import { User, Lock, Key } from '@element-plus/icons-vue';
 import type { LoginDTO } from '@/type/types';
 import { getCaptcha } from '@/api/api';
 import { ElMessage } from 'element-plus';
 import { useUserStore } from '@/stores/user';
+import LegalAgreement from '@/components/common/LegalAgreement.vue';
 
-const userStore=useUserStore();
+const userStore = useUserStore();
 const formRef = ref();
 const loading = ref<boolean>(false);
 const form = ref<LoginDTO>({} as LoginDTO);
@@ -94,8 +106,19 @@ onMounted(() => {
   loadCaptcha();
 });
 
+// 输入法确认文字时不提交登录表单。
+const handleCaptchaEnter = (event: KeyboardEvent) => {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  handleLogin();
+};
+
 //登录
 const handleLogin = async () => {
+  if (loading.value) {
+    return;
+  }
   loading.value = true;
   try {
     const valid = await formRef.value.validate();
@@ -105,10 +128,12 @@ const handleLogin = async () => {
       return;
     }
     //登录
-    await userStore.doLogin(form.value.username,
-                            form.value.password, 
-                            form.value.code, 
-                            form.value.uuid);
+    await userStore.doLogin(
+      form.value.username,
+      form.value.password,
+      form.value.code,
+      form.value.uuid
+    );
   } catch (e) {
     //登录失败
     refreshCaptcha();
@@ -140,6 +165,11 @@ const refreshCaptcha = () => {
   background-size: cover;
   background-position: center;
 }
+
+.agreement-links {
+  text-align: center;
+}
+
 .login-form {
   border-radius: 6px;
   background: #ffffff;
