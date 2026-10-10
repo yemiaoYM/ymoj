@@ -27,6 +27,10 @@ public class JudgeTask {
      */
     private Long problemId;
     /**
+     * 提交时固定的测试数据版本，旧队列任务可能为空
+     */
+    private Long testDataVersionId;
+    /**
      * 用户输入
      */
     private String input;

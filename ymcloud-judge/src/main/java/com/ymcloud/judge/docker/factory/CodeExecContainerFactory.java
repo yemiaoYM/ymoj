@@ -70,7 +70,8 @@ public class CodeExecContainerFactory implements DockerContainerFactory<CodeExec
         return new CodeExecContainer(
                 dockerClient,
                 container.getId(),
-                hostWorkingDir);
+                hostWorkingDir,
+                containerWorkingDir);
     }
 
 }

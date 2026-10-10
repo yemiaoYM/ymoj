@@ -95,7 +95,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpMessageConversionException.class)
     public Result<?> handleHttpMessageNotReadable(HttpMessageConversionException e, HttpServletRequest request) {
-        log.warn("请求体无法读取，请求URI：{}，错误信息：{}", request.getRequestURI(), e.getMessage());
+        // JSON 解析异常可能包含原始密码或存储密钥，只记录异常类型。
+        log.warn("请求体无法读取，请求URI：{}，异常类型：{}", request.getRequestURI(), e.getClass().getSimpleName());
         return Result.fail().code(HttpStatus.BAD_REQUEST).msg("请求参数格式不正确，请检查输入数据");
     }
 

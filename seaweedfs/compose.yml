@@ -1,0 +1,133 @@
+name: ymcloud-storage
+
+x-seaweedfs: &seaweedfs
+  image: ${SEAWEEDFS_IMAGE:-chrislusf/seaweedfs:4.48}
+  user: "1000:1000"
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  mem_limit: 768m
+  cpus: 1.0
+  read_only: true
+  tmpfs:
+    - /tmp
+  networks:
+    - storage
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  admin:
+    <<: *seaweedfs
+    profiles: ["admin-ui"]
+    command: admin -master=master:9333 -ip=0.0.0.0 -port=23646 -dataDir=/data -iceberg.port=0 -lance.port=0 -options=/etc/seaweedfs/admin.options
+    ports:
+      - "127.0.0.1:${YMCLOUD_ADMIN_UI_PORT:-23646}:23646"
+    networks:
+      - storage
+      - access
+    volumes:
+      - admin-data:/data
+      - type: bind
+        source: ./secrets/admin.options
+        target: /etc/seaweedfs/admin.options
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      master:
+        condition: service_healthy
+      filer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:23646/login"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  master:
+    <<: *seaweedfs
+    command: master -ip=master -mdir=/data -volumeSizeLimitMB=128
+    volumes:
+      - master-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9333/cluster/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  volume:
+    <<: *seaweedfs
+    command: volume -ip=volume -ip.bind=0.0.0.0 -master=master:9333 -dir=/data -max=32
+    volumes:
+      - volume-data:/data
+    depends_on:
+      master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  filer:
+    <<: *seaweedfs
+    command: filer -ip=filer -ip.bind=0.0.0.0 -master=master:9333 -defaultStoreDir=/data
+    volumes:
+      - filer-data:/data
+    depends_on:
+      master:
+        condition: service_healthy
+      volume:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8888/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  s3:
+    <<: *seaweedfs
+    command: s3 -filer=filer:8888 -port=8333 -config=/etc/seaweedfs/s3.json -autoCreateBucket=false -allowDeleteBucketNotEmpty=false -iam=false -port.iceberg=0 -port.lance=0 -concurrentFileUploadLimit=16 -concurrentUploadLimitMB=256 -readerCacheSizeMB=128
+    ports:
+      - "127.0.0.1:${YMCLOUD_S3_PORT:-18333}:8333"
+    networks:
+      - storage
+      - access
+    volumes:
+      - type: bind
+        source: ./secrets/s3.json
+        target: /etc/seaweedfs/s3.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      filer:
+        condition: service_healthy
+    healthcheck:
+      # 403 confirms both readiness and authentication-required mode; an anonymous 200 fails closed.
+      test: ["CMD-SHELL", "wget -S --spider http://127.0.0.1:8333/ 2>&1 | grep -q 'HTTP/1.1 403'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+networks:
+  storage:
+    internal: true
+  access:
+
+volumes:
+  admin-data:
+  master-data:
+  volume-data:
+  filer-data:

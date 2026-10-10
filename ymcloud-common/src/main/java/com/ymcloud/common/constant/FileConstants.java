@@ -22,6 +22,10 @@ public class FileConstants {
      */
     public static final int STORAGE_MINIO = 2;
     /**
+     * 通用 S3 兼容对象存储。
+     */
+    public static final int STORAGE_S3 = 3;
+    /**
      * 私有文件（需权限访问）
      */
     public static final int ACCESS_PRIVATE = 0;

@@ -1,7 +1,9 @@
 package com.ymcloud.web.controller.admin.problem;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
+import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
@@ -33,6 +35,9 @@ public class AdminProblemController {
 
     @Autowired
     private AdminProblemService adminProblemService;
+
+    @Autowired
+    private TestDataService testDataService;
 
     /**
      * 查询题目列表
@@ -169,6 +174,24 @@ public class AdminProblemController {
         log.info("删除测试样例文件: problemId={}, fileNames={}", problemId, fileNames);
         adminProblemService.deleteTestCaseFiles(problemId, fileNames);
         return Result.ok();
+    }
+
+    /**
+     * 只读盘点历史测试数据，异常通过报告返回。
+     */
+    @PreAuthorize("@ss.hasPermi('problem:testcase:query')")
+    @GetMapping("/{problemId}/testcases/migration")
+    public Result<TestDataMigrationReport> inspectTestDataMigration(@PathVariable("problemId") Long problemId) {
+        return Result.ok(testDataService.migrateLegacy(problemId, false));
+    }
+
+    /**
+     * 导入校验通过的历史数据；重复执行返回现有版本。
+     */
+    @PreAuthorize("@ss.hasPermi('problem:testcase:add')")
+    @PostMapping("/{problemId}/testcases/migration")
+    public Result<TestDataMigrationReport> migrateTestData(@PathVariable("problemId") Long problemId) {
+        return Result.ok(testDataService.migrateLegacy(problemId, true));
     }
 
 }

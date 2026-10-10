@@ -96,3 +96,6 @@ release/
 AGENTS.md
 # 迁移文件经用户逐项审批后才允许提交
 /sql/migrations/
+
+# 旧部署目录已清理；保留忽略规则防止历史私有配置被重新加入仓库。
+/docker/storage/

@@ -24,6 +24,8 @@ public class Judge {
     private Long id;
     @Schema(description="题目ID")
     private Long problemId;
+    @Schema(description="提交时固定的测试数据版本，历史记录为空")
+    private Long testDataVersionId;
     @Schema(description="题目标题")
     private String problemTitle;
     @Schema(description="题目展示ID，例如 ABC100-A")

@@ -54,12 +54,12 @@ public class JudgeListener {
      * @param task 评测任务
      */
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = RabbitMQConstants.JUDGE_QUEUE,
+            value = @Queue(name = "${ymcloud.judge.task-queue:" + RabbitMQConstants.JUDGE_QUEUE + "}",
                     durable = "true"),
-            exchange = @Exchange(value = RabbitMQConstants.JUDGE_EXCHANGE,
+            exchange = @Exchange(value = "${ymcloud.judge.exchange:" + RabbitMQConstants.JUDGE_EXCHANGE + "}",
                     delayed = "true",
                     type = ExchangeTypes.TOPIC),
-            key = RabbitMQConstants.JUDGE_ROUTING_KEY
+            key = "${ymcloud.judge.task-routing-key:" + RabbitMQConstants.JUDGE_ROUTING_KEY + "}"
     ))
     public void listenJudge(JudgeTask task) {
         log.info("[评测消息队列]=>评测机收到评测消息：{}",task.getSubmissionId());
@@ -71,12 +71,12 @@ public class JudgeListener {
      * @param result 评测结果
      */
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = RabbitMQConstants.JUDGE_RESULT_QUEUE,
+            value = @Queue(name = "${ymcloud.judge.result-queue:" + RabbitMQConstants.JUDGE_RESULT_QUEUE + "}",
                     durable = "true"),
-            exchange = @Exchange(value = RabbitMQConstants.JUDGE_EXCHANGE,
+            exchange = @Exchange(value = "${ymcloud.judge.exchange:" + RabbitMQConstants.JUDGE_EXCHANGE + "}",
                     delayed = "true",
                     type = ExchangeTypes.TOPIC),
-            key = RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY
+            key = "${ymcloud.judge.result-routing-key:" + RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY + "}"
     ))
     public void listenJudgeResultUpdate(JudgeResult result) {
         log.info("[评测结束更新状态队列]=>收到提交id为:{}的消息",result.getSubmissionId());

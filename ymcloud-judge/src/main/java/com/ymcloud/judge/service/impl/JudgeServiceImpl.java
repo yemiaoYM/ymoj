@@ -12,6 +12,7 @@ import com.ymcloud.common.utils.MessageQueueUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.common.utils.ShortSnowflake;
 import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.*;
 import com.ymcloud.core.web.mapper.JudgeMapper;
 import com.ymcloud.judge.service.JudgeService;
@@ -22,6 +23,7 @@ import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.oj.JudgeResultVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -61,6 +63,15 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
     @Autowired
     private ContestUserEntityService contestUserEntityService;
 
+    @Autowired
+    private TestDataService testDataService;
+
+    @Value("${ymcloud.judge.exchange:" + RabbitMQConstants.JUDGE_EXCHANGE + "}")
+    private String judgeExchange = RabbitMQConstants.JUDGE_EXCHANGE;
+
+    @Value("${ymcloud.judge.task-routing-key:" + RabbitMQConstants.JUDGE_ROUTING_KEY + "}")
+    private String judgeTaskRoutingKey = RabbitMQConstants.JUDGE_ROUTING_KEY;
+
     /**
      * 提交评测
      * @param judgeDTO 评测请求
@@ -75,7 +86,9 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         User user = SecurityUtils.getUser();
         //查询题目
         String problemId = judgeDTO.getProblemId();
-        Problem problem = problemEntityService.lambdaQuery().eq(Problem::getProblemId, problemId).one();
+        Problem problem = problemEntityService.lambdaQuery()
+                .eq(Problem::getProblemId, problemId)
+                .one();
         //评测题目不存在
         if(problem == null){
             throw new ProblemNotExistException();
@@ -97,9 +110,11 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         if(language == null){
             throw new JudgeException("该题目不支持此编程语言");
         }
+        Long testDataVersionId = requireTestDataVersion(problem.getId());
         //创建提交记录实体
         Judge judge = Judge.builder()
                 .problemId(problem.getId())
+                .testDataVersionId(testDataVersionId)
                 .problemTitle(problem.getTitle())
                 .displayId(problem.getProblemId())
                 .userId(user.getId())
@@ -127,6 +142,7 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         JudgeTask task =JudgeTask.builder()
                 .submissionId(judge.getId())
                 .problemId(problem.getId())
+                .testDataVersionId(judge.getTestDataVersionId())
                 .code(judgeDTO.getCode())
                 .languageConfig(language)
                 .timeLimit(problem.getTimeLimit())
@@ -137,8 +153,8 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
 
         //发送消息
         messageQueueUtils.sendWithDelay(
-                RabbitMQConstants.JUDGE_EXCHANGE,
-                RabbitMQConstants.JUDGE_ROUTING_KEY,
+                judgeExchange,
+                judgeTaskRoutingKey,
                 task,
                 5000L);
 
@@ -203,11 +219,14 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
             throw new JudgeException("该题目不支持此编程语言");
         }
 
+        Long testDataVersionId = requireTestDataVersion(problem.getId());
+
         //创建提交记录实体
         Judge judge = Judge.builder()
                 .contestId(contest.getId())
                 .contestProblemId(contestProblem.getId())
                 .problemId(problem.getId())
+                .testDataVersionId(testDataVersionId)
                 .problemTitle(contestProblem.getDisplayTitle())
                 .displayId(contestProblem.getDisplayId())
                 .userId(user.getId())
@@ -235,6 +254,7 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
         JudgeTask task =JudgeTask.builder()
                 .submissionId(judge.getId())
                 .problemId(problem.getId())
+                .testDataVersionId(judge.getTestDataVersionId())
                 .code(judgeDTO.getCode())
                 .languageConfig(language)
                 .timeLimit(problem.getTimeLimit())
@@ -246,12 +266,23 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
 
         //比赛立即评测
         messageQueueUtils.send(
-                RabbitMQConstants.JUDGE_EXCHANGE,
-                RabbitMQConstants.JUDGE_ROUTING_KEY,
+                judgeExchange,
+                judgeTaskRoutingKey,
                 task);
 
         //获取当前的评测id，用于前端请求当前评测状态
         return judge.getId();
+    }
+
+    /**
+     * 固定本次提交使用的数据版本，避免排队期间的数据发布改变评测结果。
+     */
+    private Long requireTestDataVersion(Long problemId) {
+        Long versionId = testDataService.getCurrentVersion(problemId);
+        if (versionId == null || versionId <= 0) {
+            throw new JudgeException("题目暂无可用的测试数据版本");
+        }
+        return versionId;
     }
 
     /**
@@ -300,8 +331,8 @@ public class JudgeServiceImpl extends ServiceImpl<JudgeMapper, Judge> implements
 
         //发送消息
         messageQueueUtils.sendWithDelay(
-                RabbitMQConstants.JUDGE_EXCHANGE,
-                RabbitMQConstants.JUDGE_ROUTING_KEY,
+                judgeExchange,
+                judgeTaskRoutingKey,
                 task,
                 5000L);
 

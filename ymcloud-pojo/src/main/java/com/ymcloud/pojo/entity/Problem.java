@@ -43,6 +43,8 @@ public class Problem {
     private Integer visibility;
     @Schema(description="是否允许查看测试样例结果（0=否，1=是）")
     private Boolean openCaseResult;
+    @Schema(description="当前不可变测试数据版本ID")
+    private Long testDataVersionId;
     @Schema(description="出题人ID（user.id）")
     private Long authorId;
     @Schema(description="出题人用户名")

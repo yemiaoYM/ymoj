@@ -495,8 +495,7 @@ public class UserServiceImpl implements UserService {
         fileRecord.setFileType(file.getContentType());
         fileRecord.setFileSize(file.getSize());
         fileRecord.setFileExt(ext);
-        //头像存储到本地
-        fileRecord.setStorageType(FileConstants.STORAGE_LOCAL);
+        //头像存储位置由文件服务的默认配置决定。
         //文件存储相对路径和文件可访问URL在fileService中处理
         fileRecord.setUploaderId(user.getId());
         fileRecord.setUploaderUsername(user.getUsername());

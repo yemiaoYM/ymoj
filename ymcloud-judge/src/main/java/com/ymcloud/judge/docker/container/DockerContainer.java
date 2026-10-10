@@ -150,8 +150,8 @@ public abstract class DockerContainer {
                 .close();
 
         return CmdExecResult.builder()
-                .stdout(out.toString())
-                .stderr(err.toString())
+                .stdout(out.toString(StandardCharsets.UTF_8))
+                .stderr(err.toString(StandardCharsets.UTF_8))
                 .exitCode(inspectExec(execID).getExitCodeLong())
                 .build();
     }
