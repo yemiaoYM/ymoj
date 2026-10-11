@@ -1,6 +1,7 @@
 package com.ymcloud.core.storage;
 
 import com.ymcloud.common.exception.file.FileException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
@@ -18,18 +19,25 @@ public class StorageCredentialCipher {
 
     private final StorageProperties properties;
     private final SecureRandom random = new SecureRandom();
+    private StorageMasterKeyStore keyStore;
 
     public StorageCredentialCipher(StorageProperties properties) {
         this.properties = properties;
     }
 
+    /** 窄测试上下文仍可显式提供主密钥，完整应用自动使用受限本地密钥库。 */
+    @Autowired(required = false)
+    public void setKeyStore(StorageMasterKeyStore keyStore) {
+        this.keyStore = keyStore;
+    }
+
     public void requireKey() {
-        byte[] bytes = key();
+        byte[] bytes = key(true);
         Arrays.fill(bytes, (byte) 0);
     }
 
     public String encrypt(String configKey, String field, String value) {
-        byte[] key = key();
+        byte[] key = key(true);
         try {
             byte[] nonce = new byte[12];
             random.nextBytes(nonce);
@@ -47,7 +55,7 @@ public class StorageCredentialCipher {
     }
 
     public String decrypt(String configKey, String field, String value) {
-        byte[] key = key();
+        byte[] key = key(false);
         try {
             byte[] envelope = Base64.getDecoder().decode(value);
             if (envelope.length < 29) {
@@ -70,10 +78,13 @@ public class StorageCredentialCipher {
         return cipher;
     }
 
-    private byte[] key() {
+    private byte[] key(boolean allowCreate) {
         try {
             String value = properties.getConfigEncryptionKey();
             if (value == null || value.isBlank()) {
+                if (keyStore != null) {
+                    return keyStore.load(allowCreate);
+                }
                 throw new IllegalArgumentException();
             }
             byte[] bytes = Base64.getDecoder().decode(value);

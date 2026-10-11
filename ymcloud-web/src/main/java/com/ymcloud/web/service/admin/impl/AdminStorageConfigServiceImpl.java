@@ -126,12 +126,7 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
     public void test(String key) {
         requireSuperAdmin();
         StorageConfigValidation.validateKey(key);
-        // 缺少主密钥时仍可探测 YAML，不能将配置或测试结果写入数据库。
-        if (!present(properties.getConfigEncryptionKey())) {
-            StorageConfig config = catalog.find(key);
-            if (config != null) {
-                throw new FileException("测试动态存储配置需要主密钥");
-            }
+        if ("local".equals(key)) {
             tester.test(yamlProfile(key));
             return;
         }
@@ -168,6 +163,9 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
             tester.test(yamlProfile(key));
         } else if (config == null || !Objects.equals(config.getRevision(), config.getTestedRevision())) {
             throw new FileException("请先成功测试当前版本的存储配置");
+        } else {
+            // 默认选择只更新元数据，仍需确认动态配置的凭据能够解密。
+            catalog.profile(config);
         }
         catalog.activate(state, key);
     }

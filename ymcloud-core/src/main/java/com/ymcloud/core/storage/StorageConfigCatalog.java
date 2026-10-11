@@ -77,8 +77,8 @@ public class StorageConfigCatalog {
         }
     }
 
+    /** 配置状态锁不依赖密钥，密钥缺失时仍可切回本地并删除无引用的旧配置。 */
     public StorageConfigState lockForWrite() {
-        cipher.requireKey();
         return readState(true, false, true);
     }
 

@@ -2,7 +2,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-$deploymentRoot = $PSScriptRoot
+$deploymentRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../../../seaweedfs'))
 $composeArgs = @('compose', '--project-directory', $deploymentRoot, '-f', (Join-Path $deploymentRoot 'compose.yml'))
 
 function Normalize-HostPath {

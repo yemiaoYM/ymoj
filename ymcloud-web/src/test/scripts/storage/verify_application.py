@@ -20,7 +20,7 @@ import time
 import urllib.parse
 
 
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
 
 def read_json(path):

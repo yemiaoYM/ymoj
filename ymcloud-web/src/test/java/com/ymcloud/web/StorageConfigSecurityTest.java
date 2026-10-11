@@ -220,12 +220,21 @@ class StorageConfigSecurityTest {
     }
 
     @Test
-    void yamlConnectionTestStillWorksWithoutMasterKeyAndDoesNotImport() {
+    void localConnectionTestDoesNotRequireAnEncryptionKeyOrDynamicConfigurationLock() {
         properties.setConfigEncryptionKey(null);
-        properties.getProfiles().put("minio", remoteProfile());
-        service.test("minio");
+        service.test("local");
         verify(tester).test(any());
         verify(catalog, never()).lockForWrite();
+        verify(catalog, never()).save(any(), eq(false));
+    }
+
+    @Test
+    void isolatedContextCannotPersistYamlWithoutAKeyStoreOrExplicitKey() {
+        properties.setConfigEncryptionKey(null);
+        properties.getProfiles().put("minio", remoteProfile());
+        assertThrows(FileException.class, () -> service.test("minio"));
+        verify(tester).test(any());
+        verify(catalog).lockForWrite();
         verify(catalog, never()).save(any(), eq(false));
     }
 

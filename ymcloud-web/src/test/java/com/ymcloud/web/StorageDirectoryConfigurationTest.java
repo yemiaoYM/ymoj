@@ -1,6 +1,7 @@
 package com.ymcloud.web;
 
 import com.ymcloud.core.storage.StorageDirectoryResolver;
+import com.ymcloud.core.storage.StorageProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.env.YamlPropertySourceLoader;
@@ -34,10 +35,11 @@ class StorageDirectoryConfigurationTest {
         ConfigurableEnvironment environment = configuration(Map.of());
         assertEquals("./files", environment.getRequiredProperty("ymcloud.file.base-dir"));
         assertEquals("./files/tmp", environment.getRequiredProperty("ymcloud.docker.host-working-dir"));
-        assertEquals("local", environment.getRequiredProperty("ymcloud.storage.active"));
-        assertEquals("local", environment.getRequiredProperty("ymcloud.storage.profiles.local.type"));
-        assertEquals("", environment.getProperty("ymcloud.storage.config-encryption-key"));
-        assertTrue(List.of(environment.getActiveProfiles()).contains("dev"));
+        assertEquals("local", new StorageProperties().getActive());
+        assertNull(environment.getProperty("ymcloud.storage.active"));
+        assertNull(environment.getProperty("ymcloud.storage.config-encryption-key"));
+        assertNull(environment.getProperty("ymcloud.storage.config-encryption-key-file"));
+        assertNull(environment.getProperty("spring.config.import"));
     }
 
     @Test
@@ -107,14 +109,14 @@ class StorageDirectoryConfigurationTest {
                   docker:
                     host-working-dir: ${YMCLOUD_JUDGE_WORK_DIR:${ymcloud.file.base-dir}/tmp}
                 """, StandardCharsets.UTF_8);
-        ConfigurableEnvironment environment = configuration(Map.of("YMCLOUD_STORAGE_CONFIG", configurationPath(imported)));
+        ConfigurableEnvironment environment = configuration(Map.of("spring.config.import", "optional:file:" + configurationPath(imported)));
         assertEquals("./imported-files", environment.getRequiredProperty("ymcloud.file.base-dir"));
         assertEquals("./imported-files/tmp", environment.getRequiredProperty("ymcloud.docker.host-working-dir"));
 
         Path fileDirectory = directory.resolve("import-file-override").toAbsolutePath().normalize();
         Path judgeDirectory = directory.resolve("import-judge-override").toAbsolutePath().normalize();
         ConfigurableEnvironment overridden = configuration(Map.of(
-                "YMCLOUD_STORAGE_CONFIG", configurationPath(imported),
+                "spring.config.import", "optional:file:" + configurationPath(imported),
                 "YMCLOUD_FILE_BASE_DIR", fileDirectory.toString(),
                 "YMCLOUD_JUDGE_WORK_DIR", judgeDirectory.toString()));
         assertEquals(fileDirectory.toString(), overridden.getRequiredProperty("ymcloud.file.base-dir"));
@@ -130,7 +132,6 @@ class StorageDirectoryConfigurationTest {
         environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("spring.config.location", "classpath:/application.yml");
-        properties.put("YMCLOUD_STORAGE_CONFIG", configurationPath(directory.resolve("missing-storage.yml")));
         properties.putAll(overrides);
         environment.getPropertySources().addFirst(new MapPropertySource("isolated-directory-configuration", properties));
         ConfigurableEnvironment loaded = StorageMigrationTool.loadConfigurationEnvironment(environment);

@@ -344,7 +344,7 @@ class FileManagementRuntimeIT {
     }
 
     private void runBrowser(String scriptName, String outputName, Map<String, String> environment, int timeout) throws Exception {
-        Path script = projectRoot.resolve("seaweedfs").resolve(scriptName);
+        Path script = projectRoot.resolve("ymcloud-web/src/test/scripts/storage").resolve(scriptName);
         ProcessBuilder process = new ProcessBuilder(Objects.requireNonNull(System.getenv("YMCLOUD_BROWSER_NODE")), script.toString());
         process.directory(projectRoot.toFile());
         process.environment().putAll(environment);

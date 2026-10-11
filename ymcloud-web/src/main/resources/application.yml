@@ -3,19 +3,15 @@ ymcloud:
         # 默认项目根目录/files；独立 jar 使用 jar 所在目录，自动创建 public/private。
         # 已有部署可通过 YMCLOUD_FILE_BASE_DIR 指定绝对路径，继续使用原目录。
         base-dir: ${YMCLOUD_FILE_BASE_DIR:./files}
-    storage:
-        # 首次启动仅使用本地存储；其他服务在后台新增、测试后手动启用。
-        active: local
-        max-file-size: 52428800
-        # 配置管理的加密主密钥必须独立于数据库保存，使用 base64 编码的 32 字节随机值。
-        config-encryption-key: ${YMCLOUD_STORAGE_CONFIG_ENCRYPTION_KEY:}
-        profiles:
-            local:
-                type: local
     docker:
         # 默认文件根目录/tmp，可通过 YMCLOUD_JUDGE_WORK_DIR 单独指定工作目录。
         host-working-dir: ${YMCLOUD_JUDGE_WORK_DIR:${ymcloud.file.base-dir}/tmp}
         container-working-dir: /app
+    judge:
+        # 版本化任务由 OJ 配置维护，不依赖对象存储安装脚本。
+        exchange: ${YMCLOUD_JUDGE_EXCHANGE:judge.storage-v1.topic}
+        task-queue: ${YMCLOUD_JUDGE_TASK_QUEUE:judge.storage-v1.queue}
+        result-queue: ${YMCLOUD_JUDGE_RESULT_QUEUE:judge.storage-v1.result.queue}
 
 server:
     port: 9091
@@ -24,8 +20,9 @@ server:
         # 上传文件数列控制
         max-part-count: 100
 spring:
-    config:
-        import: optional:file:${YMCLOUD_STORAGE_CONFIG:./seaweedfs/application-storage.local.yml}
+    datasource:
+        druid:
+            connection-properties: openTelemetry=${YMCLOUD_JDBC_TELEMETRY:DISABLED}
     application:
       name: ymcloud
     profiles:
@@ -103,7 +100,7 @@ user:
 # 日志配置
 logging:
     charset:
-        console: UTF-8
+        # console: UTF-8
         file: UTF-8
     level:
         com.baomidou.mybatis-plus: DEBUG

@@ -24,8 +24,9 @@ import uuid
 import xml.etree.ElementTree as ET
 
 
-DEPLOYMENT_ROOT = pathlib.Path(__file__).resolve().parent
-PROJECT_ROOT = DEPLOYMENT_ROOT.parent
+PROJECT_ROOT = next((parent for parent in pathlib.Path(__file__).resolve().parents
+                     if (parent / "pom.xml").is_file() and (parent / "ymcloud-web").is_dir()), pathlib.Path.cwd())
+DEPLOYMENT_ROOT = PROJECT_ROOT / "seaweedfs"
 REPORT_ROOT = PROJECT_ROOT / "target/test-output/seaweedfs"
 
 
@@ -242,7 +243,10 @@ def persistence(app, bucket, mode):
 
 
 def main():
+    global DEPLOYMENT_ROOT, REPORT_ROOT
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--deployment-dir", type=pathlib.Path, default=DEPLOYMENT_ROOT)
+    parser.add_argument("--report-dir", type=pathlib.Path, default=REPORT_ROOT)
     parser.add_argument("--bootstrap", action="store_true")
     parser.add_argument("--security", action="store_true")
     parser.add_argument("--iterations", type=int, default=20)
@@ -252,6 +256,8 @@ def main():
     group.add_argument("--persistence-write", action="store_true")
     group.add_argument("--persistence-check", action="store_true")
     args = parser.parse_args()
+    DEPLOYMENT_ROOT = args.deployment_dir.resolve()
+    REPORT_ROOT = args.report_dir.resolve()
     if not 0 <= args.iterations <= 1000 or not 1 <= args.concurrency <= 64:
         parser.error("iterations must be 0..1000 and concurrency 1..64")
     if any(size <= 0 or size > 67108864 for size in args.sizes):

@@ -11,8 +11,10 @@ import com.ymcloud.core.storage.ObjectStorageService;
 import com.ymcloud.core.storage.StorageConfigCatalog;
 import com.ymcloud.core.storage.StorageConnectionTester;
 import com.ymcloud.core.storage.StorageCredentialCipher;
+import com.ymcloud.core.storage.StorageMasterKeyStore;
 import com.ymcloud.core.storage.StorageProperties;
 import com.ymcloud.core.storage.StorageRegistry;
+import com.ymcloud.core.web.dao.StorageConfigEntityService;
 import com.ymcloud.core.web.dao.impl.FileEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.StorageConfigEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.StorageConfigStateEntityServiceImpl;
@@ -53,9 +55,9 @@ import javax.sql.DataSource;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.SecureRandom;
-import java.util.Base64;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -179,6 +181,85 @@ class StorageConfigDatabaseIT {
             }
             clearTableInfo();
         }
+    }
+
+    @Test
+    void newInstallationCreatesTestsAndEnablesExternalStorageWithoutRestartOrInstallScripts() throws Exception {
+        StorageProperties properties = context.getBean(StorageProperties.class);
+        assertEquals(null, properties.getConfigEncryptionKey());
+        service.create(dto("external-seaweed", "http://127.0.0.1:8333"));
+        service.test("external-seaweed");
+        service.activate("external-seaweed");
+        assertEquals("external-seaweed", registry.active());
+        assertTrue(Files.isRegularFile(directory.resolve(".secrets/storage-config.key")));
+        try (InputStream input = registry.client("external-seaweed").open("test-private", "object")) {
+            assertEquals("http://127.0.0.1:8333", new String(input.readAllBytes(), StandardCharsets.UTF_8));
+        }
+        StorageCredentialCipher anotherProcess = new StorageCredentialCipher(new StorageProperties());
+        anotherProcess.setKeyStore(new StorageMasterKeyStore(directory.toString(),
+                context.getBean(StorageConfigEntityService.class)));
+        assertEquals("test-secret", anotherProcess.decrypt("external-seaweed", "secretKey",
+                catalog.find("external-seaweed").getEncryptedSecretKey()));
+    }
+
+    @Test
+    void lostMasterKeyAllowsLocalFallbackAndUnusedConfigurationCleanupBeforeFreshSetup() throws Exception {
+        service.create(dto("old-seaweed", "http://127.0.0.1:8333"));
+        service.create(dto("old-minio", "http://127.0.0.1:8334"));
+        service.test("old-seaweed");
+        service.test("old-minio");
+        service.activate("old-seaweed");
+        Path masterKey = directory.resolve(".secrets/storage-config.key");
+        byte[] original = Files.readAllBytes(masterKey);
+        Files.delete(masterKey);
+
+        assertThrows(FileException.class, () -> service.create(dto("fresh-seaweed", "http://127.0.0.1:8335")));
+        assertThrows(FileException.class, () -> service.activate("old-minio"));
+        assertThrows(FileException.class, () -> service.delete("old-seaweed"));
+        assertEquals("old-seaweed", catalog.active());
+        assertThrows(FileException.class, registry::active);
+        assertFalse(Files.exists(masterKey));
+
+        service.activate("local");
+        assertEquals("local", registry.active());
+        service.delete("old-seaweed");
+        assertThrows(FileException.class, () -> service.create(dto("fresh-seaweed", "http://127.0.0.1:8335")));
+        assertFalse(Files.exists(masterKey));
+        service.delete("old-minio");
+        assertTrue(catalog.list().isEmpty());
+
+        service.create(dto("fresh-seaweed", "http://127.0.0.1:8335"));
+        service.test("fresh-seaweed");
+        service.activate("fresh-seaweed");
+        assertFalse(Arrays.equals(original, Files.readAllBytes(masterKey)));
+        assertEquals("fresh-seaweed", registry.active());
+        assertEquals("test-secret", catalog.profile(catalog.find("fresh-seaweed")).getSecretKey());
+    }
+
+    @Test
+    void lostMasterKeyDoesNotBypassFileReferenceProtectionAndRestoredKeyRemainsUsable() throws Exception {
+        service.create(dto("referenced-seaweed", "http://127.0.0.1:8333"));
+        service.test("referenced-seaweed");
+        jdbc.update("INSERT INTO `" + table("file") + "` (id,storage_profile) VALUES(1,?)", "referenced-seaweed");
+        Path masterKey = directory.resolve(".secrets/storage-config.key");
+        byte[] original = Files.readAllBytes(masterKey);
+        Files.delete(masterKey);
+        try {
+            service.activate("local");
+            FileException error = assertThrows(FileException.class, () -> service.delete("referenced-seaweed"));
+            assertTrue(error.getMessage().contains("已被文件引用"));
+            assertThrows(FileException.class, () -> service.test("referenced-seaweed"));
+            assertThrows(FileException.class, () -> service.activate("referenced-seaweed"));
+            assertThrows(FileException.class, () -> service.create(dto("new-seaweed", "http://127.0.0.1:8334")));
+            assertFalse(Files.exists(masterKey));
+            assertEquals(1, catalog.list().size());
+            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM `" + table("file") + "`", Integer.class));
+        } finally {
+            Files.write(masterKey, original);
+        }
+        assertEquals("test-secret", catalog.profile(catalog.find("referenced-seaweed")).getSecretKey());
+        service.activate("referenced-seaweed");
+        assertEquals("referenced-seaweed", registry.active());
     }
 
     @Test
@@ -424,11 +505,12 @@ class StorageConfigDatabaseIT {
         @Bean
         @Primary
         StorageProperties storageProperties() {
-            StorageProperties properties = new StorageProperties();
-            byte[] bytes = new byte[32];
-            new SecureRandom().nextBytes(bytes);
-            properties.setConfigEncryptionKey(Base64.getEncoder().encodeToString(bytes));
-            return properties;
+            return new StorageProperties();
+        }
+
+        @Bean
+        StorageMasterKeyStore storageMasterKeyStore(StorageConfigEntityService configs) {
+            return new StorageMasterKeyStore(directory.toString(), configs);
         }
 
         @Bean
