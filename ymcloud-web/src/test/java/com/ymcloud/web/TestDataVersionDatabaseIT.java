@@ -144,16 +144,10 @@ class TestDataVersionDatabaseIT {
         disposableTablesAttempted = true;
         try (Connection connection = preparedDataSource.getConnection()) {
             assertEquals(temporarySchemaCreated ? temporarySchema : sourceCatalog, connection.getCatalog());
-            String baseline;
-            try (InputStream input = new ClassPathResource("storage-baseline.sql").getInputStream()) {
-                baseline = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-            }
+            String schema = InitializationSqlTestSupport.storageSchema(temporarySchemaCreated ? "" : tablePrefix);
             ScriptUtils.executeSqlScript(connection, new EncodedResource(new ByteArrayResource(
-                    rewriteTestIdentifiers(baseline).getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
+                    schema.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
         }
-        JdbcTemplate preparation = new JdbcTemplate(preparedDataSource);
-        applyMigration(preparation);
-        applyMigration(preparation);
         context = new AnnotationConfigApplicationContext();
         context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("storage-it",
                 Map.of("ymcloud.file.base-dir", directory.toString())));
@@ -222,11 +216,9 @@ class TestDataVersionDatabaseIT {
             verifyTablePrefix();
             JdbcTemplate cleanup = new JdbcTemplate(adminDataSource);
             cleanup.execute("DROP TRIGGER IF EXISTS `" + helperName("reject_version") + "`");
-            for (String name : List.of("test_data_version", "file", "problem", "judge")) {
+            for (String name : List.of("judge", "test_data_version", "file", "problem")) {
                 cleanup.execute("DROP TABLE IF EXISTS `" + tableName(name) + "`");
             }
-            cleanup.execute("DROP PROCEDURE IF EXISTS `" + helperName("add_column") + "`");
-            cleanup.execute("DROP PROCEDURE IF EXISTS `" + helperName("add_index") + "`");
         }
         if (preparedDataSource != null) {
             preparedDataSource.close();
@@ -325,7 +317,7 @@ class TestDataVersionDatabaseIT {
     }
 
     private static String helperName(String name) {
-        if (!Set.of("add_column", "add_index", "reject_version").contains(name)) {
+        if (!"reject_version".equals(name)) {
             throw new IllegalArgumentException("未授权的测试辅助对象名");
         }
         if (temporarySchemaCreated) {
@@ -335,45 +327,9 @@ class TestDataVersionDatabaseIT {
         return tablePrefix + name;
     }
 
-    private static String rewriteTestIdentifiers(String sql) {
-        if (temporarySchemaCreated) {
-            return sql;
-        }
-        verifyTablePrefix();
-        String rewritten = sql;
-        for (String table : List.of("file", "problem", "judge", "test_data_version")) {
-            rewritten = rewritten.replace("`" + table + "`", "`" + tableName(table) + "`")
-                    .replace("'" + table + "'", "'" + tableName(table) + "'");
-        }
-        return rewritten.replace("ymcloud_add_storage_column", helperName("add_column"))
-                .replace("ymcloud_add_storage_index", helperName("add_index"));
-    }
-
     private static void verifyTemporarySchema() {
         if (temporarySchema == null || !temporarySchema.matches("ymcloud_storage_test_[0-9a-f]{32}")) {
             throw new IllegalStateException("临时测试库名未通过安全校验");
-        }
-    }
-
-    private static void applyMigration(JdbcTemplate target) throws Exception {
-        Path migration = Path.of(System.getProperty("user.dir")).resolve("sql/migrations/20261010_object_storage.sql");
-        if (!Files.isRegularFile(migration)) {
-            migration = Path.of(System.getProperty("user.dir")).getParent()
-                    .resolve("sql/migrations/20261010_object_storage.sql");
-        }
-        String delimiter = ";";
-        StringBuilder statement = new StringBuilder();
-        for (String line : Files.readAllLines(migration, StandardCharsets.UTF_8)) {
-            if (line.trim().startsWith("DELIMITER ")) {
-                delimiter = line.trim().substring("DELIMITER ".length());
-                continue;
-            }
-            statement.append(line).append('\n');
-            String sql = statement.toString().stripTrailing();
-            if (sql.endsWith(delimiter)) {
-                target.execute(rewriteTestIdentifiers(sql.substring(0, sql.length() - delimiter.length())));
-                statement.setLength(0);
-            }
         }
     }
 

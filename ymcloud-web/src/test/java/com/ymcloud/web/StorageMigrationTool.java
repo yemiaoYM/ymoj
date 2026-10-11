@@ -58,7 +58,7 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 /**
- * 显式运维工具，不被应用自动运行。仅 apply 模式执行增量迁移；不启动 MQ/定时任务。
+ * 显式运维工具，不被应用自动运行。仅 apply 模式迁移文件数据，不修改表结构；不启动 MQ/定时任务。
  * 只读加载 Spring 运行配置并解析占位符，凭据仅保留在内存；报告保存在忽略的 target 中。
  */
 public final class StorageMigrationTool {
@@ -108,8 +108,8 @@ public final class StorageMigrationTool {
             return;
         }
         if ("apply".equals(mode)) {
-            applySql(jdbc, migrationPath());
-            report.put("schemaApplied", true);
+            verifyStorageSchema(jdbc);
+            report.put("schemaVerified", true);
         }
         try (AnnotationConfigApplicationContext context = migrationContext()) {
             StoredFileService storedFiles = context.getBean(StoredFileService.class);
@@ -351,26 +351,21 @@ public final class StorageMigrationTool {
         write(output.resolve("local-files-before.json"), local);
     }
 
-    private static void applySql(JdbcTemplate jdbc, Path path) throws Exception {
-        String delimiter = ";";
-        StringBuilder statement = new StringBuilder();
-        for (String line : Files.readAllLines(path, StandardCharsets.UTF_8)) {
-            if (line.trim().startsWith("DELIMITER ")) {
-                delimiter = line.trim().substring("DELIMITER ".length());
-                continue;
-            }
-            statement.append(line).append('\n');
-            String sql = statement.toString().stripTrailing();
-            if (sql.endsWith(delimiter)) {
-                jdbc.execute(sql.substring(0, sql.length() - delimiter.length()));
-                statement.setLength(0);
+    /** 只校验结构，禁止把全新数据库初始化脚本作为已有业务库的升级脚本执行。 */
+    static void verifyStorageSchema(JdbcTemplate jdbc) {
+        Map<String, List<String>> required = Map.of(
+                "file", List.of("storage_profile", "bucket", "object_key", "sha256", "legacy_path"),
+                "problem", List.of("test_data_version_id"),
+                "judge", List.of("test_data_version_id"),
+                "test_data_version", List.of("id", "problem_id", "manifest", "manifest_sha256", "created_time"));
+        for (Map.Entry<String, List<String>> table : required.entrySet()) {
+            List<String> columns = jdbc.queryForList("SELECT column_name FROM information_schema.columns "
+                    + "WHERE table_schema=DATABASE() AND table_name=?", String.class, table.getKey());
+            if (!columns.containsAll(table.getValue())) {
+                throw new IllegalStateException("数据库缺少新版存储结构：" + table.getKey()
+                        + "。请先完成数据库结构升级；sql/ymcloud.sql 仅供空库初始化，不能覆盖已有库。");
             }
         }
-    }
-
-    private static Path migrationPath() {
-        Path path = Path.of("sql/migrations/20261010_object_storage.sql");
-        return Files.isRegularFile(path) ? path : Path.of("../sql/migrations/20261010_object_storage.sql");
     }
 
     private static void write(Path file, Object content) throws Exception {
