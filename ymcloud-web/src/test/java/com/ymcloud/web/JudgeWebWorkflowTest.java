@@ -1,5 +1,8 @@
 package com.ymcloud.web;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
@@ -51,7 +54,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -229,6 +235,50 @@ class JudgeWebWorkflowTest {
     }
 
     @Test
+    void lifecycleSuccessLogsWaitForCommitAndNeverIncludePrivateBodies() {
+        doReturn(query(language())).when(languages).lambdaQuery();
+        Logger submissions = (Logger) LoggerFactory.getLogger(JudgeServiceImpl.class);
+        Logger received = (Logger) LoggerFactory.getLogger(JudgeResultService.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        submissions.addAppender(appender);
+        received.addAppender(appender);
+        TransactionSynchronizationManager.initSynchronization();
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+            TestJudgeDTO request = new TestJudgeDTO();
+            request.setLanguage("Python");
+            request.setCode("print('private-code-sentinel')");
+            request.setInput("private-input-sentinel");
+            request.setExpectedOutput("private-expected-sentinel");
+            service.testJudge(request);
+            JudgeDispatch dispatch = selfDispatch();
+            doReturn(query(dispatch)).when(dispatches).lambdaQuery();
+            JudgeResult result = finalResult(dispatch);
+            result.setErrorMessage("private-error-sentinel");
+            result.getTestCaseResults().get(0).setOutput("private-output-sentinel");
+            results.receive(result);
+            assertTrue(appender.list.isEmpty(), "提交成功和终态成功只能在数据库提交后记录");
+            for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
+                synchronization.afterCommit();
+            }
+            assertEquals(2, appender.list.size());
+            String diagnostic = appender.list.stream()
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .reduce("", (first, second) -> first + "\n" + second);
+            assertTrue(diagnostic.contains("创建判题任务成功"));
+            assertTrue(diagnostic.contains("保存判题结果成功"));
+            assertTrue(diagnostic.contains(dispatch.getExecutionId()));
+            assertFalse(diagnostic.contains("private-"));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+            submissions.detachAppender(appender);
+            received.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
     void absentSelfTestInputIsAnEmptyStreamAndUnsupportedEnvironmentIsRejectedImmediately() {
         Language language = language();
         doReturn(query(language)).when(languages).lambdaQuery();
@@ -329,6 +379,20 @@ class JudgeWebWorkflowTest {
         results.receive(finalResult(dispatch));
         assertEquals(JudgeStatus.STATUS_SYSTEM_ERROR, dispatch.getStatus());
         assertEquals(JudgeVerdict.STATUS_SYSTEM_ERROR, codec.result(dispatch.getResultPayload()).getStatus());
+    }
+
+    @Test
+    void completedResultRecoveredAfterDeadlineIsKeptWhenTimeoutHasNotBeenSaved() {
+        JudgeDispatch dispatch = selfDispatch();
+        dispatch.setDeadlineTime(LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1));
+        doReturn(query(dispatch)).when(dispatches).lambdaQuery();
+        JudgeResult recovered = finalResult(dispatch);
+        recovered.setEmittedAtEpochMs(System.currentTimeMillis() - 10_000);
+        results.receive(recovered);
+        results.expire(dispatch.getSubmissionId(), dispatch.getExecutionId());
+        assertEquals(JudgeStatus.STATUS_ACCEPTED, dispatch.getStatus());
+        assertEquals(JudgeDispatchState.COMPLETED, dispatch.getDispatchState());
+        assertEquals(JudgeVerdict.STATUS_ACCEPTED, codec.result(dispatch.getResultPayload()).getStatus());
     }
 
     @Test

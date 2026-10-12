@@ -48,8 +48,11 @@ import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.service.oj.JudgeService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -59,6 +62,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /** 提交权限与可靠任务箱归 Web，任务快照中不携带业务实体或对象存储凭据。 */
+@Slf4j
 @Service
 public class JudgeServiceImpl implements JudgeService {
 
@@ -325,7 +329,11 @@ public class JudgeServiceImpl implements JudgeService {
         Long submissionId = allocator.reserve(dispatch);
         task.setSubmissionId(submissionId);
         dispatch.setSubmissionId(submissionId);
-        dispatch.setTaskPayload(codec.write(task));
+        try {
+            dispatch.setTaskPayload(codec.write(task));
+        } catch (IllegalArgumentException e) {
+            throw new JudgeException("评测任务无法发送，代码及自测数据序列化后不得超过 3MiB，请缩小后重试");
+        }
         boolean completed = dispatches.lambdaUpdate()
                 .eq(JudgeDispatch::getId, dispatch.getId())
                 .eq(JudgeDispatch::getExecutionId, dispatch.getExecutionId())
@@ -337,6 +345,24 @@ public class JudgeServiceImpl implements JudgeService {
             throw new JudgeException("任务快照保存失败，请稍后再试");
         }
         cache.putAfterCommit(task.getSubmissionId(), task.getExecutionId(), results.toView(dispatch));
+        logSubmissionAfterCommit(task, userId);
+    }
+
+    /** 仅在业务事务提交成功后记录创建成功，避免回滚任务出现在开发日志中。 */
+    private void logSubmissionAfterCommit(JudgeTask task, Long userId) {
+        Runnable record = () -> log.info("创建判题任务成功，提交编号：{}，执行编号：{}，用户编号：{}，题目编号：{}，数据版本：{}，策略：{}，语言：{}",
+                task.getSubmissionId(), task.getExecutionId(), userId, task.getProblemId(),
+                task.getTestDataVersionId(), task.getStrategy(), task.getLanguageConfig().getName());
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    record.run();
+                }
+            });
+        } else {
+            record.run();
+        }
     }
 
     @Override

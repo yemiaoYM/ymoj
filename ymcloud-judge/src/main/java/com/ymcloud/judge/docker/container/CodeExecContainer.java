@@ -69,6 +69,9 @@ public class CodeExecContainer extends DockerContainer {
                     if (Thread.currentThread().isInterrupted()) {
                         throw new InterruptedIOException("输入准备被中断");
                     }
+                    if (TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) >= timeoutMillis) {
+                        throw new CommandTimeoutException();
+                    }
                     output.write(buffer, 0, read);
                 }
             }

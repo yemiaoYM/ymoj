@@ -39,7 +39,7 @@ public class WorkerMetrics {
         try {
             journal.prune();
         } catch (IOException e) {
-            log.warn("Worker 结果日志保留期清理失败");
+            log.warn("Worker 结果日志保留期清理失败，异常类型：{}", e.getClass().getSimpleName());
         }
     }
 }

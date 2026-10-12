@@ -21,6 +21,8 @@ import com.ymcloud.pojo.vo.oj.JudgeResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -71,7 +73,9 @@ public class JudgeResultService {
         validate(result);
         JudgeDispatch dispatch = lock(result.getSubmissionId());
         if (!matches(dispatch, result)) {
-            log.debug("忽略重复、过期或不匹配的判题结果，提交编号：{}", result.getSubmissionId());
+            log.debug("忽略重复、过期或不匹配的判题结果，提交编号：{}，执行编号：{}，数据版本：{}，状态：{}，消息序号：{}",
+                    result.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId(),
+                    result.getStatus(), result.getSequence());
             return;
         }
         apply(dispatch, result);
@@ -98,8 +102,12 @@ public class JudgeResultService {
             if (!waiting) {
                 throw new JudgeException("评测恢复状态保存失败");
             }
+            log.warn("判题发布次数已用尽，保留已发布任务等待结果，提交编号：{}，执行编号：{}，数据版本：{}",
+                    submissionId, executionId, dispatch.getTestDataVersionId());
             return;
         }
+        log.warn("判题任务无法发布，准备保存系统错误，提交编号：{}，执行编号：{}，数据版本：{}",
+                submissionId, executionId, dispatch.getTestDataVersionId());
         apply(dispatch, systemError(dispatch, reason));
     }
 
@@ -112,6 +120,8 @@ public class JudgeResultService {
                 || dispatch.getDeadlineTime().isAfter(LocalDateTime.now(ZoneOffset.UTC))) {
             return;
         }
+        log.warn("判题任务超过总截止时间，准备保存系统错误，提交编号：{}，执行编号：{}，数据版本：{}",
+                submissionId, executionId, dispatch.getTestDataVersionId());
         apply(dispatch, systemError(dispatch, "评测超时，有限恢复后仍未收到结果，请稍后重新提交"));
     }
 
@@ -147,7 +157,8 @@ public class JudgeResultService {
             if (judge == null || !Objects.equals(judge.getExecutionId(), result.getExecutionId())
                     || !Objects.equals(judge.getTestDataVersionId(), result.getTestDataVersionId())
                     || !Objects.equals(judge.getProblemId(), result.getProblemId())) {
-                log.warn("评测结果与当前提交执行标识不匹配，提交编号：{}", dispatch.getSubmissionId());
+                log.warn("评测结果与当前提交执行标识不匹配，提交编号：{}，执行编号：{}，数据版本：{}",
+                        dispatch.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId());
                 return;
             }
         }
@@ -166,6 +177,31 @@ public class JudgeResultService {
         dispatch.setResultPayload(payload);
         dispatch.setLastResultSequence(result.getSequence());
         cache.putAfterCommit(dispatch.getSubmissionId(), dispatch.getExecutionId(), toView(dispatch, result));
+        logResultAfterCommit(dispatch, result);
+    }
+
+    /** 终态日志只在提交、测试点和 AC 记录全部提交后输出，不记录源码、输入输出或错误正文。 */
+    private void logResultAfterCommit(JudgeDispatch dispatch, JudgeResult result) {
+        Runnable record = () -> {
+            if (result.isTerminal()) {
+                log.info("保存判题结果成功，提交编号：{}，执行编号：{}，数据版本：{}，状态：{}，耗时：{}ms，内存：{}KiB，得分：{}",
+                        dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId(),
+                        result.getStatus(), result.getTime(), result.getMemory(), result.getScore());
+            } else {
+                log.debug("更新判题进度成功，提交编号：{}，执行编号：{}，状态：{}，消息序号：{}",
+                        dispatch.getSubmissionId(), dispatch.getExecutionId(), result.getStatus(), result.getSequence());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    record.run();
+                }
+            });
+        } else {
+            record.run();
+        }
     }
 
     private boolean saveDispatch(JudgeDispatch dispatch, JudgeResult result,

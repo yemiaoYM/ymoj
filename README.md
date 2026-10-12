@@ -46,8 +46,11 @@ Web 与 Worker 共用 `ymcloud-pojo` 中的 `com.ymcloud.pojo.contract.judge`。
 | Redis | 6+ |
 | RabbitMQ | 3.13+；判题使用普通持久化 Topic，不需要延迟交换机插件 |
 | Docker | Docker Engine 或 Docker Desktop，使用 Linux 容器 |
+| 同机生产部署 | 最低 2 核 4GB，Web、MySQL、Redis、RabbitMQ 与单个 Worker 共用服务器，Worker 并发保持 1 |
 
 可以使用已经运行的 MySQL、Redis 和 RabbitMQ。开始前确认后端能连接这些服务，并且 RabbitMQ 账户有相应 virtual host 的权限。
+
+2GB 内存不作为生产支持规格。2 核 4GB 是低并发部署基线；题目允许更高内存、同时运行对象存储或增加评测并发时，需要相应提高服务器配置。测试数据缓存默认 5GiB 是磁盘上限，文件通过小缓冲流式读取，不会预分配同等内存。
 
 ## 首次启动
 
@@ -226,9 +229,13 @@ OJ 首次保存存储配置时自动生成 `files/.secrets/storage-config.key`�
 开发连接写入 `application-dev.yml`，生产连接写入 `application-prod.yml`。生产启动时显式选择环境：
 
 ```text
-java -jar ymcloud-web/target/ymcloud-web-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
-java -jar ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
+java -Xms64m -Xmx256m -jar ymcloud-web/target/ymcloud-web-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
+java -Xms32m -Xmx128m -jar ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
 ```
+
+以上为单 Worker、低并发部署的 JVM 堆起点，堆上限不等于进程总内存。操作系统、MySQL、Redis、RabbitMQ 和判题容器仍需各自预留空间；编译和用户程序在 Docker 内运行，不占 Worker 的 Java 堆。题目的时间、内存限制决定评测语义，增加或减少 Worker 堆不会改变这些限制。
+
+高配服务器可自行提高 Web、Worker 的 `-Xmx`，并通过 `YMCLOUD_WORKER_CONCURRENCY` 逐步增加评测并发。每个判题容器最多使用 1 核，内存按题目限制设上限；先为 Web、中间件和系统留出余量，再按同时执行任务的 CPU 与内存预算设置并发，并通过实际提交观察耗时、内存和队列等待时间。无需为扩容引入新的调度组件。
 
 这两个环境文件被 Git 忽略。使用命令行参数、环境变量或外置配置管理实际部署信息；分发 jar 前也检查打包资源，避免把开发或生产的真实凭据随制品发送给他人。
 
@@ -256,9 +263,11 @@ npm run build
 
 Worker 已记录队列等待时间、执行耗时、缓存命中、下载失败、校验失败和系统错误指标（`ymcloud.judge.*`）。它不启动 HTTP 服务；需要查看指标时，通过自己的私有配置开启 `spring.jmx.enabled=true`、`management.endpoints.jmx.exposure.include=metrics`，使用本机 JMX 工具读取。任务箱中已完成的任务仍保留快照，后续可按部署的数据保留规则归档，勿直接清理未完成任务或运行中的版本缓存。
 
+Worker 的 INFO 日志记录启动、任务接收、数据准备、编译完成、终态发布及恢复；WARN 记录下载校验、租约、重试和系统故障。日志包含提交、执行和数据版本标识，耗时使用毫秒，内存使用 KiB，不记录源码、测试输入输出或凭据。开发时可在私有配置中将 `logging.level.com.ymcloud.judge` 和 `logging.level.com.ymcloud.web.judge` 设为 `DEBUG`，查看测试点、缓存命中及消息进度；生产默认保持 INFO。
+
 ## 开发验证
 
-修改前端后运行 `npm run type-check` 和 `npm run build`。Java 单元测试可按涉及的模块与测试类筛选执行；默认完整 `mvn test` 包含加载真实应用上下文的测试，运行前确认使用隔离的开发配置。
+修改前端后运行 `npm run type-check` 和 `npm run build`。Java 单元测试可按涉及的模块与测试类筛选执行。旧版 `WebTest` 是依赖业务数据、邮件服务和固定脚本的手工调试用例，默认跳过；仅在准备好对应开发环境后显式设置 `YMCLOUD_RUN_LEGACY_WEB_TESTS=true`，不要用于隔离回归。
 
 真实存储数据库测试需要显式启用 `YMCLOUD_STORAGE_DB_IT=true`，真实 S3 测试需要 `YMCLOUD_RUN_S3_TESTS=true`。SeaweedFS 安装、权限、持久性及性能验证入口见 [SeaweedFS 开发验证说明](seaweedfs/README.md#排查与开发验证)。
 
@@ -270,7 +279,7 @@ Worker 的真实 Docker 回归需要显式启用 `YMCLOUD_RUN_SANDBOX_TESTS=true
 python -B ymcloud-web/src/test/scripts/judge/verify_worker.py
 ```
 
-该 Redis database 必须为空、不同于开发配置中的 database，且处于 1–15 范围。脚本读取本机 `application-dev.yml`，使用随机数据库、独立队列和临时目录启动真实 Web 与 Worker，验证版本固定、缓存修复、普通/比赛提交、自测、权限、重复消息及重启恢复。测试连接配置只保存在临时目录，结束后清理；报告位于 `target/phase2-e2e`。不要使用生产连接配置运行测试。
+该 Redis database 必须为空、不同于开发配置中的 database，且处于 1–15 范围。脚本读取本机 `application-dev.yml`，使用随机数据库、独立队列和临时目录启动真实 Web 与 Worker，验证版本固定、缓存修复、普通/比赛提交、自测、权限、重复消息及重启恢复。验证时两个 JVM 均按 2 个处理器运行，Worker 堆上限 128MiB、Web 堆上限 256MiB；这验证应用在有限堆下的功能，不代替同机全部服务的容量测试。测试连接配置只保存在临时目录，结束后清理；报告位于 `target/phase2-e2e`。不要使用生产连接配置运行测试。
 
 [Linux 权限验证](ymcloud-web/src/test/scripts/judge/verify_linux.py) 使用现有 `oj-java-env` 镜像和打包后的 Worker，在独立非 root 容器内检查私有缓存权限、损坏恢复、链接拒绝及工作目录属主配置。先设置 `YMCLOUD_WORKER_LINUX_TEST=true`，再执行：
 

@@ -1,5 +1,8 @@
 package com.ymcloud.web;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.alibaba.druid.pool.DruidDataSource;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler;
@@ -51,6 +54,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.mockito.MockedStatic;
 import org.mybatis.spring.annotation.MapperScan;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.MessagePostProcessor;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -312,6 +316,34 @@ class JudgeDispatchDatabaseIT {
     }
 
     @Test
+    void submissionInsertFailureRollsBackReservedTaskWithoutCreationSuccessLogOrCacheWrite() {
+        Logger logger = (Logger) LoggerFactory.getLogger(JudgeServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        jdbc.execute("CREATE TRIGGER judge_it_fail_submission BEFORE INSERT ON judge FOR EACH ROW "
+                + "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated submission failure'");
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+             MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
+            security.when(SecurityUtils::getUser).thenReturn(context.getBean(UserEntityService.class).getById(2L));
+            JudgeDTO request = new JudgeDTO();
+            request.setIsContest(false);
+            request.setProblemId("YMOJ-10");
+            request.setLanguage("Python");
+            request.setCode("print(input())");
+            assertThrows(RuntimeException.class, () -> service.submitJudge(request));
+            assertEquals(0, count("judge"));
+            assertEquals(0, count("judge_dispatch"));
+            assertTrue(appender.list.isEmpty());
+            verifyNoInteractions(context.getBean(RedisCache.class));
+        } finally {
+            jdbc.execute("DROP TRIGGER judge_it_fail_submission");
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
     void taskReservationRequiresAnExistingSubmissionTransaction() {
         JudgeDispatchIdAllocator allocator = context.getBean(JudgeDispatchIdAllocator.class);
         assertThrows(IllegalTransactionStateException.class,
@@ -401,6 +433,25 @@ class JudgeDispatchDatabaseIT {
     }
 
     @Test
+    void oversizedUtf8AndEscapedSelfTestsRollBackTheReservedTaskWithAUserFacingError() {
+        TestJudgeDTO request = new TestJudgeDTO();
+        request.setLanguage("Python");
+        request.setCode("print(input())");
+        request.setExpectedOutput("");
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getUser).thenReturn(context.getBean(UserEntityService.class).getById(2L));
+            for (String input : List.of("中".repeat(1024 * 1024), "\0".repeat(600 * 1024))) {
+                request.setInput(input);
+                JudgeException exception = assertThrows(JudgeException.class, () -> service.testJudge(request));
+                assertTrue(exception.getMessage().contains("3MiB"));
+                assertEquals(0, count("judge_dispatch"));
+                assertEquals(0, count("judge"));
+                verifyNoInteractions(context.getBean(RedisCache.class));
+            }
+        }
+    }
+
+    @Test
     void confirmedTaskRecoveryIsFiniteAndKeepsExecutionAndPinnedData() {
         JudgeDispatch dispatch = formal(100L);
         RabbitTemplate rabbit = mock(RabbitTemplate.class);
@@ -418,6 +469,8 @@ class JudgeDispatchDatabaseIT {
             jdbc.update("UPDATE judge_dispatch SET next_attempt_time=? WHERE id=?",
                     LocalDateTime.now(ZoneOffset.UTC).minusSeconds(1), dispatch.getId());
             publisher.tick();
+            assertEquals(JudgeDispatchState.WAITING, dispatches.getById(dispatch.getId()).getDispatchState(),
+                    "立即恢复的任务应在本轮调度重新发布，不能因 DATETIME 舍入滞留 READY");
         }
         JudgeDispatch recovered = dispatches.getById(dispatch.getId());
         assertEquals(2, recovered.getRecoveryAttempts());

@@ -15,9 +15,8 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -66,17 +65,25 @@ public class WorkerExecutionStore {
     private final StringRedisTemplate redis;
     private final ObjectMapper mapper;
     private final WorkerProperties properties;
-    private final ScheduledExecutorService heartbeat;
+    private final ScheduledThreadPoolExecutor heartbeat;
+    private final ScheduledThreadPoolExecutor deadlines;
 
     public WorkerExecutionStore(StringRedisTemplate redis, ObjectMapper mapper, WorkerProperties properties) {
         this.redis = redis;
         this.mapper = mapper;
         this.properties = properties;
-        this.heartbeat = Executors.newScheduledThreadPool(properties.getConcurrency(), runnable -> {
+        this.heartbeat = new ScheduledThreadPoolExecutor(properties.getConcurrency(), runnable -> {
             Thread thread = new Thread(runnable, "judge-lease-heartbeat");
             thread.setDaemon(true);
             return thread;
         });
+        this.heartbeat.setRemoveOnCancelPolicy(true);
+        this.deadlines = new ScheduledThreadPoolExecutor(1, runnable -> {
+            Thread thread = new Thread(runnable, "judge-task-deadline");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.deadlines.setRemoveOnCancelPolicy(true);
     }
 
     public Claim claim(JudgeTask task) throws Exception {
@@ -93,6 +100,8 @@ public class WorkerExecutionStore {
             throw new IllegalArgumentException("同一执行标识收到不同任务内容");
         }
         if (status == 0) {
+            log.debug("Worker 执行租约已被占用 submission={} execution={} version={}",
+                    task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId());
             return new Claim(null, null, true, digest);
         }
         if (status == 2) {
@@ -105,6 +114,8 @@ public class WorkerExecutionStore {
         if (status < 11 || status - 10 > Integer.MAX_VALUE) {
             throw new IllegalStateException("Worker 执行租约返回无效状态");
         }
+        log.debug("Worker 获取执行租约 submission={} execution={} version={} attempt={}",
+                task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(), status - 10);
         return new Claim(new Lease(task, state, lock, owner, (int) (status - 10)), null, false, digest);
     }
 
@@ -143,6 +154,7 @@ public class WorkerExecutionStore {
     @PreDestroy
     public void stop() {
         heartbeat.shutdownNow();
+        deadlines.shutdownNow();
     }
 
     private String key(String executionId, String suffix) {
@@ -159,10 +171,13 @@ public class WorkerExecutionStore {
         private final String lock;
         private final String owner;
         private final int attempt;
+        private final Long submissionId;
+        private final String executionId;
+        private final Long versionId;
         private final AtomicBoolean lost = new AtomicBoolean();
-        private final AtomicBoolean deadlineInterrupted = new AtomicBoolean();
         private final Object lifecycle = new Object();
         private final ScheduledFuture<?> renewal;
+        private final ScheduledFuture<?> deadline;
         private boolean closed;
 
         private Lease(JudgeTask task, String state, String lock, String owner, int attempt) {
@@ -170,6 +185,9 @@ public class WorkerExecutionStore {
             this.lock = lock;
             this.owner = owner;
             this.attempt = attempt;
+            this.submissionId = task.getSubmissionId();
+            this.executionId = task.getExecutionId();
+            this.versionId = task.getTestDataVersionId();
             Thread running = Thread.currentThread();
             this.renewal = heartbeat.scheduleAtFixedRate(() -> {
                 boolean owned;
@@ -178,22 +196,31 @@ public class WorkerExecutionStore {
                             List.of(lock), owner, String.valueOf(properties.getLeaseMillis())));
                 } catch (RuntimeException e) {
                     owned = false;
+                    log.warn("Worker 执行租约续期失败 submission={} execution={} version={} attempt={} exception={}",
+                            submissionId, executionId, versionId, attempt, e.getClass().getSimpleName());
                 }
                 // Redis 调用可能在 close 后才返回，关闭后不能再中断复用该线程的下一任务。
                 synchronized (lifecycle) {
                     if (closed) {
                         return;
                     }
-                    if (!owned) {
-                        lost.set(true);
-                        running.interrupt();
-                    }
-                    if (System.currentTimeMillis() >= task.getDeadlineEpochMs()
-                            && deadlineInterrupted.compareAndSet(false, true)) {
+                    if (!owned && lost.compareAndSet(false, true)) {
+                        log.warn("Worker 失去执行租约 submission={} execution={} version={} attempt={}",
+                                submissionId, executionId, versionId, attempt);
                         running.interrupt();
                     }
                 }
             }, properties.getLeaseMillis() / 3, properties.getLeaseMillis() / 3, TimeUnit.MILLISECONDS);
+            // 总截止时间独立于续租间隔与 Redis 响应时间，阻塞的数据准备也应及时中断。
+            this.deadline = deadlines.schedule(() -> {
+                synchronized (lifecycle) {
+                    if (!closed) {
+                        log.warn("Worker 执行达到总截止时间 submission={} execution={} version={} attempt={}",
+                                submissionId, executionId, versionId, attempt);
+                        running.interrupt();
+                    }
+                }
+            }, Math.max(0, task.getDeadlineEpochMs() - System.currentTimeMillis()), TimeUnit.MILLISECONDS);
         }
 
         public int attempt() {
@@ -223,7 +250,8 @@ public class WorkerExecutionStore {
                 redis.execute(RELEASE, List.of(lock), owner);
             } catch (RuntimeException e) {
                 // 结果确认及 ACK 已完成时，清理失败不能触发第二次 ACK 或重复发布；租约会自动过期。
-                log.warn("Worker 租约释放失败，等待租约过期");
+                log.warn("Worker 租约释放失败，等待租约过期 submission={} execution={} version={} attempt={} exception={}",
+                        submissionId, executionId, versionId, attempt, e.getClass().getSimpleName());
             }
         }
 
@@ -231,6 +259,7 @@ public class WorkerExecutionStore {
             synchronized (lifecycle) {
                 closed = true;
                 renewal.cancel(false);
+                deadline.cancel(false);
             }
         }
     }

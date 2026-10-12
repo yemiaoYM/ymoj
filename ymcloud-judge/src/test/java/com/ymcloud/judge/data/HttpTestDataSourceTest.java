@@ -1,11 +1,16 @@
 package com.ymcloud.judge.data;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,6 +21,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -23,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -110,6 +117,49 @@ class HttpTestDataSourceTest {
             assertTrue(denied.getMessage().contains("403"));
             assertFalse(denied.getMessage().contains(TEST_TOKEN));
             assertFalse(denied.getMessage().contains("sensitive service error"));
+        }
+    }
+
+    @Test
+    void errorLogsIdentifyRequestAndHttpStatusWithoutTokenOrResponseBody() throws Exception {
+        Logger logger = (Logger) LoggerFactory.getLogger(HttpTestDataSource.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        handler.set(exchange -> respond(exchange, 403, bytes("private response " + TEST_TOKEN)));
+        try (HttpTestDataSource source = source()) {
+            assertThrows(IOException.class, () -> source.openFile(10L, 77L, 101L));
+            String logs = String.join("\n", appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList());
+
+            assertTrue(logs.contains("problem=10 version=77 file=101 status=403"));
+            assertFalse(logs.contains(TEST_TOKEN));
+            assertFalse(logs.contains("private response"));
+            appender.list.forEach(event -> assertNull(event.getThrowableProxy()));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    void completedAndRejectedRequestsRemoveDeadlineTasksImmediately() throws Exception {
+        properties.setReadTimeout(Duration.ofMinutes(30));
+        try (HttpTestDataSource source = source()) {
+            ScheduledThreadPoolExecutor deadlines = (ScheduledThreadPoolExecutor)
+                    ReflectionTestUtils.getField(source, "deadlines");
+            assertNotNull(deadlines);
+            for (int index = 0; index < 25; index++) {
+                assertArrayEquals(bytes("default"), source.fetchManifest(10L, 77L));
+                try (InputStream input = source.openFile(10L, 77L, 101L)) {
+                    assertEquals(1, deadlines.getQueue().size(), "未关闭的响应仍需保留完整请求截止时间");
+                    assertArrayEquals(bytes("default"), input.readAllBytes());
+                }
+                assertEquals(0, deadlines.getQueue().size(), "已完成请求的截止任务应立即移除");
+            }
+            handler.set(exchange -> respond(exchange, 403, bytes("denied")));
+            assertThrows(IOException.class, () -> source.openFile(10L, 77L, 101L));
+            assertEquals(0, deadlines.getQueue().size(), "响应失败时也须立即移除截止任务");
+            assertEquals(51, requests.get());
         }
     }
 

@@ -23,13 +23,14 @@ public class DockerConfig {
      * 配置 Docker 客户端
      */
     @Bean
-    public DockerClient dockerClient() {
+    public DockerClient dockerClient(WorkerProperties properties) {
         log.info("生成 Docker 客户端");
         DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder().build();
         DockerHttpClient httpClient = new ApacheDockerHttpClient.Builder()
                 .dockerHost(config.getDockerHost())
                 .sslConfig(config.getSSLConfig())
-                .maxConnections(100)
+                // 每个任务保留执行流与控制请求的余量，单并发无需默认 100 条连接上限。
+                .maxConnections(Math.max(4, properties.getConcurrency() * 2 + 2))
                 .connectionTimeout(Duration.ofSeconds(30))
                 // 覆盖最长 60 秒测试点及终止宽限，避免传输层提前中断合法执行。
                 .responseTimeout(Duration.ofSeconds(120))

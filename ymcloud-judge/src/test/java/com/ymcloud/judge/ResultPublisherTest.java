@@ -7,17 +7,80 @@ import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageDeliveryMode;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 
 class ResultPublisherTest {
+
+    @Test
+    void confirmedResultsArePersistentUtf8MessagesAndRetryUsesSeparateRoute() throws Exception {
+        RabbitTemplate rabbit = mock(RabbitTemplate.class);
+        AtomicReference<Message> sent = new AtomicReference<>();
+        AtomicReference<String> route = new AtomicReference<>();
+        doAnswer(invocation -> {
+            route.set(invocation.getArgument(1));
+            sent.set(invocation.getArgument(2));
+            CorrelationData correlation = invocation.getArgument(3);
+            correlation.getFuture().complete(new CorrelationData.Confirm(true, null));
+            return null;
+        }).when(rabbit).send(eq("exchange"), any(String.class), any(Message.class), any(CorrelationData.class));
+        var mapper = new WorkerAmqpConfig().workerObjectMapper();
+        ResultPublisher publisher = new ResultPublisher(rabbit, mapper,
+                new WorkerProperties(), "exchange", "judge.result");
+        JudgeResult result = JudgeResult.builder().terminal(true).status(JudgeVerdict.STATUS_COMPILE_ERROR)
+                .errorMessage("编译错误").build();
+
+        assertDoesNotThrow(() -> publisher.publish(result));
+
+        assertEquals("judge.result", route.get());
+        assertEquals(MessageDeliveryMode.PERSISTENT, sent.get().getMessageProperties().getDeliveryMode());
+        assertEquals("UTF-8", sent.get().getMessageProperties().getContentEncoding());
+        assertEquals(MessageProperties.CONTENT_TYPE_JSON, sent.get().getMessageProperties().getContentType());
+        assertEquals(result, mapper.readValue(sent.get().getBody(), JudgeResult.class));
+
+        publisher.retry(WorkerFixtures.task(1, 0));
+
+        assertEquals("judge.retry", route.get());
+    }
+
+    @Test
+    void missingConfirmTimesOutAndInterruptedWaitPreservesInterruptFlag() {
+        RabbitTemplate rabbit = mock(RabbitTemplate.class);
+        WorkerProperties properties = new WorkerProperties();
+        properties.setConfirmTimeoutMillis(25L);
+        ResultPublisher publisher = new ResultPublisher(rabbit, new WorkerAmqpConfig().workerObjectMapper(),
+                properties, "exchange", "judge.result");
+        JudgeResult result = JudgeResult.builder().terminal(true).status(JudgeVerdict.STATUS_ACCEPTED).build();
+
+        IllegalStateException timeout = assertThrows(IllegalStateException.class, () -> publisher.publish(result));
+        assertInstanceOf(TimeoutException.class, timeout.getCause());
+
+        Thread.currentThread().interrupt();
+        try {
+            IllegalStateException interrupted = assertThrows(IllegalStateException.class,
+                    () -> publisher.publish(result));
+            assertInstanceOf(InterruptedException.class, interrupted.getCause());
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
 
     @Test
     void publisherRejectsNackOrReturnedMessageEvenWhenConfirmIsAck() {

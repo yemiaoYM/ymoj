@@ -5,6 +5,7 @@ import com.ymcloud.judge.config.WorkerProperties;
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit;
  * 持久化 JSON 消息必须同时取得 publisher confirm 且未被退回。
  */
 @Component
+@Slf4j
 public class ResultPublisher {
 
     private final RabbitTemplate rabbit;
@@ -39,14 +41,39 @@ public class ResultPublisher {
     }
 
     public void publish(JudgeResult result) {
-        send(result, resultRoute);
+        try {
+            long elapsed = send(result, resultRoute);
+            if (result.isTerminal()) {
+                log.info("Worker 终态消息确认成功 submission={} execution={} version={} status={} elapsedMs={}",
+                        result.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId(),
+                        result.getStatus(), elapsed);
+            } else {
+                log.debug("Worker 进度消息确认成功 submission={} execution={} version={} sequence={} status={} elapsedMs={}",
+                        result.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId(),
+                        result.getSequence(), result.getStatus(), elapsed);
+            }
+        } catch (RuntimeException e) {
+            log.warn("Worker 结果消息确认失败 submission={} execution={} version={} sequence={} exception={}",
+                    result.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId(),
+                    result.getSequence(), failureType(e));
+            throw e;
+        }
     }
 
     public void retry(JudgeTask task) {
-        send(task, JudgeProtocol.RETRY_ROUTE);
+        try {
+            long elapsed = send(task, JudgeProtocol.RETRY_ROUTE);
+            log.warn("Worker 延时重试消息确认成功 submission={} execution={} version={} elapsedMs={}",
+                    task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(), elapsed);
+        } catch (RuntimeException e) {
+            log.warn("Worker 延时重试消息确认失败 submission={} execution={} version={} exception={}",
+                    task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(), failureType(e));
+            throw e;
+        }
     }
 
-    private void send(Object payload, String route) {
+    private long send(Object payload, String route) {
+        long started = System.nanoTime();
         try {
             MessageProperties messageProperties = new MessageProperties();
             messageProperties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
@@ -60,11 +87,17 @@ public class ResultPublisher {
             if (!confirm.isAck() || correlation.getReturned() != null) {
                 throw new IllegalStateException("判题消息未被队列接收");
             }
+            return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("判题消息确认被中断", e);
         } catch (Exception e) {
             throw new IllegalStateException("判题消息发布失败", e);
         }
+    }
+
+    private String failureType(RuntimeException exception) {
+        Throwable cause = exception.getCause();
+        return cause == null ? exception.getClass().getSimpleName() : cause.getClass().getSimpleName();
     }
 }

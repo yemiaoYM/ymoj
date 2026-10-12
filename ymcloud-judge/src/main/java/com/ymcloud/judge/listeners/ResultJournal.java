@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.judge.config.WorkerProperties;
 import com.ymcloud.judge.io.WorkerPaths;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -20,6 +21,7 @@ import java.util.UUID;
  * 发布前原子保存终态。进程重启或 ACK 丢失时复用结果，避免重复执行代码。
  */
 @Component
+@Slf4j
 public class ResultJournal {
 
     private final ObjectMapper mapper;
@@ -53,6 +55,9 @@ public class ResultJournal {
                 || !executionId.equals(entry.result().getExecutionId())) {
             throw new IOException("Worker 结果日志与任务指纹不一致");
         }
+        JudgeResult result = entry.result();
+        log.debug("Worker 读取本地终态记录 submission={} execution={} version={} status={}",
+                result.getSubmissionId(), executionId, result.getTestDataVersionId(), result.getStatus());
         return entry.result();
     }
 
@@ -68,6 +73,8 @@ public class ResultJournal {
                 channel.force(true);
             }
             Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            log.debug("Worker 保存本地终态记录 submission={} execution={} version={} status={}",
+                    result.getSubmissionId(), executionId, result.getTestDataVersionId(), result.getStatus());
         } finally {
             Files.deleteIfExists(temporary);
         }
@@ -79,6 +86,7 @@ public class ResultJournal {
     public synchronized void prune() throws IOException {
         WorkerPaths.rejectSymbolicLinks(directory);
         long cutoff = System.currentTimeMillis() - retentionMillis;
+        int removed = 0;
         try (var files = Files.list(directory)) {
             var iterator = files.iterator();
             while (iterator.hasNext()) {
@@ -88,8 +96,12 @@ public class ResultJournal {
                         && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
                         && Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS).toMillis() < cutoff) {
                     Files.deleteIfExists(path);
+                    removed++;
                 }
             }
+        }
+        if (removed > 0) {
+            log.info("Worker 清理过期终态记录 count={}", removed);
         }
     }
 

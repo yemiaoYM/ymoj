@@ -54,6 +54,56 @@ class SandboxClassificationTest {
         assertThrows(MemoryLimitExceededException.class, () -> sandbox.execute(container, "", 1000L));
     }
 
+    @Test
+    void decimalResourceSecondsDoNotLoseMillisecondsAtVerdictBoundary() throws Exception {
+        CodeExecContainer container = mock(CodeExecContainer.class);
+        SandBox sandbox = new CSandBox(container);
+        when(container.isRunning()).thenReturn(true);
+        when(container.oomKillCount()).thenReturn(0L);
+        when(container.execCmd(any(String[].class), any(InputStream.class), anyLong()))
+                .thenReturn(command(0, "__TIME__:1.13 512"));
+
+        assertEquals(1130L, sandbox.execute(container, "", 2000L).getTimeUsed());
+    }
+
+    @Test
+    void missingCompilerAndTimeoutToolsAreSystemFailuresRatherThanCodeErrors() throws Exception {
+        CodeExecContainer container = mock(CodeExecContainer.class);
+        SandBox sandbox = new CSandBox(container);
+        for (long exit : new long[]{125L, 126L, 127L}) {
+            when(container.execCmd(any(String[].class), anyLong())).thenReturn(command(exit, "tool unavailable"));
+            assertThrows(SandBoxException.class, () -> sandbox.compile(container));
+            when(container.execCmd(any(String[].class), any(InputStream.class), anyLong()))
+                    .thenReturn(command(exit, "tool unavailable"));
+            assertThrows(SandBoxException.class, () -> sandbox.execute(container, "", 1000L));
+        }
+    }
+
+    @Test
+    void userProgramsReturningLauncherExitCodesRemainRuntimeErrorsWhenTimeRan() throws Exception {
+        CodeExecContainer container = mock(CodeExecContainer.class);
+        SandBox sandbox = new CSandBox(container);
+        for (long exit : new long[]{125L, 126L, 127L}) {
+            when(container.execCmd(any(String[].class), any(InputStream.class), anyLong()))
+                    .thenReturn(command(exit, "Command exited with non-zero status " + exit + "\n__TIME__:0.01 512"));
+
+            assertThrows(RuntimeErrorException.class, () -> sandbox.execute(container, "", 1000L));
+        }
+    }
+
+    @Test
+    void resourceStatisticsOverflowProducesSystemErrorInsteadOfWrappedValues() throws Exception {
+        CodeExecContainer container = mock(CodeExecContainer.class);
+        SandBox sandbox = new CSandBox(container);
+        for (String statistics : new String[]{"__TIME__:9999999999999999999999999.99 512",
+                "__TIME__:0.01 9999999999999999999999999"}) {
+            when(container.execCmd(any(String[].class), any(InputStream.class), anyLong()))
+                    .thenReturn(command(0, statistics));
+
+            assertThrows(SandBoxException.class, () -> sandbox.execute(container, "", 1000L));
+        }
+    }
+
     private CmdExecResult command(long exit, String stderr) {
         return CmdExecResult.builder().stdout("").stderr(stderr).exitCode(exit).build();
     }

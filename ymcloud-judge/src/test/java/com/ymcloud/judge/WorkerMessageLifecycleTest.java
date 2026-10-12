@@ -105,6 +105,77 @@ class WorkerMessageLifecycleTest {
     }
 
     @Test
+    void resultConfirmFailureRetriesSavedResultWithoutRunningCodeAgain() throws Exception {
+        WorkerExecutionStore.Lease retryLease = mock(WorkerExecutionStore.Lease.class);
+        when(store.claim(task)).thenReturn(new WorkerExecutionStore.Claim(lease, null, false, "digest"),
+                new WorkerExecutionStore.Claim(retryLease, null, false, "digest"));
+        when(lease.attempt()).thenReturn(1);
+        when(retryLease.attempt()).thenReturn(2);
+        when(journal.read(task.getExecutionId(), "digest")).thenReturn(null, result);
+        when(runner.execute(any(), any())).thenReturn(result);
+        doThrow(new IllegalStateException("confirm timeout")).doNothing().when(publisher).publish(result);
+
+        listener.listenJudge(message(), channel);
+        listener.listenJudge(message(), channel);
+
+        verify(runner).execute(any(), any());
+        verify(journal).save(task.getExecutionId(), "digest", result);
+        verify(publisher).retry(task);
+        verify(lease, never()).complete(any());
+        verify(lease).close();
+        verify(retryLease).complete(result);
+        verify(retryLease).close();
+        verify(publisher, times(2)).publish(result);
+        verify(channel, times(2)).basicAck(7L, false);
+        verify(channel, never()).basicReject(7L, false);
+    }
+
+    @Test
+    void recoverableExecutionFailureDefersWithoutSavingOrPublishingTerminalResult() throws Exception {
+        when(store.claim(task)).thenReturn(new WorkerExecutionStore.Claim(lease, null, false, "digest"));
+        when(lease.attempt()).thenReturn(1);
+        when(runner.execute(any(), any())).thenThrow(new java.io.IOException("data endpoint unavailable"));
+
+        listener.listenJudge(message(), channel);
+
+        verify(lease).requireOwned();
+        verify(publisher).retry(task);
+        verify(publisher, never()).publish(any());
+        verify(journal, never()).save(anyString(), anyString(), any());
+        verify(runner, never()).systemFailure(any(), anyString());
+        verify(channel).basicAck(7L, false);
+        verify(lease).close();
+    }
+
+    @Test
+    void lostLeaseCannotPersistOrPublishTerminalResult() throws Exception {
+        when(store.claim(task)).thenReturn(new WorkerExecutionStore.Claim(lease, null, false, "digest"));
+        when(lease.attempt()).thenReturn(1);
+        when(runner.execute(any(), any())).thenReturn(result);
+        doThrow(new IllegalStateException("lease lost")).when(lease).requireOwned();
+
+        listener.listenJudge(message(), channel);
+
+        verify(journal, never()).save(anyString(), anyString(), any());
+        verify(publisher, never()).publish(any());
+        verify(lease, never()).complete(any());
+        verify(lease).close();
+        verify(publisher).retry(task);
+        verify(channel).basicAck(7L, false);
+    }
+
+    @Test
+    void changedTaskDigestIsRejectedWithoutRetryOrExecution() throws Exception {
+        when(store.claim(task)).thenThrow(new IllegalArgumentException("task fingerprint mismatch"));
+
+        listener.listenJudge(message(), channel);
+
+        verify(channel).basicReject(7L, false);
+        verify(channel, never()).basicAck(7L, false);
+        verifyNoInteractions(runner, publisher, journal);
+    }
+
+    @Test
     void corruptedJournalProducesSystemErrorInsteadOfPermanentRedelivery() throws Exception {
         when(store.claim(task)).thenReturn(new WorkerExecutionStore.Claim(lease, null, false, "digest"));
         when(journal.read(task.getExecutionId(), "digest")).thenThrow(new java.io.IOException("corrupt"));

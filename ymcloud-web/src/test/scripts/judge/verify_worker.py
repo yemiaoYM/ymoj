@@ -169,6 +169,7 @@ class Regression:
         self.work = self.worker_files / "work"
         self.journal = self.worker_files / "results"
         self.report = {"ok": False, "checks": [], "timingsMs": {}, "cleanup": []}
+        self.report["javaBudget"] = {"activeProcessors": 2, "workerMaxHeapMiB": 128, "webMaxHeapMiB": 256}
         self.stage = "prepare"
         self.service_token = secrets.token_hex(32)
         self.processes = []
@@ -410,7 +411,10 @@ class Regression:
         environment = {key: value for key, value in os.environ.items()
                        if not key.startswith(("SPRING_", "YMCLOUD_", "TOKEN_", "RABBITMQ_", "REDIS_", "MAIL_"))
                        and key not in ["JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS"]}
-        process = subprocess.Popen([self.args.java, "-Dfile.encoding=UTF-8", "-Duser.timezone=Asia/Shanghai", "-jar", str(jar),
+        # 用小服务器的 JVM 预算验证真实链路，不让开发机默认堆与 CPU 数掩盖开销。
+        heap = ["-Xms32m", "-Xmx128m"] if kind == "worker" else ["-Xms64m", "-Xmx256m"]
+        process = subprocess.Popen([self.args.java, *heap, "-XX:ActiveProcessorCount=2",
+                                    "-Dfile.encoding=UTF-8", "-Duser.timezone=Asia/Shanghai", "-jar", str(jar),
                                     "--spring.config.location=" + configuration.as_uri(), "--spring.profiles.active=e2e"],
                                    cwd=PROJECT_ROOT, env=environment, stdout=log_file, stderr=subprocess.STDOUT,
                                    **hidden_process_options())

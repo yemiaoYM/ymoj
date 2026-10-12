@@ -33,6 +33,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -53,9 +54,15 @@ public class JudgeRun {
     }
 
     public JudgeResult execute(JudgeTask task, Consumer<JudgeResult> progress) throws IOException {
+        long started = System.nanoTime();
+        log.info("开始执行判题 execution={} submission={} problem={} version={} strategy={} language={}",
+                task.getExecutionId(), task.getSubmissionId(), task.getProblemId(), task.getTestDataVersionId(),
+                task.getStrategy(), task.getLanguageConfig().getName());
         TestDataCache.Lease lease = null;
         Path working = null;
         CodeExecContainer container = null;
+        String stage = "prepare";
+        Integer caseIndex = null;
         JudgeResult result = result(task, JudgeVerdict.STATUS_PENDING, false);
         try {
             checkDeadline(task);
@@ -71,22 +78,33 @@ public class JudgeRun {
             if (cases.isEmpty()) {
                 throw new IOException("固定版本没有测试数据");
             }
+            log.info("判题数据准备完成 execution={} cases={} elapsedMs={}", task.getExecutionId(), cases.size(),
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             checkDeadline(task);
+            stage = "container";
             working = createWorkingDirectory(task);
             progress.accept(result(task, JudgeVerdict.STATUS_COMPILING, false));
             container = container(task, working);
             SandBox sandbox = new SandBoxFactory(task.getLanguageConfig().getName()).createSandBox(container);
             sandbox.saveCode(task.getCode());
+            stage = "compile";
+            long compileStarted = System.nanoTime();
+            log.debug("开始编译代码 execution={}", task.getExecutionId());
             sandbox.compile(container, remaining(task));
+            log.info("代码编译完成 execution={} elapsedMs={}", task.getExecutionId(),
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - compileStarted));
             progress.accept(result(task, JudgeVerdict.STATUS_JUDGING, false));
             List<TestCaseResult> results = new ArrayList<>();
             long maxTime = 0;
             long maxMemory = 0;
             int outputBudget = 512 * 1024;
             for (CaseSource source : cases) {
+                stage = "case";
+                caseIndex = source.id();
                 checkDeadline(task);
                 // 被 OOM、输出限制或强制截止杀掉的容器不能供下一测试点使用。
                 if (!container.isRunning()) {
+                    log.debug("重建已停止的判题容器 execution={} case={}", task.getExecutionId(), source.id());
                     container.remove(true);
                     container = container(task, working);
                     sandbox = new SandBoxFactory(task.getLanguageConfig().getName()).createSandBox(container);
@@ -107,32 +125,42 @@ public class JudgeRun {
             result.setTestCaseResults(results);
             result.setTime(maxTime);
             result.setMemory(maxMemory);
+            stage = "score";
+            caseIndex = null;
             score(result, task.getMode());
         } catch (CompileException e) {
             result.setStatus(JudgeVerdict.STATUS_COMPILE_ERROR);
             result.setErrorMessage(e.getMessage());
             result.setScore(0);
+        } catch (IOException | RuntimeException e) {
+            log.warn("判题执行异常 execution={} stage={} case={} elapsedMs={} cause={}", task.getExecutionId(),
+                    stage, caseIndex, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
+                    e.getClass().getSimpleName());
+            throw e;
         } finally {
             boolean interrupted = Thread.interrupted();
             if (container != null) {
                 try {
                     container.remove(true);
                 } catch (RuntimeException e) {
-                    log.warn("清理本次沙箱失败 execution={}", task.getExecutionId());
+                    log.warn("清理本次沙箱失败 execution={} cause={}",
+                            task.getExecutionId(), e.getClass().getSimpleName());
                 }
             }
             if (lease != null) {
                 try {
                     lease.close();
                 } catch (IOException e) {
-                    log.warn("释放本次数据缓存失败 execution={}", task.getExecutionId());
+                    log.warn("释放本次数据缓存失败 execution={} cause={}",
+                            task.getExecutionId(), e.getClass().getSimpleName());
                 }
             }
             if (working != null) {
                 try {
                     deleteWorkingDirectory(working);
                 } catch (IOException e) {
-                    log.warn("清理本次工作目录失败 execution={}", task.getExecutionId());
+                    log.warn("清理本次工作目录失败 execution={} cause={}",
+                            task.getExecutionId(), e.getClass().getSimpleName());
                 }
             }
             if (interrupted) {
@@ -142,6 +170,9 @@ public class JudgeRun {
         result.setTerminal(true);
         result.setSequence(3);
         result.setEmittedAtEpochMs(System.currentTimeMillis());
+        log.info("判题执行完成 execution={} status={} score={} timeMs={} memoryKiB={} elapsedMs={}",
+                task.getExecutionId(), result.getStatus(), result.getScore(), result.getTime(), result.getMemory(),
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
         return result;
     }
 
@@ -203,6 +234,7 @@ public class JudgeRun {
                 properties.getContainerWorkingDir(), task.getMemoryLimit(), task.getLanguageConfig().getEnv())
                 .createDockerContainer();
         container.setMaxOutputBytes(properties.getMaxOutputBytes());
+        log.debug("创建判题容器 execution={} container={}", task.getExecutionId(), container.getContainerId());
         try {
             container.start();
             return container;
@@ -240,6 +272,7 @@ public class JudgeRun {
 
     private TestCaseResult executeCase(JudgeTask task, CaseSource source, SandBox sandbox,
                                        CodeExecContainer container) throws IOException {
+        long started = System.nanoTime();
         TestCaseResult result = new TestCaseResult();
         result.setJudgeId(task.getSubmissionId());
         result.setCaseIndex(source.id());
@@ -269,6 +302,9 @@ public class JudgeRun {
             result.setErrorMessage(e.getMessage());
         }
         result.setScore(result.getStatus() == JudgeVerdict.STATUS_ACCEPTED ? 100 : 0);
+        log.debug("测试点执行完成 execution={} case={} status={} timeMs={} memoryKiB={} elapsedMs={}",
+                task.getExecutionId(), source.id(), result.getStatus(), result.getTime(), result.getMemory(),
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
         return result;
     }
 

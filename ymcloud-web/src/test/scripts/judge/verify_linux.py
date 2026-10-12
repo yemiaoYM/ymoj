@@ -433,8 +433,10 @@ def main():
             "--entrypoint", "/bin/sh", "oj-java-env", "-c", script])
         require(re.fullmatch(r"[0-9a-f]{64}", container), "Invalid created test container ID")
         output = command(["docker", "start", "-a", container], timeout=150)
-        require(output.startswith("PASS Linux "), "Linux Worker assertions did not complete")
-        print(output)
+        # Worker 生命周期日志可能先于最终断言摘要输出，仍须找到完整的通过标记。
+        summary = next((line for line in output.splitlines() if line.startswith("PASS Linux ")), None)
+        require(summary is not None, "Linux Worker assertions did not complete")
+        print(summary)
         succeeded = True
     except Exception as error:
         print(json.dumps({"ok": False, "errorType": type(error).__name__}))

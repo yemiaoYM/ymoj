@@ -11,10 +11,13 @@ import com.ymcloud.judge.exception.RuntimeErrorException;
 import com.ymcloud.judge.exception.SandBoxException;
 import com.ymcloud.judge.exception.TimeLimitExceededException;
 import com.ymcloud.judge.io.WorkerPaths;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -28,6 +31,7 @@ import java.util.regex.Pattern;
 /**
  * 现有 Docker 沙箱适配，资源单位统一为毫秒和 KiB。
  */
+@Slf4j
 public abstract class SandBox {
 
     private static final Pattern RESOURCE_PATTERN = Pattern.compile("__TIME__:(\\d+(?:\\.\\d+)?)\\s+(\\d+)");
@@ -46,10 +50,14 @@ public abstract class SandBox {
             CmdExecResult result = container.execCmd(combineCommands(
                     timeoutCommand(Math.min(10000L, remainingMillis)), buildCompileCommand()),
                     Math.max(1L, Math.min(11000L, remainingMillis)));
+            if (isLauncherFailure(result.getExitCode())) {
+                log.warn("编译工具无法启动 container={} exitCode={}", container.getContainerId(), result.getExitCode());
+                throw new SandBoxException("编译工具无法启动，退出码: " + result.getExitCode());
+            }
             if (result.getExitCode() != 0L) {
                 throw new CompileException("编译错误: " + diagnostic(result.getStderr()));
             }
-        } catch (CompileException e) {
+        } catch (CompileException | SandBoxException e) {
             throw e;
         } catch (CommandTimeoutException e) {
             throw new CompileException("编译超过时间限制");
@@ -99,17 +107,32 @@ public abstract class SandBox {
         if (exitCode == 124 || exitCode == 142 || exitCode == 152) {
             throw new TimeLimitExceededException();
         }
+        Matcher matcher = RESOURCE_PATTERN.matcher(result.getStderr());
+        // timeout/time 未启动时没有统计；用户程序自行退出 125/126/127 仍归为 RE。
+        if (isLauncherFailure(exitCode) && !matcher.find()) {
+            log.warn("运行工具无法启动 container={} exitCode={}", container.getContainerId(), exitCode);
+            throw new SandBoxException("运行工具无法启动，退出码: " + exitCode);
+        }
         if (exitCode != 0) {
             throw new RuntimeErrorException("运行错误，退出码: " + exitCode);
         }
-        Matcher matcher = RESOURCE_PATTERN.matcher(result.getStderr());
         long time = -1L;
         long memory = -1L;
-        while (matcher.find()) {
-            time = (long) (Double.parseDouble(matcher.group(1)) * 1000L);
-            memory = Long.parseLong(matcher.group(2));
+        try {
+            while (matcher.find()) {
+                // time 输出十进制秒，避免浮点截断使 1.13 秒被记为 1129 毫秒。
+                time = new BigDecimal(matcher.group(1)).movePointRight(3)
+                        .setScale(0, RoundingMode.DOWN)
+                        .longValueExact();
+                memory = Long.parseLong(matcher.group(2));
+            }
+        } catch (ArithmeticException | NumberFormatException e) {
+            log.warn("沙箱资源统计超出有效范围 container={} cause={}",
+                    container.getContainerId(), e.getClass().getSimpleName());
+            throw new SandBoxException("沙箱资源统计超出有效范围", e);
         }
         if (time < 0 || memory < 0) {
+            log.warn("沙箱缺少资源统计 container={}", container.getContainerId());
             throw new SandBoxException("沙箱缺少资源统计");
         }
         return new CodeRunResult(result.getStdout(), null, time, memory);
@@ -129,6 +152,10 @@ public abstract class SandBox {
         } catch (Exception e) {
             throw new SandBoxException("保存代码文件失败", e);
         }
+    }
+
+    private static boolean isLauncherFailure(long exitCode) {
+        return exitCode >= 125 && exitCode <= 127;
     }
 
     private String[] timeoutCommand(long timeoutMillis) {

@@ -6,11 +6,14 @@ import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+
 /** 仅解析明确的消息契约，忽略 AMQP 的 Java 类型头，也不启用任意类型反序列化。 */
 @Component
 public class JudgeMessageCodec {
 
-    private static final int MAX_PAYLOAD_LENGTH = 16 * 1024 * 1024;
+    private static final int MAX_TASK_MESSAGE_BYTES = 3 * 1024 * 1024;
+    private static final int MAX_RESULT_MESSAGE_BYTES = 16 * 1024 * 1024;
     private final ObjectMapper objectMapper;
 
     public JudgeMessageCodec(ObjectMapper objectMapper) {
@@ -23,7 +26,7 @@ public class JudgeMessageCodec {
         }
         try {
             String payload = objectMapper.writeValueAsString(message);
-            checkLength(payload);
+            checkLength(payload, message instanceof JudgeTask ? MAX_TASK_MESSAGE_BYTES : MAX_RESULT_MESSAGE_BYTES);
             return payload;
         } catch (JsonProcessingException e) {
             // Jackson 的异常可能携带私有代码或结果正文，不向消息框架传递原始异常。
@@ -40,7 +43,7 @@ public class JudgeMessageCodec {
     }
 
     private <T> T read(String payload, Class<T> type) {
-        checkLength(payload);
+        checkLength(payload, type == JudgeTask.class ? MAX_TASK_MESSAGE_BYTES : MAX_RESULT_MESSAGE_BYTES);
         try {
             T message = objectMapper.readValue(payload, type);
             if (message == null) {
@@ -52,8 +55,10 @@ public class JudgeMessageCodec {
         }
     }
 
-    private void checkLength(String payload) {
-        if (payload == null || payload.isBlank() || payload.length() > MAX_PAYLOAD_LENGTH) {
+    /** 与消息消费者采用同一字节上限，计入 UTF-8 多字节字符及 JSON 转义后的实际大小。 */
+    private void checkLength(String payload, int maxBytes) {
+        if (payload == null || payload.isBlank() || payload.length() > maxBytes
+                || payload.getBytes(StandardCharsets.UTF_8).length > maxBytes) {
             throw new IllegalArgumentException("判题消息为空或超出大小限制");
         }
     }

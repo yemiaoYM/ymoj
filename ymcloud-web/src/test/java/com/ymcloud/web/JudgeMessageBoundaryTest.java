@@ -2,6 +2,7 @@ package com.ymcloud.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
+import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeDispatch;
@@ -24,6 +25,38 @@ import static org.mockito.Mockito.*;
 
 /** 协议只使用数字状态与明确 DTO，非法 UTF-8 和任意类型头不能穿透消息边界。 */
 class JudgeMessageBoundaryTest {
+
+    @Test
+    void taskLimitCountsUtf8BytesAndJsonEscapesBeforePublishing() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JudgeMessageCodec codec = new JudgeMessageCodec(mapper);
+        JudgeTask task = new JudgeTask();
+        task.setInput("中".repeat(256 * 1024));
+        String allowed = codec.write(task);
+        assertEquals(task.getInput(), codec.task(allowed).getInput());
+        task.setInput("中".repeat(1024 * 1024));
+        String multibyte = mapper.writeValueAsString(task);
+        assertTrue(multibyte.length() < 3 * 1024 * 1024);
+        assertTrue(multibyte.getBytes(StandardCharsets.UTF_8).length > 3 * 1024 * 1024);
+        assertThrows(IllegalArgumentException.class, () -> codec.write(task));
+        assertThrows(IllegalArgumentException.class, () -> codec.task(multibyte));
+        task.setInput("\0".repeat(600 * 1024));
+        assertTrue(task.getInput().length() < 1024 * 1024);
+        assertThrows(IllegalArgumentException.class, () -> codec.write(task));
+    }
+
+    @Test
+    void resultLimitAlsoCountsUtf8BytesRatherThanCharacters() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        JudgeMessageCodec codec = new JudgeMessageCodec(mapper);
+        JudgeResult result = new JudgeResult();
+        result.setErrorMessage("中".repeat(6 * 1024 * 1024));
+        String payload = mapper.writeValueAsString(result);
+        assertTrue(payload.length() < 16 * 1024 * 1024);
+        assertTrue(payload.getBytes(StandardCharsets.UTF_8).length > 16 * 1024 * 1024);
+        assertThrows(IllegalArgumentException.class, () -> codec.write(result));
+        assertThrows(IllegalArgumentException.class, () -> codec.result(payload));
+    }
 
     @Test
     void javaTypeHeaderIsIgnoredAndVerdictUsesNumericWireCode() {

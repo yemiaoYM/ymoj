@@ -33,6 +33,8 @@ public class JudgeDispatchPublisher {
     private final String exchange;
     private final String routingKey;
 
+    private boolean unavailable;
+
     public JudgeDispatchPublisher(JudgeDispatchEntityService dispatches, JudgeResultService results,
                                   @Qualifier("judgeRabbitTemplate") RabbitTemplate rabbitTemplate,
                                   JudgeMessageCodec codec, JudgeDispatchProperties properties,
@@ -66,8 +68,15 @@ public class JudgeDispatchPublisher {
             for (JudgeDispatch dispatch : ready) {
                 publish(dispatch);
             }
+            if (unavailable) {
+                unavailable = false;
+                log.info("判题任务箱已恢复，继续发布和补偿数据库任务");
+            }
         } catch (RuntimeException e) {
-            log.warn("判题任务箱暂时不可用，保留数据库任务等待下次恢复");
+            if (!unavailable) {
+                unavailable = true;
+                log.warn("判题任务箱暂时不可用，保留数据库任务等待恢复，异常类型：{}", e.getClass().getSimpleName());
+            }
         }
     }
 
@@ -92,17 +101,19 @@ public class JudgeDispatchPublisher {
             CorrelationData.Confirm confirm = correlation.getFuture().get(
                     properties.getConfirmTimeout().toMillis(), TimeUnit.MILLISECONDS);
             if (!confirm.isAck() || correlation.getReturned() != null) {
-                retry(dispatch, lease);
+                retry(dispatch, lease, correlation.getReturned() == null ? "Broker 未确认" : "消息无法路由");
                 return;
             }
             markWaiting(dispatch, lease);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            retry(dispatch, lease);
+            retry(dispatch, lease, "发布线程被中断");
         } catch (IllegalArgumentException e) {
+            log.warn("持久判题任务格式无效，提交编号：{}，执行编号：{}，数据版本：{}",
+                    dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId());
             results.failPublishing(dispatch.getSubmissionId(), dispatch.getExecutionId(), "持久评测任务格式无效");
         } catch (Exception e) {
-            retry(dispatch, lease);
+            retry(dispatch, lease, e.getClass().getSimpleName());
         }
     }
 
@@ -152,7 +163,7 @@ public class JudgeDispatchPublisher {
 
     private void markWaiting(JudgeDispatch dispatch, String lease) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        dispatches.lambdaUpdate()
+        boolean waiting = dispatches.lambdaUpdate()
                 .eq(JudgeDispatch::getId, dispatch.getId())
                 .eq(JudgeDispatch::getExecutionId, dispatch.getExecutionId())
                 .eq(JudgeDispatch::getLeaseToken, lease)
@@ -163,9 +174,16 @@ public class JudgeDispatchPublisher {
                 .set(JudgeDispatch::getLeaseToken, null)
                 .set(JudgeDispatch::getLeaseUntil, null)
                 .update();
+        log.info("判题任务发布已确认，提交编号：{}，执行编号：{}，数据版本：{}，发布次数：{}，恢复次数：{}",
+                dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId(),
+                dispatch.getPublishAttempts() + 1, dispatch.getRecoveryAttempts());
+        if (!waiting) {
+            log.debug("判题任务等待状态未更新，使用数据库当前状态继续恢复，提交编号：{}，执行编号：{}",
+                    dispatch.getSubmissionId(), dispatch.getExecutionId());
+        }
     }
 
-    private void retry(JudgeDispatch dispatch, String lease) {
+    private void retry(JudgeDispatch dispatch, String lease, String reason) {
         LocalDateTime nextAttempt = LocalDateTime.now(ZoneOffset.UTC).plus(properties.getRetryInterval());
         boolean reset = dispatches.lambdaUpdate()
                 .eq(JudgeDispatch::getId, dispatch.getId())
@@ -179,7 +197,11 @@ public class JudgeDispatchPublisher {
         if (reset && dispatch.getPublishAttempts() + 1 >= properties.getMaxPublishAttempts()) {
             results.failPublishing(dispatch.getSubmissionId(), dispatch.getExecutionId(), "任务发布失败，重试次数已用尽");
         }
-        log.debug("判题发布未确认，持久任务保留待重试，提交编号：{}", dispatch.getSubmissionId());
+        if (reset) {
+            log.warn("判题任务发布失败，提交编号：{}，执行编号：{}，数据版本：{}，发布次数：{}，原因：{}，下次尝试：{}",
+                    dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId(),
+                    dispatch.getPublishAttempts() + 1, reason, nextAttempt);
+        }
     }
 
     private void expireTasks() {
@@ -205,16 +227,21 @@ public class JudgeDispatchPublisher {
                 .list();
         for (JudgeDispatch dispatch : waiting) {
             if (dispatch.getRecoveryAttempts() >= properties.getMaxRecoveryAttempts()) {
-                dispatches.lambdaUpdate()
+                boolean stopped = dispatches.lambdaUpdate()
                         .eq(JudgeDispatch::getId, dispatch.getId())
                         .eq(JudgeDispatch::getExecutionId, dispatch.getExecutionId())
                         .eq(JudgeDispatch::getDispatchState, JudgeDispatchState.WAITING)
                         .eq(JudgeDispatch::getLastResultSequence, dispatch.getLastResultSequence())
                         .set(JudgeDispatch::getNextAttemptTime, dispatch.getDeadlineTime())
                         .update();
+                if (stopped) {
+                    log.warn("判题任务恢复次数已用尽，等待总截止时间，提交编号：{}，执行编号：{}，恢复次数：{}，截止时间：{}",
+                            dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getRecoveryAttempts(),
+                            dispatch.getDeadlineTime());
+                }
                 continue;
             }
-            dispatches.lambdaUpdate()
+            boolean recovered = dispatches.lambdaUpdate()
                     .eq(JudgeDispatch::getId, dispatch.getId())
                     .eq(JudgeDispatch::getExecutionId, dispatch.getExecutionId())
                     .eq(JudgeDispatch::getDispatchState, JudgeDispatchState.WAITING)
@@ -223,10 +250,16 @@ public class JudgeDispatchPublisher {
                     .le(JudgeDispatch::getNextAttemptTime, now)
                     .set(JudgeDispatch::getDispatchState, JudgeDispatchState.READY)
                     .set(JudgeDispatch::getRecoveryAttempts, dispatch.getRecoveryAttempts() + 1)
-                    .set(JudgeDispatch::getNextAttemptTime, now)
+                    // DATETIME 未保留小数秒，避免向上舍入后本轮调度无法立即读取恢复任务。
+                    .set(JudgeDispatch::getNextAttemptTime, now.withNano(0))
                     .set(JudgeDispatch::getLeaseToken, null)
                     .set(JudgeDispatch::getLeaseUntil, null)
                     .update();
+            if (recovered) {
+                log.warn("判题结果等待超时，准备恢复任务，提交编号：{}，执行编号：{}，数据版本：{}，恢复次数：{}",
+                        dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId(),
+                        dispatch.getRecoveryAttempts() + 1);
+            }
         }
     }
 }

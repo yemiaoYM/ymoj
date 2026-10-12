@@ -2,6 +2,7 @@ package com.ymcloud.judge.data;
 
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
@@ -17,15 +18,15 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 使用独立服务身份读取 Web 的受限数据接口。文件流有完整请求截止时间，且从不跟随重定向。
  */
+@Slf4j
 @Component
 public class HttpTestDataSource implements TestDataSource, AutoCloseable {
 
@@ -39,7 +40,7 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
     private final int maxManifestBytes;
     private final Set<HttpURLConnection> connections = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean closed = new AtomicBoolean();
-    private final ScheduledExecutorService deadlines;
+    private final ScheduledThreadPoolExecutor deadlines;
 
     public HttpTestDataSource(WorkerDataProperties properties, TestDataCacheProperties cacheProperties) {
         if (properties == null || cacheProperties == null) {
@@ -57,11 +58,13 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
         if (maxManifestBytes <= 0 || maxManifestBytes > 16 * 1024 * 1024) {
             throw new IllegalArgumentException("Worker 清单大小限制无效");
         }
-        this.deadlines = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        this.deadlines = new ScheduledThreadPoolExecutor(1, runnable -> {
             Thread thread = new Thread(runnable, "worker-data-request-deadline");
             thread.setDaemon(true);
             return thread;
         });
+        // 连续下载文件时及时移除取消的截止任务，不保留到原定超时时间。
+        this.deadlines.setRemoveOnCancelPolicy(true);
     }
 
     @Override
@@ -133,8 +136,9 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
             throw new IOException("Worker 数据客户端已停止", e);
         }
         boolean opened = false;
+        int status = -1;
         try {
-            int status = connection.getResponseCode();
+            status = connection.getResponseCode();
             if (closed.get() || Thread.currentThread().isInterrupted()) {
                 throw new IOException("Worker 数据请求已经停止");
             }
@@ -150,7 +154,13 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
             }
             InputStream body = connection.getInputStream();
             opened = true;
+            log.debug("Worker 测试数据接口响应 problem={} version={} file={} status={} bytes={}",
+                    problemId, versionId, fileId, status, connection.getContentLengthLong());
             return new DeadlineStream(body, connection, timer, expired, deadline);
+        } catch (IOException e) {
+            log.warn("Worker 测试数据接口请求失败 problem={} version={} file={} status={} cause={}",
+                    problemId, versionId, fileId, status, e.getClass().getSimpleName());
+            throw e;
         } finally {
             if (!opened) {
                 timer.cancel(false);

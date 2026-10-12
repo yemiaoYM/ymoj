@@ -1,7 +1,11 @@
 package com.ymcloud.web;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.baomidou.mybatisplus.core.toolkit.LambdaUtils;
 import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
@@ -15,6 +19,7 @@ import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeResultService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessagePostProcessor;
 import org.springframework.amqp.core.MessageProperties;
@@ -162,6 +167,47 @@ class JudgeDispatchPublisherTest {
         publisher.publish(dispatch);
         verify(results).failPublishing(100L, dispatch.getExecutionId(), "持久评测任务格式无效");
         verifyNoInteractions(rabbit);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void persistentOutboxFailureLogsOnceAndRecoveryNeverIncludesExceptionDetails() {
+        Logger logger = (Logger) LoggerFactory.getLogger(JudgeDispatchPublisher.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            doThrow(new IllegalStateException("private-database-secret")).when(dispatches).lambdaQuery();
+            publisher.tick();
+            publisher.tick();
+            publisher.tick();
+            assertEquals(1, appender.list.size());
+            LambdaQueryChainWrapper<JudgeDispatch> query = mock(LambdaQueryChainWrapper.class, RETURNS_SELF);
+            when(query.eq(any(), any())).thenReturn(query);
+            when(query.ne(any(), any())).thenReturn(query);
+            when(query.le(any(), any())).thenReturn(query);
+            when(query.gt(any(), any())).thenReturn(query);
+            when(query.and(any())).thenReturn(query);
+            when(query.orderByAsc(any(SFunction.class))).thenReturn(query);
+            when(query.last(anyString())).thenReturn(query);
+            when(query.list()).thenReturn(List.of());
+            doReturn(query).when(dispatches).lambdaQuery();
+            publisher.tick();
+            assertEquals(2, appender.list.size());
+            assertTrue(appender.list.get(1).getFormattedMessage().contains("已恢复"));
+            doThrow(new IllegalStateException("private-broker-secret")).when(rabbit)
+                    .convertAndSend(anyString(), anyString(), any(),
+                            any(MessagePostProcessor.class), any(CorrelationData.class));
+            publisher.publish(dispatch);
+            String failure = appender.list.get(2).getFormattedMessage();
+            assertTrue(failure.contains(dispatch.getExecutionId()));
+            assertTrue(failure.contains("IllegalStateException"));
+            assertTrue(appender.list.stream().allMatch(event -> event.getThrowableProxy() == null));
+            assertTrue(appender.list.stream().noneMatch(event -> event.getFormattedMessage().contains("private-")));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
     }
 
     private void brokerConfirmation(boolean ack, boolean returned) {

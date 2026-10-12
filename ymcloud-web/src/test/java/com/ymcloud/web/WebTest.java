@@ -18,6 +18,7 @@ import com.ymcloud.pojo.entity.Auth;
 import com.ymcloud.pojo.bo.ContestSubmissionRecord;
 import com.ymcloud.pojo.vo.oj.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -32,10 +33,12 @@ import java.util.List;
  * @ClassName: WebTest
  * @Author: Yemiao
  * @CreateTime: 2025-07-18  21:55
- * @Description: 测试类
+ * @Description: 旧版手工调试用例，依赖业务数据、邮件服务和固定本地脚本。
+ * 显式设置 YMCLOUD_RUN_LEGACY_WEB_TESTS=true 后才运行，常规回归使用隔离测试。
  */
 //@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @SpringBootTest
+@EnabledIfEnvironmentVariable(named = "YMCLOUD_RUN_LEGACY_WEB_TESTS", matches = "true")
 public class WebTest {
     @Autowired
     private RedisCache redisCache;

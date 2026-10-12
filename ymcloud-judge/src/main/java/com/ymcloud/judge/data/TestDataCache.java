@@ -4,6 +4,7 @@ import com.ymcloud.judge.data.TestDataManifestReader.CaseSpec;
 import com.ymcloud.judge.data.TestDataManifestReader.FileSpec;
 import com.ymcloud.judge.data.TestDataManifestReader.VerifiedManifest;
 import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.FilterInputStream;
@@ -31,6 +32,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
@@ -41,6 +43,7 @@ import java.util.stream.Stream;
 /**
  * 按题目与不可变版本缓存原始文件。下载校验完成后原子发布，使用中的版本不会被容量清理。
  */
+@Slf4j
 @Component
 public class TestDataCache implements AutoCloseable {
 
@@ -93,6 +96,7 @@ public class TestDataCache implements AutoCloseable {
         }
         try {
             recover();
+            log.info("测试数据缓存初始化完成 versions={} bytes={}", versions.size(), readyBytes);
         } catch (IOException | RuntimeException e) {
             processLock.release();
             lockChannel.close();
@@ -133,6 +137,7 @@ public class TestDataCache implements AutoCloseable {
                 current = versions.get(key);
                 if (current != null) {
                     if (!manifestSha256.equals(current.manifestHash)) {
+                        log.warn("任务清单与缓存版本不一致 problem={} version={}", problemId, versionId);
                         throw new IOException("任务的清单哈希与已缓存不可变版本不一致");
                     }
                     current.references++;
@@ -145,6 +150,8 @@ public class TestDataCache implements AutoCloseable {
                         current.lastAccess = System.nanoTime();
                     }
                     hits.incrementAndGet();
+                    log.debug("测试数据缓存命中 problem={} version={} cases={}",
+                            problemId, versionId, current.cases.size());
                     return new Lease(current);
                 } catch (IOException e) {
                     synchronized (state) {
@@ -153,6 +160,8 @@ public class TestDataCache implements AutoCloseable {
                             throw e;
                         }
                         verificationFailures.incrementAndGet();
+                        log.warn("测试数据缓存校验失败 problem={} version={} references={} cause={}",
+                                problemId, versionId, current.references, e.getClass().getSimpleName());
                         if (current.references != 0) {
                             throw new IOException("运行中的测试数据缓存损坏，不能替换其文件", e);
                         }
@@ -185,33 +194,44 @@ public class TestDataCache implements AutoCloseable {
     public void close() throws IOException {
         synchronized (state) {
             closed = true;
+            log.info("测试数据缓存停止接收任务 versions={} downloads={}", versions.size(), downloads.size());
             releaseProcessLockIfUnused();
         }
     }
 
     private Lease download(Key key, String expectedHash) throws IOException {
+        long started = System.nanoTime();
+        log.info("开始下载测试数据 problem={} version={}", key.problemId, key.versionId);
         Path staged = null;
         long reservation = 0;
         boolean published = false;
+        String stage = "manifest";
+        Long fileId = null;
         try {
             checkInterrupted();
             byte[] raw = source.fetchManifest(key.problemId, key.versionId);
             CachedVersion planned = parseVersion(key, raw, expectedHash, directory(key));
+            stage = "capacity";
             synchronized (state) {
                 requireOpen();
                 ensureCapacity(planned.bytes);
                 reservedBytes += planned.bytes;
                 reservation = planned.bytes;
             }
+            stage = "staging";
             staged = Files.createDirectory(root.resolve(".download-" + UUID.randomUUID()));
             privatePermissions(staged, true);
             writeManifest(staged, raw, expectedHash);
             for (FileSpec file : planned.files.values()) {
+                stage = "file";
+                fileId = file.id();
                 checkInterrupted();
                 try (InputStream input = source.openFile(key.problemId, key.versionId, file.id())) {
                     writeVerified(staged.resolve(file.filename()), input, file);
                 }
             }
+            stage = "publish";
+            fileId = null;
             synchronized (state) {
                 requireOpen();
                 Files.move(staged, planned.directory, StandardCopyOption.ATOMIC_MOVE);
@@ -221,10 +241,16 @@ public class TestDataCache implements AutoCloseable {
                 reservedBytes -= reservation;
                 reservation = 0;
                 published = true;
+                log.info("测试数据下载校验完成 problem={} version={} files={} cases={} bytes={} elapsedMs={}",
+                        key.problemId, key.versionId, planned.files.size(), planned.cases.size(), planned.bytes,
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
                 return new Lease(planned);
             }
         } catch (IOException | RuntimeException e) {
             downloadFailures.incrementAndGet();
+            log.warn("测试数据下载失败 problem={} version={} stage={} file={} elapsedMs={} cause={}",
+                    key.problemId, key.versionId, stage, fileId,
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), e.getClass().getSimpleName());
             if (e instanceof IOException ioException) {
                 throw ioException;
             }
@@ -238,6 +264,8 @@ public class TestDataCache implements AutoCloseable {
                 synchronized (state) {
                     // 残留下载无法删除时停止新任务准备，避免释放预算后继续占满磁盘。
                     closed = true;
+                    log.warn("下载临时目录清理失败，停止缓存准备 problem={} version={} cause={}",
+                            key.problemId, key.versionId, e.getClass().getSimpleName());
                 }
                 throw e;
             } finally {
@@ -254,6 +282,7 @@ public class TestDataCache implements AutoCloseable {
                 String name = path.getFileName().toString();
                 if (TEMP_DIRECTORY.matcher(name).matches()) {
                     deleteOwnedDirectory(path);
+                    log.debug("清理上次未完成的测试数据下载 directory={}", name);
                     continue;
                 }
                 Matcher matcher = VERSION_DIRECTORY.matcher(name);
@@ -268,8 +297,11 @@ public class TestDataCache implements AutoCloseable {
                     ensureCapacity(recovered.bytes);
                     versions.put(key, recovered);
                     readyBytes += recovered.bytes;
+                    log.debug("恢复测试数据缓存 problem={} version={} cases={} bytes={}",
+                            key.problemId, key.versionId, recovered.cases.size(), recovered.bytes);
                 } catch (IOException | RuntimeException e) {
                     verificationFailures.incrementAndGet();
+                    log.warn("移除无效的测试数据缓存 directory={} cause={}", name, e.getClass().getSimpleName());
                     deleteOwnedDirectory(path);
                 }
             }
@@ -411,6 +443,8 @@ public class TestDataCache implements AutoCloseable {
         deleteOwnedDirectory(version.directory);
         if (versions.remove(version.key, version)) {
             readyBytes -= version.bytes;
+            log.debug("清理未使用的测试数据缓存 problem={} version={} bytes={}",
+                    version.key.problemId, version.key.versionId, version.bytes);
         }
     }
 

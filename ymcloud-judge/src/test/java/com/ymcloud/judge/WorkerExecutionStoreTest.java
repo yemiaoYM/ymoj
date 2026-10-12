@@ -12,6 +12,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -29,6 +30,110 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class WorkerExecutionStoreTest {
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void completingShortTasksDoesNotRetainCanceledDeadlineOrRenewalCallbacks() throws Exception {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.execute(any(DefaultRedisScript.class), anyList(), any(), any(), any(), any()))
+                .thenReturn(11L);
+        WorkerExecutionStore store = new WorkerExecutionStore(redis,
+                new WorkerAmqpConfig().workerObjectMapper(), new WorkerProperties());
+        try {
+            for (int index = 0; index < 100; index++) {
+                try (var lease = store.claim(WorkerFixtures.task(1, 0)).lease()) {
+                    assertNotNull(lease);
+                }
+            }
+            ScheduledThreadPoolExecutor deadlines = (ScheduledThreadPoolExecutor)
+                    ReflectionTestUtils.getField(store, "deadlines");
+            ScheduledThreadPoolExecutor heartbeat = (ScheduledThreadPoolExecutor)
+                    ReflectionTestUtils.getField(store, "heartbeat");
+            assertNotNull(deadlines);
+            assertNotNull(heartbeat);
+            assertEquals(0, deadlines.getQueue().size());
+            assertEquals(0, heartbeat.getQueue().size());
+        } finally {
+            store.stop();
+        }
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void taskDeadlineInterruptsBeforeFirstLeaseRenewalAndWhileRedisRenewalIsBlocked() throws Exception {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.execute(any(DefaultRedisScript.class), anyList(), any(), any(), any(), any()))
+                .thenReturn(11L);
+        CountDownLatch renewing = new CountDownLatch(1);
+        CountDownLatch renewalResponse = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            renewing.countDown();
+            assertTrue(renewalResponse.await(5, TimeUnit.SECONDS));
+            return 1L;
+        }).when(redis).execute(any(DefaultRedisScript.class), anyList(), any(), any());
+        WorkerProperties properties = new WorkerProperties();
+        properties.setLeaseMillis(3000L);
+        WorkerExecutionStore store = new WorkerExecutionStore(redis,
+                new WorkerAmqpConfig().workerObjectMapper(), properties);
+        var consumer = Executors.newSingleThreadExecutor();
+        try {
+            for (long deadlineMillis : new long[]{200L, 1400L}) {
+                var task = WorkerFixtures.task(1, 0);
+                task.setDeadlineEpochMs(System.currentTimeMillis() + deadlineMillis);
+                var interrupted = consumer.submit(() -> {
+                    try (var lease = store.claim(task).lease()) {
+                        assertNotNull(lease);
+                        try {
+                            new CountDownLatch(1).await();
+                            return false;
+                        } catch (InterruptedException expected) {
+                            return true;
+                        }
+                    }
+                });
+                if (deadlineMillis > 1000L) {
+                    assertTrue(renewing.await(2, TimeUnit.SECONDS));
+                }
+                assertTrue(interrupted.get(2, TimeUnit.SECONDS));
+            }
+        } finally {
+            renewalResponse.countDown();
+            consumer.shutdownNow();
+            store.stop();
+        }
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void closedLeaseDeadlineCannotInterruptConsumersNextTask() throws Exception {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        when(redis.execute(any(DefaultRedisScript.class), anyList(), any(), any(), any(), any()))
+                .thenReturn(11L);
+        WorkerExecutionStore store = new WorkerExecutionStore(redis,
+                new WorkerAmqpConfig().workerObjectMapper(), new WorkerProperties());
+        var consumer = Executors.newSingleThreadExecutor();
+        CountDownLatch deadlinePassed = new CountDownLatch(1);
+        try {
+            var task = WorkerFixtures.task(1, 0);
+            task.setDeadlineEpochMs(System.currentTimeMillis() + 200L);
+            var nextTask = consumer.submit(() -> {
+                try (var lease = store.claim(task).lease()) {
+                    assertNotNull(lease);
+                }
+                deadlinePassed.await();
+                return Thread.currentThread().isInterrupted();
+            });
+            ScheduledExecutorService deadlines = (ScheduledExecutorService)
+                    ReflectionTestUtils.getField(store, "deadlines");
+            assertNotNull(deadlines);
+            deadlines.schedule(deadlinePassed::countDown, 400, TimeUnit.MILLISECONDS);
+            assertFalse(nextTask.get(2, TimeUnit.SECONDS));
+        } finally {
+            deadlinePassed.countDown();
+            consumer.shutdownNow();
+            store.stop();
+        }
+    }
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})

@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -133,6 +134,39 @@ class CodeExecContainerInputTest {
             }
         };
         assertThrows(CommandTimeoutException.class, () -> container.execCmd(new String[]{"cat"}, delayed, 1L));
+        verify(container, never()).execCmd(any(String[].class), anyLong());
+        try (var files = Files.list(workingDir)) {
+            assertEquals(0, files.count());
+        }
+    }
+
+    @Test
+    void inputCopyStopsAtDeadlineInsteadOfConsumingAllRemainingBlocks() throws Exception {
+        CodeExecContainer container = container("/app");
+        AtomicInteger reads = new AtomicInteger();
+        InputStream delayed = new InputStream() {
+            @Override
+            public int read() {
+                throw new AssertionError("输入应按块复制");
+            }
+
+            @Override
+            public int read(byte[] buffer, int offset, int length) {
+                if (reads.incrementAndGet() > 100) {
+                    return -1;
+                }
+                try {
+                    Thread.sleep(20L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                buffer[offset] = 'x';
+                return 1;
+            }
+        };
+
+        assertThrows(CommandTimeoutException.class, () -> container.execCmd(new String[]{"cat"}, delayed, 1L));
+        assertEquals(1, reads.get());
         verify(container, never()).execCmd(any(String[].class), anyLong());
         try (var files = Files.list(workingDir)) {
             assertEquals(0, files.count());
