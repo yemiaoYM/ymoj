@@ -1,6 +1,5 @@
 package com.ymcloud.pojo.vo.oj;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -14,6 +13,7 @@ import java.io.Serializable;
  */
 @Data
 public class LanguageVO implements Serializable {
+
     private static final long serialVersionUID = 1L;
     /**
      * 语言名称，如 C++ 17

@@ -1,14 +1,9 @@
 package com.ymcloud.pojo.vo.oj;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.enums.ProblemSource;
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -20,6 +15,7 @@ import java.util.List;
  */
 @Data
 public class ProblemVO implements Serializable {
+
     private static final long serialVersionUID = 1L;
 
     /**
@@ -59,7 +55,7 @@ public class ProblemVO implements Serializable {
      */
     private Long timeLimit;
     /**
-     * 内存限制（KB）
+     * 内存限制（KiB）
      */
     private Long memoryLimit;
     /**

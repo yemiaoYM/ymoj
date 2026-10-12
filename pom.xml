@@ -21,7 +21,7 @@
         <module>ymcloud-pojo</module>
         <!--核心模块：全局配置类、安全认证、统一异常、通用拦截器、通用注解等-->
         <module>ymcloud-core</module>
-        <!--判题模块：负责判题相关逻辑，如代码沙箱、判题流程、结果解析等-->
+        <!--独立 Worker：任务消费、数据缓存、沙箱执行和评分-->
         <module>ymcloud-judge</module>
         <!--Web接口模块：负责接口暴露，控制层、业务服务层、定时任务等-->
         <module>ymcloud-web</module>
@@ -35,14 +35,12 @@
         <hutool.version>5.8.38</hutool.version>
         <spring.boot.version>3.5.3</spring.boot.version>
         <spring.security.version>6.5.1</spring.security.version>
-        <knife4j.version>4.4.0</knife4j.version>
         <redis.version>3.5.3</redis.version>
         <mysql.version>9.2.0</mysql.version>
         <druid.version>1.2.23</druid.version>
         <xml.version>2.3.1</xml.version>
         <fastjson.version>2.0.57</fastjson.version>
         <jwt.version>0.9.1</jwt.version>
-        <spring.security.version>6.5.1</spring.security.version>
         <mybatis-plus.version>3.5.10.1</mybatis-plus.version>
         <javax.mail.version>1.6.2</javax.mail.version>
         <docker.version>3.4.0</docker.version>
@@ -119,12 +117,6 @@
                 <artifactId>jjwt</artifactId>
                 <version>${jwt.version}</version>
             </dependency>
-            <!-- knife4j-doc -->
-            <dependency>
-                <groupId>com.github.xiaoymin</groupId>
-                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
-                <version>${knife4j.version}</version>
-            </dependency>
             <!--mail-->
             <dependency>
                 <groupId>com.sun.mail</groupId>
@@ -196,8 +188,7 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.11.0</version>
                     <configuration>
-                        <source>${java.version}</source>
-                        <target>${java.version}</target>
+                        <release>${java.version}</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
                     </configuration>
                 </plugin>

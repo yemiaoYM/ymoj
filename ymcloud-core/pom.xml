@@ -19,6 +19,11 @@
     </properties>
 
     <dependencies>
+        <!-- Web 校验运行实现留在基础模块，避免通过 pojo 传播给 Worker。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>

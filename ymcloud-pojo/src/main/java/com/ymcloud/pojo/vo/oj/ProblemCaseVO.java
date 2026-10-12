@@ -1,6 +1,5 @@
 package com.ymcloud.pojo.vo.oj;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -15,6 +14,7 @@ import java.io.Serializable;
  */
 @Data
 public class ProblemCaseVO implements Serializable {
+
     private static final long serialVersionUID = 1L;
     /**
      * 输入内容

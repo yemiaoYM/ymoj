@@ -1,0 +1,85 @@
+spring:
+    application:
+        name: ymcloud-judge-worker
+    profiles:
+        # 与 Web 一致，直接启动使用 dev；服务器部署必须显式指定 prod。
+        active: dev
+    main:
+        # 独立后台进程，不启动 HTTP 服务，也不连接业务数据库。
+        web-application-type: none
+    rabbitmq:
+        # 与同一环境的 Web 使用相同地址、账号和 virtual host。
+        # 开发与生产必须隔离 virtual host，避免消费者互相抢任务。
+        host: ${RABBITMQ_HOST:127.0.0.1}
+        port: ${RABBITMQ_PORT:5672}
+        username: ${RABBITMQ_USERNAME:guest}
+        password: ${RABBITMQ_PASSWORD:guest}
+        virtual-host: ${RABBITMQ_VHOST:/}
+        # 最终结果等 broker 确认后才确认任务；未路由的消息会返回发布方。
+        publisher-confirm-type: correlated
+        publisher-returns: true
+        template:
+            mandatory: true
+        listener:
+            simple:
+                # 判题完成、结果持久化并确认发布后，由 Worker 手动 ACK。
+                acknowledge-mode: manual
+                # 每个消费者最多保留一条未确认任务；实际并发由下面 concurrency 控制。
+                prefetch: 1
+                # 失败任务走有限重试/死信，不在原队列无限重投。
+                default-requeue-rejected: false
+    data:
+        redis:
+            # 保存执行租约和去重状态；与 Web 使用同一环境的 Redis database。
+            host: ${REDIS_HOST:127.0.0.1}
+            port: ${REDIS_PORT:6379}
+            password: ${REDIS_PASSWORD:}
+            database: ${REDIS_DATABASE:0}
+            # 单次 Redis 操作超时；过长会影响租约续期和故障恢复。
+            connect-timeout: 2s
+            timeout: 2s
+ymcloud:
+    judge:
+        # 两个服务必须使用完全相同的队列名称；新版协议与旧内置判题队列隔离。
+        exchange: ${YMCLOUD_JUDGE_EXCHANGE:judge.worker-v2.topic}
+        task-queue: ${YMCLOUD_JUDGE_TASK_QUEUE:judge.worker-v2.queue}
+        result-queue: ${YMCLOUD_JUDGE_RESULT_QUEUE:judge.worker-v2.result.queue}
+        task-routing-key: judge
+        result-routing-key: judge.result
+    worker:
+        # 每个实例使用独立目录。工作目录会清理，结果目录重启时必须保留。
+        # Worker ID 默认随机；部署时可通过 YMCLOUD_WORKER_ID 指定固定实例名称。
+        work-dir: ${YMCLOUD_JUDGE_WORK_DIR:./files/worker/work}
+        journal-dir: ${YMCLOUD_JUDGE_RESULT_DIR:./files/worker/results}
+        redis-prefix: ${YMCLOUD_WORKER_REDIS_PREFIX:ymcloud:judge-worker-v2:}
+        # 同时评测的任务数，默认 1；增加前先确认 CPU、内存及磁盘容量。
+        concurrency: ${YMCLOUD_WORKER_CONCURRENCY:1}
+        # 单任务最多执行次数，超过次数由最终系统错误收敛。
+        max-attempts: 3
+        # 以下时间单位为毫秒；租约必须大于结果确认超时的两倍。
+        lease-millis: 30000
+        confirm-timeout-millis: 10000
+        # 已完成结果与去重状态保存 7 天，单位为毫秒。
+        retention-millis: 604800000
+        # 每次受限进程 stdout + stderr 的上限，单位字节，默认 1 MiB。
+        max-output-bytes: 1048576
+        cache:
+            # 私有测试版本缓存，禁止多个 Worker 共用同一目录。
+            directory: ${YMCLOUD_JUDGE_CACHE_DIR:./files/worker/cache}
+            # 容量单位均为字节：总缓存 5 GiB，单版本 1 GiB，单文件 50 MiB。
+            max-bytes: 5368709120
+            max-version-bytes: 1073741824
+            max-file-bytes: 52428800
+        data:
+            # Worker 可达的 Web 地址；回环地址可用 HTTP，远程必须使用 HTTPS。
+            base-url: ${YMCLOUD_WORKER_API_URL:http://127.0.0.1:9091}
+            # 与 Web 的 worker-api.token 相同，至少 32 个字符，不复用用户 JWT 或存储密钥。
+            token: ${YMCLOUD_WORKER_SERVICE_TOKEN:}
+            # 连接建立超时与一次文件下载的总超时，支持 s/m 等时间单位。
+            connect-timeout: 5s
+            read-timeout: 60s
+logging:
+    charset:
+        # 控制台和日志文件统一编码，独立 Worker 日志也可以直接按 UTF-8 读取。
+        # console: UTF-8
+        file: UTF-8

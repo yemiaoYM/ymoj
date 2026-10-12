@@ -10,7 +10,7 @@ import com.ymcloud.core.storage.TestDataServiceImpl;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
-import com.ymcloud.pojo.bo.TestDataManifest;
+import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.FileBizType;

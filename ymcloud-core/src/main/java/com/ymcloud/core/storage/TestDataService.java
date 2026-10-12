@@ -1,8 +1,8 @@
 package com.ymcloud.core.storage;
 
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
-import com.ymcloud.pojo.bo.TestDataManifest;
 import com.ymcloud.pojo.bo.TestDataMigrationReport;
+import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;

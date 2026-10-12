@@ -39,7 +39,16 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
     private AuthorizationService authorizationService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        // 专用安全链接管 Worker 身份，不加载用户权限或刷新用户会话。
+        String path = request.getServletPath();
+        return path.startsWith("/internal/judge-worker/");
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain) throws ServletException, IOException {
         try {
             //先获取loginUser
             LoginUser loginUser = tokenService.getLoginUser(request);

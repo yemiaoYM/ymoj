@@ -4,34 +4,34 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.command.InspectExecResponse;
+import com.github.dockerjava.api.exception.ConflictException;
+import com.github.dockerjava.api.exception.NotFoundException;
 import com.ymcloud.judge.bo.CmdExecResult;
 import com.ymcloud.judge.bo.DockerFrameCallback;
-import com.ymcloud.judge.bo.StringInputStream;
-import lombok.*;
+import com.ymcloud.judge.exception.CommandTimeoutException;
+import lombok.Getter;
+import lombok.Setter;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @PackageName: com.ymcloud.judge.docker.container
- * @ClassName: DockerContainer
- * @Author: Yemiao
- * @CreateTime: 2025-08-24  22:56
- * @Description: docker操作容器
+ * Docker 进程生命周期与有界的命令执行。
  */
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
+@Getter
 public abstract class DockerContainer {
-    /**
-     * docker客户端
-     */
-    private DockerClient dockerClient;
-    /**
-     * 容器id
-     */
-    private String containerId;
+
+    private final DockerClient dockerClient;
+    private final String containerId;
+    @Setter
+    private int maxOutputBytes = 1024 * 1024;
+
+    public DockerContainer(DockerClient dockerClient, String containerId) {
+        this.dockerClient = Objects.requireNonNull(dockerClient, "Docker 客户端不能为空");
+        this.containerId = Objects.requireNonNull(containerId, "容器标识不能为空");
+    }
 
     public void start() {
         dockerClient.startContainerCmd(containerId).exec();
@@ -41,119 +41,107 @@ public abstract class DockerContainer {
         dockerClient.stopContainerCmd(containerId).exec();
     }
 
-    public void restart() {
-        dockerClient.restartContainerCmd(containerId).exec();
-    }
-
-    public void pause() {
-        dockerClient.pauseContainerCmd(containerId).exec();
-    }
-
-    public void unpause() {
-        dockerClient.unpauseContainerCmd(containerId).exec();
+    public void remove(boolean force) {
+        dockerClient.removeContainerCmd(containerId).withForce(force).exec();
     }
 
     public void kill() {
         dockerClient.killContainerCmd(containerId).exec();
     }
 
-    public void remove(boolean force) {
-        dockerClient.removeContainerCmd(containerId).withForce(force).exec();
-    }
-
-    /**
-     * 查看进程信息
-     */
-    public InspectExecResponse inspectExec(String execId){
+    public InspectExecResponse inspectExec(String execId) {
         return dockerClient.inspectExecCmd(execId).exec();
     }
 
-    /**
-     * 查看容器信息
-     */
     public InspectContainerResponse inspectContainer() {
         return dockerClient.inspectContainerCmd(containerId).exec();
     }
 
-    /**
-     * 判断容器是否在运行
-     */
     public boolean isRunning() {
         return Boolean.TRUE.equals(inspectContainer().getState().getRunning());
     }
 
-    /**
-     * 判断容器是否被OOM杀死
-     */
     public boolean isOOMKilled() {
         return Boolean.TRUE.equals(inspectContainer().getState().getOOMKilled());
     }
 
     /**
-     * 创建执行命令
-     * 可以传入标准输入、标准输出和错误输出的流
-     * @param cmd 命令
-     * @return 执行命令的ID
+     * cgroup v2 记录 exec 进程被 OOM 杀死的次数，即使 PID 1 仍在运行也可识别。
      */
+    public long oomKillCount() {
+        try {
+            CmdExecResult result = execCmd(new String[]{"cat", "/sys/fs/cgroup/memory.events"}, 1000L);
+            if (result.getExitCode() == 0) {
+                for (String line : result.getStdout().split("\\n")) {
+                    if (line.startsWith("oom_kill ")) {
+                        return Long.parseLong(line.substring(9).trim());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // cgroup v1 使用容器 OOM 状态和退出码作为兼容入口。
+        }
+        return -1L;
+    }
+
     public ExecCreateCmdResponse createCmd(String... cmd) {
         return dockerClient.execCreateCmd(containerId)
                 .withAttachStdout(true)
                 .withAttachStderr(true)
-                .withAttachStdin(true)
+                .withAttachStdin(false)
                 .withCmd(cmd)
                 .exec();
     }
 
-    /**
-     * 执行命令
-     * @param cmd 命令
-     * @return 执行结果
-     */
     public CmdExecResult execCmd(String[] cmd) throws Exception {
+        return execCmd(cmd, 30000L);
+    }
 
-        String execID = this.createCmd(cmd).getId();
-
+    public CmdExecResult execCmd(String[] cmd, long timeoutMillis) throws Exception {
+        if (timeoutMillis <= 0 || maxOutputBytes < 1) {
+            throw new IllegalArgumentException("命令执行边界无效");
+        }
+        String execId = createCmd(cmd).getId();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
-
-        dockerClient.execStartCmd(execID)
-                .exec(new DockerFrameCallback(out, err))
-                .awaitCompletion()
-                .close();
-
+        DockerFrameCallback callback = new DockerFrameCallback(out, err, maxOutputBytes);
+        try (callback) {
+            dockerClient.execStartCmd(execId).exec(callback);
+            if (!callback.awaitCompletion(timeoutMillis, TimeUnit.MILLISECONDS)) {
+                terminateCommand();
+                throw new CommandTimeoutException();
+            }
+            if (callback.getFailure() != null) {
+                throw callback.getFailure();
+            }
+        } catch (InterruptedException e) {
+            terminateCommand();
+            Thread.currentThread().interrupt();
+            throw e;
+        } catch (Exception e) {
+            if (!(e instanceof CommandTimeoutException) && callback.getFailure() != null) {
+                terminateCommand();
+                throw callback.getFailure();
+            }
+            throw e;
+        }
         return CmdExecResult.builder()
                 .stdout(out.toString(StandardCharsets.UTF_8))
                 .stderr(err.toString(StandardCharsets.UTF_8))
-                .exitCode(inspectExec(execID).getExitCodeLong())
+                .exitCode(Objects.requireNonNull(inspectExec(execId).getExitCodeLong(), "命令没有退出状态"))
                 .build();
     }
 
     /**
-     * 执行命令带输入流
-     * @param cmd 命令
-     * @param stdin 输入
-     * @return 执行结果
+     * 仅子类可以提供有界的输入实现，禁止遗留 Docker 直连 stdin 的无限等待入口。
      */
-    public CmdExecResult execCmd(String[] cmd, String stdin) throws Exception {
+    public abstract CmdExecResult execCmd(String[] cmd, String stdin) throws Exception;
 
-        String execID = this.createCmd(cmd).getId();
-
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-
-        InputStream in = new StringInputStream(stdin);
-
-        dockerClient.execStartCmd(execID)
-                .withStdIn(in)
-                .exec(new DockerFrameCallback(out,err))
-                .awaitCompletion()
-                .close();
-
-        return CmdExecResult.builder()
-                .stdout(out.toString(StandardCharsets.UTF_8))
-                .stderr(err.toString(StandardCharsets.UTF_8))
-                .exitCode(inspectExec(execID).getExitCodeLong())
-                .build();
+    private void terminateCommand() {
+        try {
+            kill();
+        } catch (NotFoundException | ConflictException alreadyStopped) {
+            // 截止或 OOM 已终止容器时，清理状态不能覆盖原始 TLE/输出限制原因。
+        }
     }
-
 }

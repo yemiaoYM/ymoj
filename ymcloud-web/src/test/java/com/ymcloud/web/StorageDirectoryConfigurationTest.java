@@ -31,10 +31,10 @@ class StorageDirectoryConfigurationTest {
     private Path directory;
 
     @Test
-    void mainConfigurationDefaultsToLocalFilesAndNestedJudgeWorkDirectory() {
+    void mainConfigurationDefaultsToLocalFilesWithoutWorkerRuntime() {
         ConfigurableEnvironment environment = configuration(Map.of());
         assertEquals("./files", environment.getRequiredProperty("ymcloud.file.base-dir"));
-        assertEquals("./files/tmp", environment.getRequiredProperty("ymcloud.docker.host-working-dir"));
+        assertNull(environment.getProperty("ymcloud.docker.host-working-dir"));
         assertEquals("local", new StorageProperties().getActive());
         assertNull(environment.getProperty("ymcloud.storage.active"));
         assertNull(environment.getProperty("ymcloud.storage.config-encryption-key"));
@@ -43,7 +43,7 @@ class StorageDirectoryConfigurationTest {
     }
 
     @Test
-    void developmentAndProductionProfilesInheritStorageAndJudgeDirectories() throws Exception {
+    void developmentAndProductionProfilesInheritStorageWithoutWorkerDirectories() throws Exception {
         YamlPropertySourceLoader yaml = new YamlPropertySourceLoader();
         for (String profile : List.of("dev", "prod")) {
             for (var source : yaml.load("profile-directory-" + profile,
@@ -51,51 +51,47 @@ class StorageDirectoryConfigurationTest {
                 assertNull(source.getProperty("ymcloud.file.base-dir"),
                         "Profiles must inherit the file directory from main configuration.");
                 assertNull(source.getProperty("ymcloud.docker.host-working-dir"),
-                        "Profiles must inherit the judge directory from main configuration.");
+                        "Web profiles must not configure the independent Worker directory.");
             }
             ConfigurableEnvironment environment = configuration(Map.of("spring.profiles.active", profile));
             assertEquals("./files", environment.getRequiredProperty("ymcloud.file.base-dir"));
-            assertEquals("./files/tmp", environment.getRequiredProperty("ymcloud.docker.host-working-dir"));
+            assertNull(environment.getProperty("ymcloud.docker.host-working-dir"));
             assertTrue(List.of(environment.getActiveProfiles()).contains(profile));
         }
     }
 
     @Test
-    void defaultRelativePathsResolveToRepositoryFilesAndTmpForCliAndWeb() throws Exception {
+    void defaultRelativeFilePathResolvesToRepositoryForCliAndWeb() throws Exception {
         Path repository = repository();
         Path moduleDirectory = Files.createDirectories(repository.resolve("ymcloud-web/target/classes"));
         ConfigurableEnvironment environment = configuration(Map.of("spring.profiles.active", "prod"));
         assertEquals(repository.resolve("files"), StorageDirectoryResolver.resolve(
                 environment.getRequiredProperty("ymcloud.file.base-dir"), moduleDirectory, moduleDirectory));
-        assertEquals(repository.resolve("files/tmp"), StorageDirectoryResolver.resolve(
-                environment.getRequiredProperty("ymcloud.docker.host-working-dir"), moduleDirectory, moduleDirectory));
+        assertNull(environment.getProperty("ymcloud.docker.host-working-dir"));
         assertFalse(Files.exists(repository.resolve("files")), "Configuration and path loading must remain read-only.");
     }
 
     @Test
-    void explicitFileEnvironmentOverrideAlsoChangesDefaultNestedJudgeDirectory() throws Exception {
+    void explicitFileEnvironmentOverrideOnlyChangesWebFileDirectory() throws Exception {
         Path fileDirectory = directory.resolve("explicit-files").toAbsolutePath().normalize();
         Path unrelatedWorkingDirectory = Files.createDirectories(directory.resolve("unrelated-cwd"));
         ConfigurableEnvironment environment = configuration(Map.of("YMCLOUD_FILE_BASE_DIR", fileDirectory.toString()));
         assertEquals(fileDirectory.toString(), environment.getRequiredProperty("ymcloud.file.base-dir"));
         assertEquals(fileDirectory, StorageDirectoryResolver.resolve(
                 environment.getRequiredProperty("ymcloud.file.base-dir"), unrelatedWorkingDirectory, null));
-        assertEquals(fileDirectory.resolve("tmp"), StorageDirectoryResolver.resolve(
-                environment.getRequiredProperty("ymcloud.docker.host-working-dir"), unrelatedWorkingDirectory, null));
+        assertNull(environment.getProperty("ymcloud.docker.host-working-dir"));
         assertFalse(Files.exists(fileDirectory));
     }
 
     @Test
-    void explicitJudgeEnvironmentOverrideIsIndependentOfFileStorageRoot() throws Exception {
+    void workerEnvironmentOverrideDoesNotConfigureWebRuntime() throws Exception {
         Path repository = repository();
         Path judgeDirectory = directory.resolve("separate-judge-work").toAbsolutePath().normalize();
         ConfigurableEnvironment environment = configuration(Map.of("YMCLOUD_JUDGE_WORK_DIR", judgeDirectory.toString()));
         assertEquals("./files", environment.getRequiredProperty("ymcloud.file.base-dir"));
-        assertEquals(judgeDirectory.toString(), environment.getRequiredProperty("ymcloud.docker.host-working-dir"));
+        assertNull(environment.getProperty("ymcloud.docker.host-working-dir"));
         assertEquals(repository.resolve("files"), StorageDirectoryResolver.resolve(
                 environment.getRequiredProperty("ymcloud.file.base-dir"), repository, repository));
-        assertEquals(judgeDirectory, StorageDirectoryResolver.resolve(
-                environment.getRequiredProperty("ymcloud.docker.host-working-dir"), repository, repository));
         assertFalse(Files.exists(judgeDirectory));
     }
 
@@ -106,12 +102,10 @@ class StorageDirectoryConfigurationTest {
                 ymcloud:
                   file:
                     base-dir: ${YMCLOUD_FILE_BASE_DIR:./imported-files}
-                  docker:
-                    host-working-dir: ${YMCLOUD_JUDGE_WORK_DIR:${ymcloud.file.base-dir}/tmp}
                 """, StandardCharsets.UTF_8);
         ConfigurableEnvironment environment = configuration(Map.of("spring.config.import", "optional:file:" + configurationPath(imported)));
         assertEquals("./imported-files", environment.getRequiredProperty("ymcloud.file.base-dir"));
-        assertEquals("./imported-files/tmp", environment.getRequiredProperty("ymcloud.docker.host-working-dir"));
+        assertNull(environment.getProperty("ymcloud.docker.host-working-dir"));
 
         Path fileDirectory = directory.resolve("import-file-override").toAbsolutePath().normalize();
         Path judgeDirectory = directory.resolve("import-judge-override").toAbsolutePath().normalize();
@@ -120,7 +114,7 @@ class StorageDirectoryConfigurationTest {
                 "YMCLOUD_FILE_BASE_DIR", fileDirectory.toString(),
                 "YMCLOUD_JUDGE_WORK_DIR", judgeDirectory.toString()));
         assertEquals(fileDirectory.toString(), overridden.getRequiredProperty("ymcloud.file.base-dir"));
-        assertEquals(judgeDirectory.toString(), overridden.getRequiredProperty("ymcloud.docker.host-working-dir"));
+        assertNull(overridden.getProperty("ymcloud.docker.host-working-dir"));
         assertFalse(Files.exists(fileDirectory));
         assertFalse(Files.exists(judgeDirectory));
     }

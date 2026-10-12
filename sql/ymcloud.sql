@@ -275,6 +275,7 @@ CREATE TABLE `judge` (
   `judge_server` varchar(100) DEFAULT NULL COMMENT '执行判题的机器标识',
   `ip` varchar(255) DEFAULT NULL COMMENT '提交用户IP',
   `version` int DEFAULT '1' COMMENT '乐观锁版本号',
+  `execution_id` varchar(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '当前评测执行标识；历史记录为空',
   `vjudge_submit_id` bigint unsigned DEFAULT NULL COMMENT 'vjudge判题在其它oj的提交id',
   `vjudge_username` varchar(255) DEFAULT NULL COMMENT 'vjudge判题在其它oj的提交用户名',
   `vjudge_password` varchar(255) DEFAULT NULL COMMENT 'vjudge判题在其它oj的提交账号密码',
@@ -293,6 +294,38 @@ CREATE TABLE `judge` (
   CONSTRAINT `fk_judge_test_data_version` FOREIGN KEY (`test_data_version_id`)
     REFERENCES `test_data_version` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='判题记录表';
+
+CREATE TABLE `judge_dispatch` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '持久化任务ID',
+  `submission_id` bigint unsigned DEFAULT NULL COMMENT '与任务ID一致；仅同事务预分配时暂为空',
+  `execution_id` varchar(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '执行标识，防止旧结果覆盖',
+  `user_id` bigint unsigned NOT NULL COMMENT '任务所属用户',
+  `strategy` int NOT NULL COMMENT '0正式提交；1自测',
+  `problem_id` bigint unsigned DEFAULT NULL,
+  `test_data_version_id` bigint DEFAULT NULL COMMENT '创建任务时固定的测试版本',
+  `task_payload` longtext NOT NULL COMMENT '不可变消息快照，包含私有代码及自测输入',
+  `result_payload` longtext DEFAULT NULL COMMENT '最近接收的有效结果',
+  `dispatch_state` int NOT NULL DEFAULT 0 COMMENT '0待发布；1待结果；2已完成',
+  `status` int NOT NULL DEFAULT 5,
+  `last_result_sequence` int NOT NULL DEFAULT 0,
+  `publish_attempts` int NOT NULL DEFAULT 0,
+  `recovery_attempts` int NOT NULL DEFAULT 0,
+  `next_attempt_time` datetime NOT NULL COMMENT '下次发布或恢复时间（UTC）',
+  `published_time` datetime DEFAULT NULL COMMENT '最近发布时间（UTC）',
+  `deadline_time` datetime NOT NULL COMMENT '任务总截止时间（UTC）',
+  `lease_token` varchar(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `lease_until` datetime DEFAULT NULL COMMENT '发布租约截止时间（UTC）',
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_dispatch_submission` (`submission_id`),
+  UNIQUE KEY `uniq_dispatch_execution` (`execution_id`),
+  KEY `idx_dispatch_pending` (`dispatch_state`,`next_attempt_time`),
+  KEY `idx_dispatch_deadline` (`dispatch_state`,`deadline_time`),
+  KEY `idx_dispatch_version` (`test_data_version_id`),
+  CONSTRAINT `fk_dispatch_test_data_version` FOREIGN KEY (`test_data_version_id`)
+    REFERENCES `test_data_version` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='可靠任务发布与结果幂等状态';
 
 CREATE TABLE `judge_case` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '评测样例记录ID',

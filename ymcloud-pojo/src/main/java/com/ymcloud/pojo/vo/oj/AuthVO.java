@@ -1,6 +1,5 @@
 package com.ymcloud.pojo.vo.oj;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 /**
@@ -12,6 +11,7 @@ import lombok.Data;
  */
 @Data
 public class AuthVO {
+
     /**
      * 权限编码（如 problem:add, user:delete）
      */

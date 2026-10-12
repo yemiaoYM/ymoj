@@ -13,11 +13,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
 /**
- * @PackageName: com.ymcloud.judge.config
- * @ClassName: DockerConfig
- * @Author: Yemiao
- * @CreateTime: 2025-08-24  22:10
- * @Description: docker 配置类
+ * 独立 Worker 的 Docker 客户端，连接参数沿用 Docker 标准环境变量。
  */
 @Configuration
 @Slf4j
@@ -30,17 +26,15 @@ public class DockerConfig {
     public DockerClient dockerClient() {
         log.info("生成 Docker 客户端");
         DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder().build();
-        //自动根据环境进行配置
         DockerHttpClient httpClient = new ApacheDockerHttpClient.Builder()
                 .dockerHost(config.getDockerHost())
                 .sslConfig(config.getSSLConfig())
                 .maxConnections(100)
                 .connectionTimeout(Duration.ofSeconds(30))
-                .responseTimeout(Duration.ofSeconds(45))
+                // 覆盖最长 60 秒测试点及终止宽限，避免传输层提前中断合法执行。
+                .responseTimeout(Duration.ofSeconds(120))
                 .build();
 
         return DockerClientImpl.getInstance(config, httpClient);
     }
-
-
 }

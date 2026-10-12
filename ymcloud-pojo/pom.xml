@@ -20,25 +20,29 @@
 
     <dependencies>
 
-        <!--spring doc swagger-->
-        <dependency>
-            <groupId>com.github.xiaoymin</groupId>
-            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
-        </dependency>
-        <!--自定义校验包-->
+        <!-- 业务 DTO 的校验注解由 Web 使用，不传播到独立 Worker。 -->
         <dependency>
             <groupId>org.hibernate.validator</groupId>
             <artifactId>hibernate-validator</artifactId>
+            <optional>true</optional>
         </dependency>
-        <!--mybatis-plus-->
+        <!-- 实体和分页模型的编译依赖；数据库实现由 Web 的基础模块引入。 -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <artifactId>mybatis-plus-extension</artifactId>
+            <version>${mybatis-plus.version}</version>
+            <optional>true</optional>
         </dependency>
-        <!--hutool-->
+        <!-- Web 分页转换使用的工具，不是 Worker 契约的运行依赖。 -->
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 用户 API 与判题契约均使用 JSON 注解。 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
     </dependencies>
 </project>

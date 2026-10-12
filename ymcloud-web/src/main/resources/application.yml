@@ -3,61 +3,86 @@ ymcloud:
         # 默认项目根目录/files；独立 jar 使用 jar 所在目录，自动创建 public/private。
         # 已有部署可通过 YMCLOUD_FILE_BASE_DIR 指定绝对路径，继续使用原目录。
         base-dir: ${YMCLOUD_FILE_BASE_DIR:./files}
-    docker:
-        # 默认文件根目录/tmp，可通过 YMCLOUD_JUDGE_WORK_DIR 单独指定工作目录。
-        host-working-dir: ${YMCLOUD_JUDGE_WORK_DIR:${ymcloud.file.base-dir}/tmp}
-        container-working-dir: /app
     judge:
-        # 版本化任务由 OJ 配置维护，不依赖对象存储安装脚本。
-        exchange: ${YMCLOUD_JUDGE_EXCHANGE:judge.storage-v1.topic}
-        task-queue: ${YMCLOUD_JUDGE_TASK_QUEUE:judge.storage-v1.queue}
-        result-queue: ${YMCLOUD_JUDGE_RESULT_QUEUE:judge.storage-v1.result.queue}
+        # Web 与独立 Worker 使用相同的新协议队列，旧消费者不会抢占新任务。
+        exchange: ${YMCLOUD_JUDGE_EXCHANGE:judge.worker-v2.topic}
+        task-queue: ${YMCLOUD_JUDGE_TASK_QUEUE:judge.worker-v2.queue}
+        result-queue: ${YMCLOUD_JUDGE_RESULT_QUEUE:judge.worker-v2.result.queue}
+        worker-api:
+            # 与 Worker 相同的独立随机服务密钥；未配置时私有数据接口拒绝访问。
+            token: ${YMCLOUD_WORKER_SERVICE_TOKEN:}
+        dispatch:
+            # 首次发布失败的重试预算，与收到任务后等待结果的恢复预算分别计算。
+            max-publish-attempts: 5
+            max-recovery-attempts: 2
+            # 等待 RabbitMQ 发布确认的时间，最多 60s。
+            confirm-timeout: 5s
+            # 发布租约须大于确认超时的两倍，最多 5m。
+            lease-duration: 30s
+            # 发布失败后等待多久再试，最多 1m。
+            retry-interval: 3s
+            # 已发布任务多久没有最终结果后尝试恢复；进度消息不延长总截止时间。
+            result-wait: 5m
+            # 从创建任务开始的总预算，包含排队、下载、编译和执行，最多一小时。
+            total-timeout: 20m
 
 server:
+    # Web 的监听端口；Worker 数据入口也由这个服务提供。
     port: 9091
+    # 默认仅监听本机，对外访问通过同机反向代理；远程 Worker 使用 HTTPS 入口。
     address: 127.0.0.1
     tomcat:
-        # 上传文件数列控制
+        # 单个 multipart 请求允许的分段数量，包含表单字段和文件。
         max-part-count: 100
 spring:
     datasource:
         druid:
+            # 默认关闭 JDBC 遥测上报，业务连接在私有 dev/prod 配置中填写。
             connection-properties: openTelemetry=${YMCLOUD_JDBC_TELEMETRY:DISABLED}
     application:
-      name: ymcloud
+        name: ymcloud
     profiles:
+        # 开发/生产分别维护连接信息，不能只靠 profile 名称隔离共享数据。
         active: dev
     servlet:
         multipart:
-            # 单个文件大小
+            # 单个上传文件的大小上限。
             max-file-size: 50MB
-            # 设置总上传的文件大小
+            # 整个上传请求的大小上限，含多个文件和表单字段。
             max-request-size: 120MB
     rabbitmq:
+        # 使用 broker 发布确认和未路由消息返回，配合数据库任务箱补偿。
+        publisher-confirm-type: correlated
+        publisher-returns: true
         listener:
             simple:
-                prefetch: 1 #确保同一时刻最多投递给消费者1条消息
+                # 每个结果消费者最多保留一条未确认消息。
+                prefetch: 1
+                # 结果事务成功后确认；重复结果通过执行标识与序号去重。
                 acknowledge-mode: auto
                 retry:
+                    # 数据库等暂时故障的有限消费重试，不改变判题执行标识。
                     enabled: true
                     initial-interval: 1000ms
                     multiplier: 1.1
                     max-attempts: 3
-        connection-timeout: 1s #设置MQ的连接超时时间
-        #这只是连接失败的重试
+        # 建立 RabbitMQ 连接的超时。
+        connection-timeout: 1s
         template:
+            # 没有匹配队列时返回消息，不能把发布确认误当作已经投递给 Worker。
+            mandatory: true
             retry:
-                enabled: true #开启超时重传机制
-                initial-interval: 1000ms #失败后的初始等待
-                multiplier: 1.1 #失败后下次的等待时间，下次等待时间=initial-interval*multiplier
-                max-attempts: 3 #最大重试次数
+                # 单次发布中的连接失败重试；耗尽后仍由任务箱的独立预算处理。
+                enabled: true
+                initial-interval: 1000ms
+                multiplier: 1.1
+                max-attempts: 3
 
 # mybatis-plus配置
 mybatis-plus:
     #mapper配置文件
     mapper-locations: classpath*:mapper/**/*Mapper.xml
     configuration:
-        #在控制台输出日志
         # 文件、用户和存储配置含敏感字段，不向控制台打印 SQL 参数或查询结果。
         log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
         #开启驼峰命名
@@ -65,28 +90,30 @@ mybatis-plus:
         #全局枚举处理器
         default-enum-type-handler: com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler
     global-config:
-      db-config:
-          #id为雪花策略
-          id-type: assign_id
-          #更新策略：只更新非空字段
-          update-strategy: not_null
-          #逻辑删除的配置（可以是Boolean，Integer）
-          logic-delete-field: deleted
-          logic-delete-value: 1
-          logic-not-delete-value: 0
+        db-config:
+            # 默认使用雪花 ID；显式标记自增的实体不使用此策略。
+            id-type: assign_id
+            # 只更新非空字段；需要置空时由业务显式指定。
+            update-strategy: not_null
+            # 实体存在 deleted 字段时使用逻辑删除。
+            logic-delete-field: deleted
+            logic-delete-value: 1
+            logic-not-delete-value: 0
 
 #邮箱配置
 mail:
+    # QQ SMTP 发件邮箱；仅需要密码找回等邮件功能时配置。
     from: yourEmail
+    # 邮箱授权码，不是登录密码；实际值放在私有环境配置中。
     pass: yourEmailPass
 
 # token配置
 token:
     # 令牌自定义标识
     header: Authorization
-    # 令牌密钥
-    secret: Ymcloud
-    # 令牌有效期（默认30分钟）
+    # 公开开发占位值；部署时使用自己的随机密钥，并在后续启动时保持一致。
+    secret: ${YMCLOUD_TOKEN_SECRET:Ymcloud}
+    # 令牌有效期，单位为分钟。
     expireTime: 60
 
 # 用户配置
@@ -100,6 +127,7 @@ user:
 # 日志配置
 logging:
     charset:
+        # 控制台与日志文件统一 UTF-8，避免 Windows 默认编码造成中文乱码。
         # console: UTF-8
         file: UTF-8
     level:

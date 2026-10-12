@@ -1,280 +1,196 @@
 package com.ymcloud.judge.strategy;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
 import com.github.dockerjava.api.DockerClient;
-import com.ymcloud.common.constant.CacheConstants;
-import com.ymcloud.common.constant.JudgeConstants;
-import com.ymcloud.common.constant.RabbitMQConstants;
-import com.ymcloud.common.exception.MqException;
-import com.ymcloud.common.exception.file.FileException;
-import com.ymcloud.common.exception.judge.CompileException;
-import com.ymcloud.common.exception.judge.JudgeException;
-import com.ymcloud.common.exception.judge.MemoryLimitExceededException;
-import com.ymcloud.common.exception.judge.RuntimeErrorException;
-import com.ymcloud.common.exception.judge.SandBoxException;
-import com.ymcloud.common.exception.judge.TimeLimitExceededException;
-import com.ymcloud.common.utils.FileUtils;
-import com.ymcloud.common.utils.MessageQueueUtils;
-import com.ymcloud.common.utils.RedisCache;
-import com.ymcloud.core.storage.StorageDirectoryResolver;
-import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.judge.bo.CodeRunResult;
-import com.ymcloud.judge.bo.JudgeResult;
-import com.ymcloud.judge.bo.TestCase;
-import com.ymcloud.judge.bo.TestCaseResult;
+import com.ymcloud.judge.config.WorkerProperties;
+import com.ymcloud.judge.data.TestDataCache;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
 import com.ymcloud.judge.docker.factory.CodeExecContainerFactory;
+import com.ymcloud.judge.exception.CompileException;
+import com.ymcloud.judge.exception.MemoryLimitExceededException;
+import com.ymcloud.judge.exception.RuntimeErrorException;
+import com.ymcloud.judge.exception.SandBoxException;
+import com.ymcloud.judge.exception.TimeLimitExceededException;
+import com.ymcloud.judge.io.WorkerPaths;
 import com.ymcloud.judge.sandbox.SandBox;
 import com.ymcloud.judge.sandbox.SandBoxFactory;
-import com.ymcloud.pojo.bo.JudgeTask;
-import com.ymcloud.pojo.bo.TestDataManifest;
-import com.ymcloud.pojo.entity.Language;
-import com.ymcloud.pojo.enums.JudgeStatus;
-import com.ymcloud.pojo.vo.oj.JudgeResultVO;
+import com.ymcloud.pojo.contract.judge.JudgeResult;
+import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.pojo.contract.judge.JudgeVerdict;
+import com.ymcloud.pojo.contract.judge.TestCaseResult;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
- * @PackageName: com.ymcloud.judge.strategy
- * @ClassName: JudgeRun
- * @Author: Yemiao
- * @CreateTime: 2025-08-05  18:29
- * @Description: 评测逻辑处理
+ * Worker 执行边界：使用固定数据快照并产生结果，不访问业务数据库。
  */
-@Component
 @Slf4j
+@Component
 public class JudgeRun {
 
-    @Autowired
-    private DockerClient dockerClient;
+    private final DockerClient docker;
+    private final TestDataCache cache;
+    private final WorkerProperties properties;
 
-    @Autowired
-    private RedisCache redisCache;
-
-    @Autowired
-    private MessageQueueUtils messageQueueUtils;
-
-    @Autowired
-    private TestDataService testDataService;
-
-    @Value("${ymcloud.judge.exchange:" + RabbitMQConstants.JUDGE_EXCHANGE + "}")
-    private String judgeExchange = RabbitMQConstants.JUDGE_EXCHANGE;
-
-    @Value("${ymcloud.judge.result-routing-key:" + RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY + "}")
-    private String judgeResultRoutingKey = RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY;
-
-    @Value("${ymcloud.docker.host-working-dir}")
-    private String hostWorkingDir;
-    @Value("${ymcloud.docker.container-working-dir}")
-    private String containerWorkingDir;
-
-    /**
-     * 执行判题
-     * @param task 判题任务
-     */
-    public void execute(JudgeTask task) {
-        log.info("JudgeRun评测逻辑处理...");
-        try {
-            if (JudgeConstants.DEFAULT_JUDGE.equals(task.getStrategy())) {
-                JudgeResult result = judge(task);
-                //更新评测结果
-                messageQueueUtils.send(
-                        judgeExchange,
-                        judgeResultRoutingKey,
-                        result);
-            } else if (JudgeConstants.TEST_JUDGE.equals(task.getStrategy())) {
-                judge(task);
-            }
-        } catch (MqException e) {
-            log.warn(e.getMessage(), e);
-        } catch (Exception e) {
-            log.error("评测逻辑出现异常", e);
-        }
+    public JudgeRun(DockerClient docker, TestDataCache cache, WorkerProperties properties) {
+        this.docker = docker;
+        this.cache = cache;
+        this.properties = properties;
     }
 
-    /**
-     * 执行正式提交或自测，并记录终态。
-     */
-    private JudgeResult judge(JudgeTask task) {
-        //评测结果
-        JudgeResult result = new JudgeResult();
-        result.setSubmissionId(task.getSubmissionId());
-        //本地文件路径
-        String hostFilePath = StorageDirectoryResolver.resolve(hostWorkingDir)
-                .resolve(String.valueOf(task.getSubmissionId()))
-                .toString();
-        //docker容器
+    public JudgeResult execute(JudgeTask task, Consumer<JudgeResult> progress) throws IOException {
+        TestDataCache.Lease lease = null;
+        Path working = null;
         CodeExecContainer container = null;
+        JudgeResult result = result(task, JudgeVerdict.STATUS_PENDING, false);
         try {
-            List<TestCaseSource> testCases = getTestCaseSources(task);
-            //评测样式严格限制不能为空
-            if (CollUtil.isEmpty(testCases)) {
-                throw new JudgeException("暂无测试用例，评测失败");
+            checkDeadline(task);
+            List<CaseSource> cases = new ArrayList<>();
+            if (task.getStrategy() == 1) {
+                cases.add(new CaseSource(1, () -> inline(task.getInput()), () -> inline(task.getExpectedOutput())));
+            } else {
+                lease = cache.acquire(task.getProblemId(), task.getTestDataVersionId(), task.getManifestSha256());
+                for (TestDataCache.CachedCase testCase : lease.entries()) {
+                    cases.add(new CaseSource(testCase.id(), testCase::openInput, testCase::openOutput));
+                }
             }
-            //通知开始编译
-            notifyStatus(result, JudgeStatus.STATUS_COMPILING, null, task.getStrategy());
-            //获取语言配置
-            Language language = task.getLanguageConfig();
-            //从工厂中创建容器
-            CodeExecContainerFactory factory = new CodeExecContainerFactory(
-                    dockerClient,
-                    hostFilePath,
-                    containerWorkingDir,
-                    task.getMemoryLimit(),
-                    language.getEnv());
-            container = factory.createDockerContainer();
-            //启动容器
-            container.start();
-            //根据语言选择沙箱判题策略
-            SandBoxFactory sandBoxFactory = new SandBoxFactory(language.getName());
-            SandBox sandBox = sandBoxFactory.createSandBox(container);
-            //保存用户代码
-            sandBox.saveCode(task.getCode());
-            //编译
-            sandBox.compile(container);
-            //通知开始评测
-            notifyStatus(result, JudgeStatus.STATUS_JUDGING, null, task.getStrategy());
-            //评测测试用例
-            long maxTimeUsed = 0L;
-            long maxMemoryUsed = 0L;
-            List<TestCaseResult> testCaseResults = new ArrayList<>();
-            for (TestCaseSource source : testCases) {
-                //清单只保留引用，当前测试点评测前再读取输入输出。
-                TestCase testCase = source.read();
-                log.debug("第{}个测试样例开始评测", testCase.getId());
-                //设置单个用例基本信息
-                TestCaseResult caseResult = new TestCaseResult();
-                caseResult.setJudgeId(result.getSubmissionId());
-                caseResult.setCaseIndex(testCase.getId());
-
-                CodeRunResult codeRunResult = new CodeRunResult();
-                try {
-                    codeRunResult = sandBox.execute(container,
-                            testCase.getInput(),
-                            //增加200ms是消除容器启动等时间
-                            task.getTimeLimit() + 200L);
-                } catch (TimeLimitExceededException e) {
-                    caseResult.setStatus(JudgeStatus.STATUS_TIME_LIMIT_EXCEEDED);
-                } catch (MemoryLimitExceededException e) {
-                    caseResult.setStatus(JudgeStatus.STATUS_MEMORY_LIMIT_EXCEEDED);
-                } catch (RuntimeErrorException e) {
-                    caseResult.setStatus(JudgeStatus.STATUS_RUNTIME_ERROR);
-                    caseResult.setErrorMessage(e.getMessage());
-                }
-
-                if (codeRunResult.getTimeUsed() > task.getTimeLimit()) {
-                    caseResult.setStatus(JudgeStatus.STATUS_TIME_LIMIT_EXCEEDED);
-                }
-                if (codeRunResult.getMemoryUsed() > task.getMemoryLimit() * 1024L) {
-                    caseResult.setStatus(JudgeStatus.STATUS_MEMORY_LIMIT_EXCEEDED);
-                }
-
-                //没有TLE也没有MLE，则比较输出。
-                if (caseResult.getStatus() == null) {
-                    String expectedOutput = testCase.getOutput();
-                    String actualOutput = codeRunResult.getStdout();
-
-                    if (equalsOutput(expectedOutput, actualOutput)) {
-                        caseResult.setStatus(JudgeStatus.STATUS_ACCEPTED);
-                    } else {
-                        caseResult.setStatus(JudgeStatus.STATUS_WRONG_ANSWER);
-                    }
-
-                    maxTimeUsed = Math.max(maxTimeUsed, codeRunResult.getTimeUsed());
-                    maxMemoryUsed = Math.max(maxMemoryUsed, codeRunResult.getMemoryUsed());
-                    //单个用例设置输出，部分信息
-                    int MAX_OUTPUT_LENGTH = 300;
-                    if (actualOutput.length() > MAX_OUTPUT_LENGTH) {
-                        caseResult.setOutput(actualOutput.substring(0, MAX_OUTPUT_LENGTH) +
-                                "\n... (output truncated)");
-                    } else {
-                        caseResult.setOutput(actualOutput);
-                    }
-                    //单个用例设置耗时和内存使用
-                    caseResult.setTime(codeRunResult.getTimeUsed());
-                    caseResult.setMemory(codeRunResult.getMemoryUsed());
-                }
-                testCaseResults.add(caseResult);
+            if (cases.isEmpty()) {
+                throw new IOException("固定版本没有测试数据");
             }
-            result.setTestCaseResults(testCaseResults);
-
-            result.setTime(maxTimeUsed);
-            result.setMemory(maxMemoryUsed);
-
-            //根据评测模式设置评测结果
-            getStatusByMode(result, task.getMode());
-
-            //通知评测结束
-            notifyStatus(result, result.getStatus(), null, task.getStrategy());
-
-        } catch (CompileException e) {
-            notifyStatus(result, JudgeStatus.STATUS_COMPILE_ERROR, e.getMessage(), task.getStrategy());
-        } catch (SandBoxException e) {
-            log.error("沙箱运行异常", e);
-            String errMsg = "对不起，沙箱运行异常，请联系管理员";
-            notifyStatus(result, JudgeStatus.STATUS_SYSTEM_ERROR, errMsg, task.getStrategy());
-        } catch (Exception e) {
-            log.error("系统评测异常", e);
-            String errMsg = "对不起，系统评测失败，请联系管理员";
-            notifyStatus(result, JudgeStatus.STATUS_SYSTEM_ERROR, errMsg, task.getStrategy());
-        } finally {
-            try {
-                //删除容器
-                if (container != null) {
+            checkDeadline(task);
+            working = createWorkingDirectory(task);
+            progress.accept(result(task, JudgeVerdict.STATUS_COMPILING, false));
+            container = container(task, working);
+            SandBox sandbox = new SandBoxFactory(task.getLanguageConfig().getName()).createSandBox(container);
+            sandbox.saveCode(task.getCode());
+            sandbox.compile(container, remaining(task));
+            progress.accept(result(task, JudgeVerdict.STATUS_JUDGING, false));
+            List<TestCaseResult> results = new ArrayList<>();
+            long maxTime = 0;
+            long maxMemory = 0;
+            int outputBudget = 512 * 1024;
+            for (CaseSource source : cases) {
+                checkDeadline(task);
+                // 被 OOM、输出限制或强制截止杀掉的容器不能供下一测试点使用。
+                if (!container.isRunning()) {
                     container.remove(true);
+                    container = container(task, working);
+                    sandbox = new SandBoxFactory(task.getLanguageConfig().getName()).createSandBox(container);
                 }
-                //评测结束删除提交文件
-                if (!FileUtils.deleteFile(hostFilePath)) {
-                    throw new FileException("删除提交文件异常");
+                TestCaseResult current = executeCase(task, source, sandbox, container);
+                String output = current.getOutput();
+                if (output != null) {
+                    if (output.length() <= outputBudget) {
+                        outputBudget -= output.length();
+                    } else {
+                        current.setOutput(null);
+                    }
                 }
-            } catch (Exception e) {
-                log.error(e.getMessage(), e);
+                results.add(current);
+                maxTime = Math.max(maxTime, current.getTime());
+                maxMemory = Math.max(maxMemory, current.getMemory());
+            }
+            result.setTestCaseResults(results);
+            result.setTime(maxTime);
+            result.setMemory(maxMemory);
+            score(result, task.getMode());
+        } catch (CompileException e) {
+            result.setStatus(JudgeVerdict.STATUS_COMPILE_ERROR);
+            result.setErrorMessage(e.getMessage());
+            result.setScore(0);
+        } finally {
+            boolean interrupted = Thread.interrupted();
+            if (container != null) {
+                try {
+                    container.remove(true);
+                } catch (RuntimeException e) {
+                    log.warn("清理本次沙箱失败 execution={}", task.getExecutionId());
+                }
+            }
+            if (lease != null) {
+                try {
+                    lease.close();
+                } catch (IOException e) {
+                    log.warn("释放本次数据缓存失败 execution={}", task.getExecutionId());
+                }
+            }
+            if (working != null) {
+                try {
+                    deleteWorkingDirectory(working);
+                } catch (IOException e) {
+                    log.warn("清理本次工作目录失败 execution={}", task.getExecutionId());
+                }
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         }
+        result.setTerminal(true);
+        result.setSequence(3);
+        result.setEmittedAtEpochMs(System.currentTimeMillis());
         return result;
     }
 
-    /**
-     * 根据评测模式设置评测状态和分数
-     * @param result 当前评测结果
-     * @param mode 评测模式
-     */
-    private void getStatusByMode(JudgeResult result, Integer mode) {
-        //获取所有测试用例结果
-        List<TestCaseResult> caseResults = result.getTestCaseResults();
-        //根据评测模式判断如何计算状态和分数
-        if (mode.equals(JudgeConstants.OI)) {
-            long total = caseResults.size();
-            long ac = caseResults.stream().filter(o -> o.getStatus() == JudgeStatus.STATUS_ACCEPTED).count();
+    public JudgeResult systemFailure(JudgeTask task, String message) {
+        JudgeResult result = result(task, JudgeVerdict.STATUS_SYSTEM_ERROR, true);
+        result.setScore(0);
+        result.setErrorMessage(message);
+        return result;
+    }
 
-            result.setScore((int) Math.ceil((double) ac / total * 100));
+    public JudgeResult result(JudgeTask task, JudgeVerdict status, boolean terminal) {
+        JudgeResult result = new JudgeResult();
+        result.setExecutionId(task.getExecutionId());
+        result.setSubmissionId(task.getSubmissionId());
+        result.setProblemId(task.getProblemId());
+        result.setTestDataVersionId(task.getTestDataVersionId());
+        result.setStrategy(task.getStrategy());
+        result.setWorkerId(properties.getId());
+        result.setTerminal(terminal);
+        if (terminal) {
+            result.setSequence(3);
+        } else {
+            result.setSequence(status == JudgeVerdict.STATUS_COMPILING ? 1 : 2);
+        }
+        result.setStatus(status);
+        result.setEmittedAtEpochMs(System.currentTimeMillis());
+        result.setTime(0L);
+        result.setMemory(0L);
+        return result;
+    }
 
-            if (ac == total) {
-                result.setStatus(JudgeStatus.STATUS_ACCEPTED);
-            } else if (ac == 0) {
-                result.setStatus(JudgeStatus.STATUS_WRONG_ANSWER);
+    static void score(JudgeResult result, int mode) {
+        List<TestCaseResult> cases = result.getTestCaseResults();
+        long accepted = cases.stream().filter(testCase -> testCase.getStatus() == JudgeVerdict.STATUS_ACCEPTED).count();
+        if (mode == 1) {
+            result.setScore((int) Math.ceil((double) accepted / cases.size() * 100));
+            if (accepted == cases.size()) {
+                result.setStatus(JudgeVerdict.STATUS_ACCEPTED);
+            } else if (accepted == 0) {
+                result.setStatus(JudgeVerdict.STATUS_WRONG_ANSWER);
             } else {
-                result.setStatus(JudgeStatus.STATUS_PARTIAL_ACCEPTED);
+                result.setStatus(JudgeVerdict.STATUS_PARTIAL_ACCEPTED);
             }
-        } else if (mode.equals(JudgeConstants.ACM)) {
-            result.setStatus(JudgeStatus.STATUS_ACCEPTED);
+        } else {
+            result.setStatus(JudgeVerdict.STATUS_ACCEPTED);
             result.setScore(100);
-            for (TestCaseResult o : caseResults) {
-                //查找第一个不为AC的测试用例，更新状态
-                if (o.getStatus() != JudgeStatus.STATUS_ACCEPTED) {
-                    result.setStatus(o.getStatus());
+            for (TestCaseResult testCase : cases) {
+                if (testCase.getStatus() != JudgeVerdict.STATUS_ACCEPTED) {
+                    result.setStatus(testCase.getStatus());
                     result.setScore(0);
                     break;
                 }
@@ -282,116 +198,131 @@ public class JudgeRun {
         }
     }
 
-    /**
-     * 更新评测状态
-     * @param result   评测结果
-     * @param status   评测状态
-     * @param errMsg   错误信息
-     * @param strategy 评测策略
-     */
-    private void notifyStatus(JudgeResult result, JudgeStatus status, String errMsg, Integer strategy) {
-        //先更新当前状态
-        result.setStatus(status);
-        result.setErrorMessage(errMsg);
-
-        String key = CacheConstants.JUDGE_KEY + result.getSubmissionId();
-        //先尝试从缓存获取已有对象
-        JudgeResultVO nowStatus = redisCache.getCacheObject(key);
-        if (nowStatus == null) {
-            //缓存不存在则新建
-            nowStatus = BeanUtil.copyProperties(result, JudgeResultVO.class);
-        } else {
-            nowStatus.setStatus(status);
-            nowStatus.setErrorMessage(errMsg);
-            nowStatus.setTime(result.getTime());
-            nowStatus.setMemory(result.getMemory());
+    private CodeExecContainer container(JudgeTask task, Path working) {
+        CodeExecContainer container = new CodeExecContainerFactory(docker, working.toString(),
+                properties.getContainerWorkingDir(), task.getMemoryLimit(), task.getLanguageConfig().getEnv())
+                .createDockerContainer();
+        container.setMaxOutputBytes(properties.getMaxOutputBytes());
+        try {
+            container.start();
+            return container;
+        } catch (RuntimeException startFailure) {
+            // 创建成功但启动失败的容器尚未交给 execute，必须在此处释放。
+            try {
+                container.remove(true);
+            } catch (RuntimeException cleanupFailure) {
+                startFailure.addSuppressed(cleanupFailure);
+            }
+            throw startFailure;
         }
-        //自测模式下填充输出信息
-        if (JudgeConstants.TEST_JUDGE.equals(strategy) && CollUtil.isNotEmpty(result.getTestCaseResults())) {
-            TestCaseResult caseResult = result.getTestCaseResults().get(0);
-            nowStatus.setOutput(caseResult.getOutput());
-            nowStatus.setErrorMessage(caseResult.getErrorMessage());
-        }
-        //写回缓存，设置过期
-        redisCache.setCacheObject(key, nowStatus, 5, TimeUnit.MINUTES);
     }
 
-    /**
-     * 获取固定版本的测试点引用；旧队列任务通过只读清单兼容本地数据。
-     */
-    private List<TestCaseSource> getTestCaseSources(JudgeTask task) {
-        if (JudgeConstants.TEST_JUDGE.equals(task.getStrategy())) {
-            return List.of(() -> new TestCase(1, task.getInput(), task.getExpectedOutput()));
+    private Path createWorkingDirectory(JudgeTask task) throws IOException {
+        Path root = properties.getWorkDir().toAbsolutePath().normalize();
+        WorkerPaths.rejectSymbolicLinks(root);
+        Files.createDirectories(root);
+        WorkerPaths.rejectSymbolicLinks(root);
+        Path working = Files.createTempDirectory(root.toRealPath(), "execution-" + task.getExecutionId() + "-");
+        try {
+            if (working.getFileSystem().supportedFileAttributeViews().contains("posix")) {
+                Files.setPosixFilePermissions(working, PosixFilePermissions.fromString("rwx------"));
+            }
+            return working;
+        } catch (IOException permissionFailure) {
+            try {
+                Files.deleteIfExists(working);
+            } catch (IOException cleanupFailure) {
+                permissionFailure.addSuppressed(cleanupFailure);
+            }
+            throw permissionFailure;
         }
-
-        Long problemId = task.getProblemId();
-        Long versionId = task.getTestDataVersionId();
-        TestDataManifest manifest = testDataService.getManifest(problemId, versionId);
-        if (manifest == null || !Objects.equals(problemId, manifest.getProblemId())
-                || !Objects.equals(versionId, manifest.getVersionId())
-                || manifest.getEntries() == null) {
-            throw new JudgeException("测试数据清单与提交版本不一致");
-        }
-
-        List<TestCaseSource> sources = new ArrayList<>();
-        for (TestDataManifest.Entry entry : manifest.getEntries()) {
-            sources.add(() -> new TestCase(
-                    entry.getId(),
-                    readTestData(problemId, versionId, entry.getInput()),
-                    readTestData(problemId, versionId, entry.getOutput())));
-        }
-        return sources;
     }
 
-    /**
-     * 流必须完整读取并关闭，使存储服务完成大小和 SHA-256 校验。
-     */
-    private String readTestData(Long problemId, Long versionId, String logicalPath) throws IOException {
-        try (InputStream stream = testDataService.openFile(problemId, versionId, logicalPath)) {
-            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+    private TestCaseResult executeCase(JudgeTask task, CaseSource source, SandBox sandbox,
+                                       CodeExecContainer container) throws IOException {
+        TestCaseResult result = new TestCaseResult();
+        result.setJudgeId(task.getSubmissionId());
+        result.setCaseIndex(source.id());
+        result.setTime(0L);
+        result.setMemory(0L);
+        try (InputStream input = source.input().open()) {
+            CodeRunResult run = sandbox.execute(container, input, task.getTimeLimit() + 200L, remaining(task));
+            result.setTime(run.getTimeUsed());
+            result.setMemory(run.getMemoryUsed());
+            if (run.getTimeUsed() > task.getTimeLimit()) {
+                result.setStatus(JudgeVerdict.STATUS_TIME_LIMIT_EXCEEDED);
+            } else if (run.getMemoryUsed() > task.getMemoryLimit()) {
+                result.setStatus(JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED);
+            } else {
+                try (InputStream expected = source.output().open()) {
+                    result.setStatus(OutputComparator.matches(expected, run.getStdout())
+                            ? JudgeVerdict.STATUS_ACCEPTED : JudgeVerdict.STATUS_WRONG_ANSWER);
+                }
+            }
+            result.setOutput(preview(run.getStdout()));
+        } catch (TimeLimitExceededException e) {
+            result.setStatus(JudgeVerdict.STATUS_TIME_LIMIT_EXCEEDED);
+        } catch (MemoryLimitExceededException e) {
+            result.setStatus(JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED);
+        } catch (RuntimeErrorException e) {
+            result.setStatus(JudgeVerdict.STATUS_RUNTIME_ERROR);
+            result.setErrorMessage(e.getMessage());
         }
+        result.setScore(result.getStatus() == JudgeVerdict.STATUS_ACCEPTED ? 100 : 0);
+        return result;
+    }
+
+    private static InputStream inline(String value) {
+        return new ByteArrayInputStream((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String preview(String value) {
+        return value.length() <= 300 ? value : value.substring(0, 300) + "\n... (output truncated)";
+    }
+
+    private static long remaining(JudgeTask task) {
+        long remaining = task.getDeadlineEpochMs() - System.currentTimeMillis();
+        if (remaining <= 0 || Thread.currentThread().isInterrupted()) {
+            throw new SandBoxException("任务超过总截止时间或失去执行租约");
+        }
+        return remaining;
+    }
+
+    private static void checkDeadline(JudgeTask task) {
+        remaining(task);
+    }
+
+    void deleteWorkingDirectory(Path working) throws IOException {
+        Path configuredRoot = properties.getWorkDir().toAbsolutePath().normalize();
+        WorkerPaths.rejectSymbolicLinks(configuredRoot);
+        Path root = configuredRoot.toRealPath();
+        if (!root.equals(working.getParent()) || !working.getFileName().toString().startsWith("execution-")) {
+            throw new IOException("拒绝清理 Worker 工作目录以外的路径");
+        }
+        // 默认不跟随符号链接，逐文件删除；大量执行产物不在清理时汇集到内存。
+        Files.walkFileTree(working, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
+                Files.deleteIfExists(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path directory, IOException error) throws IOException {
+                if (error != null) {
+                    throw error;
+                }
+                Files.deleteIfExists(directory);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private record CaseSource(int id, StreamSource input, StreamSource output) {
     }
 
     @FunctionalInterface
-    private interface TestCaseSource {
-
-        TestCase read() throws IOException;
+    private interface StreamSource {
+        InputStream open() throws IOException;
     }
-
-    /**
-     * 标准化 OJ 输出：
-     * 1. 统一换行符
-     * 2. 去掉每行末尾空格
-     * 3. 去掉末尾空行
-     */
-    public static String normalize(String s) {
-        if (s == null) {
-            return "";
-        }
-        //统一成 \n
-        s = StrUtil.replace(s, "\r\n", "\n");
-        s = StrUtil.replace(s, "\r", "\n");
-        //按行切分
-        String[] lines = s.split("\n", -1);
-        //去掉每行末尾空白
-        for (int i = 0; i < lines.length; i++) {
-            lines[i] = StrUtil.trimEnd(lines[i]);
-        }
-        //转成 List 处理末尾空行
-        List<String> list = CollUtil.newArrayList(lines);
-        //去除末尾空行
-        while (!list.isEmpty() && StrUtil.isBlank(list.get(list.size() - 1))) {
-            list.remove(list.size() - 1);
-        }
-        return StrUtil.join("\n", list);
-    }
-
-    /**
-     * 对比输出（忽略末尾空行与行尾空格）
-     */
-    private boolean equalsOutput(String expected, String actual) {
-        return normalize(expected).equals(normalize(actual));
-    }
-
-
 }

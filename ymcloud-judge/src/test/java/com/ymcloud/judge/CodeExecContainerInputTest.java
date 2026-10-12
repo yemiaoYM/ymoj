@@ -3,9 +3,12 @@ package com.ymcloud.judge;
 import com.github.dockerjava.api.DockerClient;
 import com.ymcloud.judge.bo.CmdExecResult;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
+import com.ymcloud.judge.exception.CommandTimeoutException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,9 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 /**
  * 文件 stdin 保留原始字节与 EOF，shell 位置参数不执行输入或命令中的特殊字符。
@@ -49,7 +55,7 @@ class CodeExecContainerInputTest {
             inputs.add(inputPath);
             assertArrayEquals(input.getBytes(StandardCharsets.UTF_8), Files.readAllBytes(inputPath));
             return CmdExecResult.builder().exitCode(0L).stdout(input).stderr("").build();
-        }).when(container).execCmd(any(String[].class));
+        }).when(container).execCmd(any(String[].class), anyLong());
 
         assertEquals(input, container.execCmd(originalCommand, input).getStdout());
 
@@ -70,7 +76,7 @@ class CodeExecContainerInputTest {
             inputs.add(inputPath);
             assertEquals(0, Files.size(inputPath));
             return CmdExecResult.builder().exitCode(0L).stdout("").stderr("").build();
-        }).when(container).execCmd(any(String[].class));
+        }).when(container).execCmd(any(String[].class), anyLong());
 
         container.execCmd(new String[]{"cat"}, "");
         container.execCmd(new String[]{"cat"}, "");
@@ -89,7 +95,7 @@ class CodeExecContainerInputTest {
             String[] wrapped = invocation.getArgument(0);
             inputs.add(inputPath(wrapped[3]));
             throw new IllegalStateException("Docker unavailable");
-        }).when(container).execCmd(any(String[].class));
+        }).when(container).execCmd(any(String[].class), anyLong());
 
         assertThrows(IllegalStateException.class, () -> container.execCmd(new String[]{"cat"}, "input"));
 
@@ -99,12 +105,35 @@ class CodeExecContainerInputTest {
 
     @Test
     void invalidContainerPathsAndEmptyCommandFailBeforeCreatingInput() throws Exception {
-        for (String directory : new String[]{"relative", "/app/../escape", "/app/./child", "C:\\app"}) {
+        for (String directory : new String[]{"relative", "/", "/app/../escape", "/app/./child", "C:\\app"}) {
             assertThrows(IllegalArgumentException.class, () -> container(directory));
         }
         CodeExecContainer container = container("/app");
         assertThrows(IllegalArgumentException.class, () -> container.execCmd(new String[0], "input"));
         assertThrows(NullPointerException.class, () -> container.execCmd(new String[]{"cat"}, null));
+        assertThrows(IllegalArgumentException.class, () -> container.execCmd(
+                new String[]{"cat"}, InputStream.nullInputStream(), 0L));
+        try (var files = Files.list(workingDir)) {
+            assertEquals(0, files.count());
+        }
+    }
+
+    @Test
+    void slowInputPreparationCannotExtendCommandDeadlineOrStartExpiredCommand() throws Exception {
+        CodeExecContainer container = container("/app");
+        InputStream delayed = new ByteArrayInputStream("input".getBytes(StandardCharsets.UTF_8)) {
+            @Override
+            public synchronized int read(byte[] buffer, int offset, int length) {
+                try {
+                    Thread.sleep(20L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return super.read(buffer, offset, length);
+            }
+        };
+        assertThrows(CommandTimeoutException.class, () -> container.execCmd(new String[]{"cat"}, delayed, 1L));
+        verify(container, never()).execCmd(any(String[].class), anyLong());
         try (var files = Files.list(workingDir)) {
             assertEquals(0, files.count());
         }

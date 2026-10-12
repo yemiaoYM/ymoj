@@ -1,14 +1,10 @@
 package com.ymcloud.judge.sandbox;
 
-import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.judge.docker.container.CodeExecContainer;
+import com.ymcloud.judge.exception.SandBoxException;
 
 /**
- * @PackageName: com.ymcloud.judge.sandbox
- * @ClassName: SandBoxFactory
- * @Author: Yemiao
- * @CreateTime: 2025-08-27  00:29
- * @Description: 沙箱工厂
+ * 根据现有语言创建 Docker 沙箱适配器。
  */
 public class SandBoxFactory {
 
@@ -20,6 +16,7 @@ public class SandBoxFactory {
 
     /**
      * 根据语言返回代码沙箱
+     *
      * @param container 执行容器
      * @return 代码沙箱
      */
@@ -29,8 +26,7 @@ public class SandBoxFactory {
             case "C++" -> new CppSandBox(container);
             case "C" -> new CSandBox(container);
             case "Python" -> new PythonSandBox(container);
-            default -> throw new JudgeException("不支持的语言类型: " + language);
+            default -> throw new SandBoxException("不支持的语言类型: " + language);
         };
     }
-
 }

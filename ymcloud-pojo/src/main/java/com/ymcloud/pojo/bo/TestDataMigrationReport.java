@@ -1,5 +1,6 @@
 package com.ymcloud.pojo.bo;
 
+import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import lombok.Data;
 
 import java.util.ArrayList;
