@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in, isolated Web -> RabbitMQ -> Worker -> Docker -> Web regression.
+"""Opt-in, isolated Web -> RabbitMQ -> Worker -> go-judge -> Web regression.
 
 Requires YMCLOUD_WORKER_E2E=true and an explicitly selected unused Redis DB in
 YMCLOUD_WORKER_E2E_REDIS_DATABASE. Uses only the existing local dev MySQL service.
@@ -25,11 +25,12 @@ import subprocess
 import sys
 import time
 import uuid
+import urllib.parse
 
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
 SCHEMA_PATTERN = re.compile(r"ymcloud_worker_e2e_[0-9a-f]{32}")
-REDIS_CLAIM = "ymcloud:phase2-e2e:exclusive-db"
+REDIS_CLAIM = "ymcloud:phase3-verification/business:exclusive-db"
 INITIAL_PASSWORD = "Ymcloud@123"
 INPUTS = [b" \tleading\r\ntrailing  \n\n", b"\n\t  second\n  "]
 VERSION = 101
@@ -143,12 +144,6 @@ def hidden_process_options():
     return {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
 
 
-def docker(arguments):
-    result = subprocess.run(["docker", *arguments], capture_output=True, timeout=30,
-                            check=True, text=True, encoding="utf-8", **hidden_process_options())
-    return result.stdout.strip()
-
-
 class Regression:
     def __init__(self, args, yaml_module, mysql_module, redis_module, pika_module):
         self.args = args
@@ -158,11 +153,11 @@ class Regression:
         self.pika = pika_module
         self.identifier = uuid.uuid4().hex
         self.schema = "ymcloud_worker_e2e_" + self.identifier
-        self.namespace = "phase2e2e." + self.identifier
-        self.worker_prefix = "phase2e2e:" + self.identifier + ":"
-        self.folder = PROJECT_ROOT / "target" / "phase2-e2e" / self.identifier
+        self.namespace = "phase3e2e." + self.identifier
+        self.worker_prefix = "phase3e2e:" + self.identifier + ":"
+        self.folder = PROJECT_ROOT / "target" / "phase3-verification/business" / self.identifier
         self.runtime = self.folder / "runtime"
-        confined_test_path(self.runtime, PROJECT_ROOT / "target" / "phase2-e2e")
+        confined_test_path(self.runtime, PROJECT_ROOT / "target" / "phase3-verification/business")
         self.web_files = self.runtime / "web-files"
         self.worker_files = self.runtime / "worker"
         self.cache = self.worker_files / "cache"
@@ -182,7 +177,6 @@ class Regression:
         self.mq = None
         self.channel = None
         self.port = None
-        self.baseline_containers = set()
         self.redis_keys = set()
         self.tokens = []
         self.submissions = []
@@ -193,7 +187,7 @@ class Regression:
 
     def prepare(self):
         require(SCHEMA_PATTERN.fullmatch(self.schema), "Invalid generated test schema")
-        target = confined_test_path(PROJECT_ROOT / "target" / "phase2-e2e", PROJECT_ROOT / "target" / "phase2-e2e")
+        target = confined_test_path(PROJECT_ROOT / "target" / "phase3-verification/business", PROJECT_ROOT / "target" / "phase3-verification/business")
         require(confined_test_path(self.folder, target).parent == target, "Test directory is outside ignored target")
         private_directory(self.runtime)
         private_directory(self.web_files / "private")
@@ -256,12 +250,14 @@ class Regression:
         self.mq = self.pika.BlockingConnection(self.mq_parameters())
         self.channel = self.mq.channel()
         self.channel.confirm_delivery()
-        host = os.environ.get("DOCKER_HOST") or docker(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"])
-        require(host.startswith(("npipe://", "unix://", "tcp://127.0.0.1:", "tcp://localhost:")),
-                "E2E Docker must use the local daemon")
-        self.baseline_containers = set(filter(None, docker(["ps", "-aq"]).splitlines()))
-        # Docker 29 may resolve short names differently during image inspection.
-        docker(["image", "inspect", "docker.io/library/oj-python-env:latest", "--format", "{{.Id}}"])
+        self.go_judge_url = os.environ.get("YMCLOUD_GO_JUDGE_URL", "http://127.0.0.1:5050")
+        self.go_judge_token = os.environ.get("YMCLOUD_GO_JUDGE_TOKEN", "")
+        endpoint = urllib.parse.urlsplit(self.go_judge_url)
+        require(endpoint.scheme == "http" and endpoint.hostname in ["127.0.0.1", "localhost"]
+                and not endpoint.username and not endpoint.password and not endpoint.query
+                and not endpoint.fragment and endpoint.path in ["", "/"],
+                "E2E requires a dedicated local go-judge service")
+        require(len(self.go_judge_token) >= 32, "A dedicated go-judge token is required")
         self.fixture()
         self.write_configs(base_web, base_worker)
 
@@ -390,6 +386,7 @@ class Regression:
         worker["ymcloud"]["judge"].update(topology)
         worker["ymcloud"]["worker"].update({"id": "e2e-" + self.identifier, "redis-prefix": self.worker_prefix,
                                            "work-dir": str(self.work), "journal-dir": str(self.journal), "concurrency": 1,
+                                           "go-judge": {"base-url": self.go_judge_url, "token": self.go_judge_token},
                                            "cache": {"directory": str(self.cache)},
                                            "data": {"base-url": "http://127.0.0.1:" + str(self.port), "token": self.service_token,
                                                     "connect-timeout": "5s", "read-timeout": "30s"}})
@@ -630,7 +627,7 @@ class Regression:
         self.report["ok"] = True
 
     def cleanup(self):
-        operations = [("Owned Boot processes", self.cleanup_processes), ("Owned sandbox containers", self.cleanup_containers),
+        operations = [("Owned Boot processes", self.cleanup_processes),
                       ("Isolated RabbitMQ topology", self.cleanup_mq), ("Owned Redis keys", self.cleanup_redis),
                       ("Random local MySQL schema", self.cleanup_database), ("Temporary credentials and fixture files", self.cleanup_files)]
         for label, operation in operations:
@@ -647,25 +644,13 @@ class Regression:
         for output in self.log_files:
             output.close()
 
-    def cleanup_containers(self):
-        if not self.baseline_containers and self.stage == "prepare":
-            return
-        current = set(filter(None, docker(["ps", "-aq"]).splitlines()))
-        marker = "/target/phase2-e2e/" + self.identifier + "/runtime/worker/work/"
-        for container in current - self.baseline_containers:
-            require(re.fullmatch(r"[0-9a-f]{12,64}", container), "Unsafe Docker container ID")
-            mounts = json.loads(docker(["inspect", "--format", "{{json .Mounts}}", container]))
-            owned = any(marker in (mount.get("Source", "").replace("\\", "/").lower() + "/") for mount in mounts)
-            if owned:
-                docker(["container", "rm", "--force", container])
-
     def cleanup_mq(self):
         if self.mq is None:
             return
         if self.mq.is_closed:
             self.mq = self.pika.BlockingConnection(self.mq_parameters())
         names = [self.namespace + suffix for suffix in [".task", ".task.retry", ".task.dead", ".result", ".observe"]]
-        require(all(name.startswith("phase2e2e." + self.identifier + ".") for name in names), "Unsafe MQ cleanup scope")
+        require(all(name.startswith("phase3e2e." + self.identifier + ".") for name in names), "Unsafe MQ cleanup scope")
         for name in names:
             channel = self.mq.channel()
             try:
@@ -715,7 +700,7 @@ class Regression:
             self.mysql_admin.close()
 
     def cleanup_files(self):
-        target = confined_test_path(PROJECT_ROOT / "target" / "phase2-e2e", PROJECT_ROOT / "target" / "phase2-e2e")
+        target = confined_test_path(PROJECT_ROOT / "target" / "phase3-verification/business", PROJECT_ROOT / "target" / "phase3-verification/business")
         runtime = confined_test_path(self.runtime, target)
         require(runtime == target / self.identifier / "runtime"
                 and re.fullmatch(r"[0-9a-f]{32}", self.identifier),

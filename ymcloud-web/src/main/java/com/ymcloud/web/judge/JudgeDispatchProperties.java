@@ -6,7 +6,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.util.Set;
 
 /** 发布失败与结果超时有独立的有限预算，数据库任务不会无限重试。 */
 @Data
@@ -22,7 +21,6 @@ public class JudgeDispatchProperties {
     private Duration retryInterval = Duration.ofSeconds(3);
     private Duration resultWait = Duration.ofMinutes(5);
     private Duration totalTimeout = Duration.ofMinutes(20);
-    private Set<String> allowedImages = Set.of("oj-java-env", "oj-cpp-env", "oj-python-env");
 
     @PostConstruct
     public void validate() {
@@ -37,9 +35,8 @@ public class JudgeDispatchProperties {
             }
         }
         if (leaseDuration.compareTo(confirmTimeout.multipliedBy(2)) <= 0
-                || totalTimeout.compareTo(resultWait) < 0 || totalTimeout.compareTo(Duration.ofHours(1)) > 0
-                || allowedImages == null || allowedImages.isEmpty()) {
-            throw new IllegalArgumentException("判题租约、语言环境或总超时无效，总超时不得超过一小时");
+                || totalTimeout.compareTo(resultWait) < 0 || totalTimeout.compareTo(Duration.ofHours(1)) > 0) {
+            throw new IllegalArgumentException("判题租约或总超时无效，总超时不得超过一小时");
         }
         if (confirmTimeout.compareTo(Duration.ofSeconds(60)) > 0
                 || leaseDuration.compareTo(Duration.ofMinutes(5)) > 0

@@ -1,0 +1,10 @@
+ca-certificates=20250419~deb12u1
+openjdk-17-jdk-headless=17.0.20.1+1-1~deb12u1
+openjdk-17-jre-headless=17.0.20.1+1-1~deb12u1
+gcc=4:12.2.0-3
+g++=4:12.2.0-3
+gcc-12=12.2.0-14+deb12u1
+g++-12=12.2.0-14+deb12u1
+libc6-dev=2.36-9+deb12u14
+python3=3.11.2-1+b1
+python3.11=3.11.2-6+deb12u9

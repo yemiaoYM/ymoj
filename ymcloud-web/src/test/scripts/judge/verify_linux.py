@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Opt-in Linux filesystem verification of the packaged Worker in local Docker.
 
-Uses the existing oj-java-env image, no Docker socket in the test container, no
+Uses the digest-locked YMCLOUD_GO_JUDGE_IMAGE runtime image, no Docker socket in the test container, no
 database/message broker/Redis, and no application credentials or real files.
 Set YMCLOUD_WORKER_LINUX_TEST=true explicitly before running this script.
 """
@@ -21,21 +21,15 @@ import zipfile
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]
 JAVA_HELPER = r'''
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.CreateContainerCmd;
-import com.github.dockerjava.api.command.CreateContainerResponse;
-import com.github.dockerjava.api.model.HostConfig;
 import com.ymcloud.judge.data.TestDataCache;
 import com.ymcloud.judge.data.TestDataCacheProperties;
 import com.ymcloud.judge.data.TestDataSource;
-import com.ymcloud.judge.docker.factory.CodeExecContainerFactory;
 import com.ymcloud.judge.io.WorkerPaths;
 import com.ymcloud.pojo.contract.judge.TestDataManifest;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -43,10 +37,8 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public final class LinuxWorkerCheck {
@@ -61,9 +53,9 @@ public final class LinuxWorkerCheck {
         check(((Number) Files.getAttribute(STATE, "unix:gid")).intValue() == 1000, "State group must be GID 1000");
         permissions(STATE, "rwx------");
         verifyCache();
-        verifyFactoryAndExecution();
+        verifyPrivateExecution();
         System.out.println("PASS Linux UID/GID, private permissions, cold/warm/restart/corrupt cache, "
-                + "symlink rejection, Factory isolation and raw stdin");
+                + "symlink rejection, private compilation and raw stdin");
     }
 
     private static void verifyCache() throws Exception {
@@ -142,63 +134,10 @@ public final class LinuxWorkerCheck {
         check(Files.readString(marker).equals("outside-data"), "Cache cleanup followed a symlink");
     }
 
-    private static void verifyFactoryAndExecution() throws Exception {
+    private static void verifyPrivateExecution() throws Exception {
         Path work = STATE.resolve("work");
         Files.createDirectory(work);
         Files.setPosixFilePermissions(work, PosixFilePermissions.fromString("rwx------"));
-        Map<String, Object> calls = new HashMap<>();
-        CreateContainerCmd command = (CreateContainerCmd) Proxy.newProxyInstance(
-                LinuxWorkerCheck.class.getClassLoader(), new Class<?>[]{CreateContainerCmd.class},
-                (proxy, method, values) -> {
-                    if (method.getName().equals("exec")) {
-                        CreateContainerResponse response = new CreateContainerResponse();
-                        response.setId("fake-local-test-only");
-                        return response;
-                    }
-                    if (method.getName().startsWith("with")) {
-                        calls.put(method.getName(), values[0]);
-                        return proxy;
-                    }
-                    if (method.getName().equals("toString")) {
-                        return "local-test-proxy";
-                    }
-                    throw new UnsupportedOperationException(method.getName());
-                });
-        DockerClient client = (DockerClient) Proxy.newProxyInstance(
-                LinuxWorkerCheck.class.getClassLoader(), new Class<?>[]{DockerClient.class},
-                (proxy, method, values) -> {
-                    if (method.getName().equals("createContainerCmd")) {
-                        calls.put("image", values[0]);
-                        return command;
-                    }
-                    throw new UnsupportedOperationException(method.getName());
-                });
-        new CodeExecContainerFactory(client, work.toString(), "/app", 262144L, "oj-java-env")
-                .createDockerContainer();
-        check("1000:1000".equals(calls.get("withUser")), "Factory did not use private directory owner");
-        check("/app".equals(calls.get("withWorkingDir")), "Container working directory changed");
-        check("oj-java-env".equals(calls.get("image")), "Factory image changed");
-        HostConfig config = (HostConfig) calls.get("withHostConfig");
-        check(config != null, "Factory omitted HostConfig");
-        check("none".equals(config.getNetworkMode()), "Sandbox network enabled");
-        check(Boolean.TRUE.equals(config.getReadonlyRootfs()), "Sandbox root is writable");
-        check(Long.valueOf(262144L * 1024).equals(config.getMemory()), "Memory units changed");
-        check(config.getMemory().equals(config.getMemorySwap()), "Swap is enabled");
-        check(Long.valueOf(64).equals(config.getPidsLimit()), "Process limit changed");
-        check(Arrays.stream(config.getCapDrop()).anyMatch(value -> value.name().equals("ALL")), "Capabilities retained");
-        check(config.getSecurityOpts().contains("no-new-privileges:true"), "Privilege escalation is enabled");
-        check(config.getBinds().length == 1 && config.getBinds()[0].getPath().equals(work.toString()), "Unexpected mount source");
-        check(config.getTmpFs().get("/tmp").contains("noexec"), "Executable /tmp enabled");
-
-        Path rootLink = STATE.resolve("linked-cache");
-        boolean rejected = false;
-        try {
-            new CodeExecContainerFactory(client, rootLink.toString(), "/app", 262144L, "oj-java-env");
-        } catch (RuntimeException expected) {
-            rejected = true;
-        }
-        check(rejected, "Factory accepted a symbolic work directory");
-
         Path program = work.resolve("Echo.java");
         String programSource = """
                 public class Echo {
@@ -388,7 +327,7 @@ def cleanup_container(container, identifier):
     if inspected.returncode != 0:
         return
     labels = json.loads(inspected.stdout)
-    require(labels.get("com.ymcloud.phase2-linux-test") == identifier, "Refusing to delete another Docker container")
+    require(labels.get("com.ymcloud.phase3-linux-test") == identifier, "Refusing to delete another Docker container")
     command(["docker", "rm", "-f", container])
 
 
@@ -401,15 +340,18 @@ def main():
     require(args.jar.resolve().is_relative_to(PROJECT_ROOT.resolve()), "Worker jar must be in this project")
     require(args.jar.is_file(), "Packaged Worker jar is missing")
     identifier = uuid.uuid4().hex
-    target = confined_test_path(PROJECT_ROOT / "target" / "phase2-linux", PROJECT_ROOT / "target" / "phase2-linux")
+    target = confined_test_path(PROJECT_ROOT / "target" / "phase3-verification/linux", PROJECT_ROOT / "target" / "phase3-verification/linux")
     folder = confined_test_path(target / identifier, target)
     require(folder.resolve().parent == target, "Linux test directory escaped ignored target")
     container = None
     succeeded = False
     try:
         local_daemon()
-        # Docker 29 may resolve short names differently during image inspection.
-        command(["docker", "image", "inspect", "docker.io/library/oj-java-env:latest", "--format", "{{.Id}}"])
+        runtime_image = os.environ.get("YMCLOUD_GO_JUDGE_IMAGE", "")
+        require(re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", runtime_image) is not None
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", runtime_image) is not None,
+                "Set YMCLOUD_GO_JUDGE_IMAGE to the verified runtime digest")
+        command(["docker", "image", "inspect", runtime_image, "--format", "{{.Id}}"])
         folder.mkdir(parents=True, exist_ok=False)
         if os.name != "nt":
             folder.chmod(0o755)
@@ -423,14 +365,14 @@ def main():
                   'java -Xmx192m -cp "/state/classes:/fixture/classes:/fixture/lib/*" LinuxWorkerCheck')
         container = command([
             "docker", "create", "--rm", "--name", "ymcloud-worker-linux-" + identifier,
-            "--label", "com.ymcloud.phase2-linux-test=" + identifier,
+            "--label", "com.ymcloud.phase3-linux-test=" + identifier,
             "--user", "1000:1000", "--read-only", "--network", "none", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges:true", "--pids-limit", "96",
             "--memory", "512m", "--memory-swap", "512m", "--cpus", "1",
             "--tmpfs", "/state:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700",
             "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=64m,uid=1000,gid=1000,mode=1777",
             "--mount", "type=bind,source=" + str(folder.resolve()) + ",target=/fixture,readonly",
-            "--entrypoint", "/bin/sh", "oj-java-env", "-c", script])
+            "--entrypoint", "/bin/sh", runtime_image, "-c", script])
         require(re.fullmatch(r"[0-9a-f]{64}", container), "Invalid created test container ID")
         output = command(["docker", "start", "-a", container], timeout=150)
         # Worker 生命周期日志可能先于最终断言摘要输出，仍须找到完整的通过标记。

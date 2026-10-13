@@ -1,0 +1,118 @@
+name: ymcloud-judge
+
+services:
+  go-judge:
+    image: ${YMCLOUD_GO_JUDGE_IMAGE:?先运行 build.sh 生成不可变镜像锁}
+    pull_policy: never
+    platform: linux/amd64
+    # 执行服务需要嵌套 namespace；Worker 始终非特权且没有 Docker Socket。
+    privileged: true
+    cgroup: private
+    restart: unless-stopped
+    read_only: true
+    cpus: ${YMCLOUD_GO_JUDGE_CPUS:-1.0}
+    mem_limit: ${YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES:-1073741824}
+    memswap_limit: ${YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES:-1073741824}
+    pids_limit: ${YMCLOUD_GO_JUDGE_SERVICE_PIDS:-256}
+    shm_size: 64m
+    environment:
+      YMCLOUD_GO_JUDGE_TOKEN: ${YMCLOUD_GO_JUDGE_TOKEN:?需要独立 go-judge 令牌}
+      YMCLOUD_GO_JUDGE_PARALLELISM: ${YMCLOUD_GO_JUDGE_CONCURRENCY:-1}
+      YMCLOUD_GO_JUDGE_FILE_TTL_SECONDS: ${YMCLOUD_GO_JUDGE_FILE_TTL_SECONDS:-3600}
+      YMCLOUD_GO_JUDGE_MAX_FILE_BYTES: ${YMCLOUD_GO_JUDGE_MAX_FILE_BYTES:-16777216}
+    ports:
+      - "127.0.0.1:5050:5050"
+    networks:
+      - judge
+    volumes:
+      - type: bind
+        source: ${YMCLOUD_GO_JUDGE_CACHE_DIR:?指定独占磁盘缓存目录}
+        target: /var/lib/go-judge
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m
+      - /run:rw,nosuid,nodev,size=8m
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: "2"}
+    healthcheck:
+      test: ["CMD", "python3", "/opt/ymcloud/healthcheck.py"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  worker:
+    image: ${YMCLOUD_WORKER_IMAGE:?先运行 build.sh 生成不可变镜像锁}
+    pull_policy: never
+    platform: linux/amd64
+    user: "10001:10001"
+    privileged: false
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    mem_limit: 384m
+    memswap_limit: 384m
+    cpus: 0.5
+    pids_limit: 128
+    stop_grace_period: 45s
+    depends_on:
+      go-judge: {condition: service_healthy}
+    environment:
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-127.0.0.1}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?填写已有 RabbitMQ 账号}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?填写已有 RabbitMQ 密码}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+      REDIS_HOST: ${REDIS_HOST:-127.0.0.1}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DATABASE: ${REDIS_DATABASE:-0}
+      YMCLOUD_JUDGE_EXCHANGE: ${YMCLOUD_JUDGE_EXCHANGE:-judge.worker-v2.topic}
+      YMCLOUD_JUDGE_TASK_QUEUE: ${YMCLOUD_JUDGE_TASK_QUEUE:-judge.worker-v2.queue}
+      YMCLOUD_JUDGE_RESULT_QUEUE: ${YMCLOUD_JUDGE_RESULT_QUEUE:-judge.worker-v2.result.queue}
+      YMCLOUD_WORKER_REDIS_PREFIX: ${YMCLOUD_WORKER_REDIS_PREFIX:-ymcloud:judge-worker-v2:}
+      YMCLOUD_WORKER_ID: ${YMCLOUD_WORKER_ID:-judge-1}
+      YMCLOUD_WORKER_API_URL: ${YMCLOUD_WORKER_API_URL:-http://127.0.0.1:9091}
+      YMCLOUD_WORKER_SERVICE_TOKEN: ${YMCLOUD_WORKER_SERVICE_TOKEN:?填写 Web 服务令牌}
+      YMCLOUD_WORKER_CONCURRENCY: ${YMCLOUD_WORKER_CONCURRENCY:-1}
+      YMCLOUD_GO_JUDGE_URL: http://127.0.0.1:5050
+      YMCLOUD_GO_JUDGE_TOKEN: ${YMCLOUD_GO_JUDGE_TOKEN:?填写独立 go-judge 令牌}
+      YMCLOUD_GO_JUDGE_CONCURRENCY: ${YMCLOUD_GO_JUDGE_CONCURRENCY:-1}
+      YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES: ${YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES:-1073741824}
+      YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB: ${YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB:-524288}
+      YMCLOUD_GO_JUDGE_COMPILE_MEMORY_BYTES: ${YMCLOUD_GO_JUDGE_COMPILE_MEMORY_BYTES:-536870912}
+      YMCLOUD_GO_JUDGE_COMPILE_WALL_MS: ${YMCLOUD_GO_JUDGE_COMPILE_WALL_MS:-10000}
+      YMCLOUD_GO_JUDGE_PROCESS_LIMIT: ${YMCLOUD_GO_JUDGE_PROCESS_LIMIT:-64}
+      YMCLOUD_GO_JUDGE_CPU_RATE: ${YMCLOUD_GO_JUDGE_CPU_RATE:-1000}
+      YMCLOUD_GO_JUDGE_MAX_FILE_BYTES: ${YMCLOUD_GO_JUDGE_MAX_FILE_BYTES:-16777216}
+      YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES: ${YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES:-1048576}
+      YMCLOUD_GO_JUDGE_MAX_REQUEST_BYTES: ${YMCLOUD_GO_JUDGE_MAX_REQUEST_BYTES:-25165824}
+      YMCLOUD_GO_JUDGE_MAX_RESPONSE_BYTES: ${YMCLOUD_GO_JUDGE_MAX_RESPONSE_BYTES:-8388608}
+      YMCLOUD_GO_JUDGE_REQUEST_TIMEOUT: ${YMCLOUD_GO_JUDGE_REQUEST_TIMEOUT:-90s}
+      YMCLOUD_JUDGE_WORK_DIR: /data/work
+      YMCLOUD_JUDGE_CACHE_DIR: /data/cache
+      YMCLOUD_JUDGE_RESULT_DIR: /data/results
+    volumes:
+      - type: bind
+        source: ${YMCLOUD_WORKER_DATA_DIR:?指定独占 Worker 数据目录}
+        target: /data
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=32m,uid=10001,gid=10001
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+    healthcheck:
+      test: ["CMD", "python3", "/opt/ymcloud/worker-healthcheck.py"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+networks:
+  judge: {driver: bridge}

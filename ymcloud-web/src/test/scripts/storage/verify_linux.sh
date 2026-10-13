@@ -10,8 +10,10 @@ command -v python3 >/dev/null || { printf 'Regression checks require Python 3.\n
 if [[ ${1:-} == --docker ]]; then
     [[ $(id -u) == 0 ]] || { printf 'Use sudo for the root-owned bind-mount regression.\n' >&2; exit 1; }
     docker info --format '{{.OSType}}' >/dev/null || { printf 'Docker is unavailable; check daemon access or WSL integration.\n' >&2; exit 1; }
-    docker image inspect --format '{{.Id}}' oj-python-env:latest >/dev/null || {
-        printf 'Build the OJ Python sandbox image before Docker regression checks.\n' >&2
+    : "${YMCLOUD_GO_JUDGE_IMAGE:?Set the digest-locked unified runtime image}"
+    [[ $YMCLOUD_GO_JUDGE_IMAGE =~ ^([^[:space:]]+@)?sha256:[0-9a-f]{64}$ ]] || exit 1
+    docker image inspect --format '{{.Id}}' "$YMCLOUD_GO_JUDGE_IMAGE" >/dev/null || {
+        printf 'Build and lock the unified go-judge runtime image before Docker regression checks.\n' >&2
         exit 1
     }
 fi
@@ -144,7 +146,7 @@ if [[ ${1:-} == --docker ]]; then
             --mount "type=bind,source=$deployment,target=/checks,readonly" \
             --mount "type=bind,source=$fixture/client.env,target=/checks/.env,readonly" \
             --mount "type=bind,source=$fixture,target=/target" \
-            --entrypoint python3 oj-python-env:latest /checks/verify_storage.py \
+            --entrypoint python3 "$YMCLOUD_GO_JUDGE_IMAGE" /checks/verify_storage.py \
             --deployment-dir /checks --report-dir /target/storage "$@"
     }
     storage_check --persistence-write --iterations 0 > "$fixture/persistence-write.log" 2>&1
@@ -165,7 +167,7 @@ if [[ ${1:-} == --docker ]]; then
     pass 'Admin UI starts and repeat preserves password while repairing permissions'
     docker run --rm -i --user 0:0 --network "${COMPOSE_PROJECT_NAME}_access" \
         --mount "type=bind,source=$deployment,target=/checks,readonly" \
-        --entrypoint python3 oj-python-env:latest - > "$fixture/admin-login.log" 2>&1 <<'PY'
+        --entrypoint python3 "$YMCLOUD_GO_JUDGE_IMAGE" - > "$fixture/admin-login.log" 2>&1 <<'PY'
 import html.parser, http.cookiejar, pathlib, urllib.parse, urllib.request
 class LoginForm(html.parser.HTMLParser):
     token = None

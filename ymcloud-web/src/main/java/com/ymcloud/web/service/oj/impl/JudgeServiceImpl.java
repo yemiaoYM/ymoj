@@ -279,15 +279,12 @@ public class JudgeServiceImpl implements JudgeService {
                 && SUPPORTED_LANGUAGES.contains(language.getName());
         boolean compiled = Objects.equals(language.getType(), 0);
         boolean interpreted = Objects.equals(language.getType(), 1);
-        boolean missingCompiler = compiled
-                && (language.getCompileCmd() == null || language.getCompileCmd().isBlank());
         if (!supported
-                || language.getEnv() == null || !properties.getAllowedImages().contains(language.getEnv())
                 || language.getFileName() == null || !language.getFileName().matches("[A-Za-z0-9_-]+\\.(java|c|cpp|py)")
-                || language.getRunCmd() == null || language.getRunCmd().isBlank()
-                || (!compiled && !interpreted) || missingCompiler) {
-            throw new JudgeException("编程语言配置不完整或不在允许的判题环境中，请联系管理员");
+                || (!compiled && !interpreted)) {
+            throw new JudgeException("编程语言入口、文件名或类型无效，请联系管理员");
         }
+        // image、env 和命令只保留在提交快照中，实际执行由 Worker 的固定语言入口决定。
     }
 
     private JudgeLanguage languageSnapshot(Language language) {

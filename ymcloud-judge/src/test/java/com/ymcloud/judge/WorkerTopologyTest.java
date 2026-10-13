@@ -32,7 +32,7 @@ class WorkerTopologyTest {
     void workerClasspathHasNoDatabaseOrWebSecurityImplementation() {
         for (String forbidden : new String[]{"com.ymcloud.core.security.config.SecurityConfig",
                 "com.ymcloud.core.web.dao.JudgeEntityService", "com.baomidou.mybatisplus.core.mapper.BaseMapper",
-                "com.mysql.cj.jdbc.Driver"}) {
+                "com.mysql.cj.jdbc.Driver", "com.github.dockerjava.api.DockerClient"}) {
             assertThrows(ClassNotFoundException.class, () -> Class.forName(forbidden));
         }
     }

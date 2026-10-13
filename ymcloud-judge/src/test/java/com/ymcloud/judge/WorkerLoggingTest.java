@@ -68,7 +68,7 @@ class WorkerLoggingTest {
         appender.start();
         logger.addAppender(appender);
         WorkerProperties properties = new WorkerProperties();
-        listener = new JudgeListener(mapper, new WorkerTaskValidator(properties), store, journal,
+        listener = new JudgeListener(mapper, new WorkerTaskValidator(), store, journal,
                 publisher, runner, properties, metrics);
         task = WorkerFixtures.task(1, 0);
         task.setCode("// " + PRIVATE_MARKER + "\nclass Main {}");

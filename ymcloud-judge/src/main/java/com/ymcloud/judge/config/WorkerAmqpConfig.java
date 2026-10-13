@@ -19,6 +19,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 
 /**
  * 普通持久化 Topic 拓扑，使用 TTL 重试队列，无 delayed 插件依赖。
@@ -75,6 +76,7 @@ public class WorkerAmqpConfig {
     }
 
     @Bean
+    @DependsOn("goJudgeStartupCheck")
     public SimpleRabbitListenerContainerFactory workerListenerFactory(ConnectionFactory connectionFactory,
                                                                      WorkerProperties properties) {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();

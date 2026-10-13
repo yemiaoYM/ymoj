@@ -1,6 +1,5 @@
 package com.ymcloud.judge.listeners;
 
-import com.ymcloud.judge.config.WorkerProperties;
 import com.ymcloud.pojo.contract.judge.JudgeLanguage;
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
@@ -19,12 +18,6 @@ public class WorkerTaskValidator {
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("Java", "C", "C++", "Python");
     private static final Pattern SOURCE_FILE_NAME = Pattern.compile("[A-Za-z0-9_-]+\\.(java|c|cpp|py)");
     private static final Pattern SHA256 = Pattern.compile("[0-9a-f]{64}");
-
-    private final WorkerProperties properties;
-
-    public WorkerTaskValidator(WorkerProperties properties) {
-        this.properties = properties;
-    }
 
     public void validate(JudgeTask task) {
         validateIdentity(task);
@@ -66,19 +59,14 @@ public class WorkerTaskValidator {
     }
 
     private void validateLanguage(JudgeLanguage language) {
-        if (language == null || language.getName() == null || language.getEnv() == null
+        if (language == null || language.getName() == null
                 || language.getFileName() == null
                 || !SOURCE_FILE_NAME.matcher(language.getFileName()).matches()
-                || language.getRunCmd() == null || language.getRunCmd().isBlank()
                 || language.getType() == null || (language.getType() != 0 && language.getType() != 1)
-                || !SUPPORTED_LANGUAGES.contains(language.getName())
-                || !properties.getAllowedImages().contains(language.getEnv())) {
-            throw new IllegalArgumentException("判题语言或允许的镜像无效");
+                || !SUPPORTED_LANGUAGES.contains(language.getName())) {
+            throw new IllegalArgumentException("判题语言配置无效");
         }
-        if (language.getType() == 0
-                && (language.getCompileCmd() == null || language.getCompileCmd().isBlank())) {
-            throw new IllegalArgumentException("编译型语言缺少编译配置");
-        }
+        // 历史快照的 env、compileCmd 和 runCmd 仅作元数据；执行命令由 Worker 固定。
     }
 
     private void validateData(JudgeTask task) {

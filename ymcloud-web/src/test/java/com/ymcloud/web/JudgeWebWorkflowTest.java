@@ -52,6 +52,8 @@ import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.slf4j.LoggerFactory;
@@ -279,8 +281,10 @@ class JudgeWebWorkflowTest {
     }
 
     @Test
-    void absentSelfTestInputIsAnEmptyStreamAndUnsupportedEnvironmentIsRejectedImmediately() {
+    void absentSelfTestInputIsEmptyAndOnlyInvalidLanguageMetadataIsRejected() {
         Language language = language();
+        language.setEnv(null);
+        language.setRunCmd(null);
         doReturn(query(language)).when(languages).lambdaQuery();
         TestJudgeDTO request = new TestJudgeDTO();
         request.setCode("print(input())");
@@ -293,13 +297,67 @@ class JudgeWebWorkflowTest {
             JudgeTask task = codec.task(created.getValue().getTaskPayload());
             assertEquals("", task.getInput());
             assertEquals("", task.getExpectedOutput());
-            language.setEnv("unapproved-image");
+            language.setName("Go");
             assertThrows(JudgeException.class, () -> service.testJudge(request));
-            language.setEnv("oj-python-env");
+            language.setName("Python");
             language.setFileName("main.txt");
+            assertThrows(JudgeException.class, () -> service.testJudge(request));
+            language.setFileName("main.py");
+            language.setType(2);
             assertThrows(JudgeException.class, () -> service.testJudge(request));
             verify(dispatches, times(1)).save(any());
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Java", "C", "C++", "Python"})
+    void legacyEnvironmentAndEmptyCommandsRemainSnapshotMetadata(String name) {
+        Language language = language();
+        language.setName(name);
+        language.setType("Python".equals(name) ? 1 : 0);
+        language.setFileName(switch (name) {
+            case "Java" -> "Main.java";
+            case "C" -> "main.c";
+            case "C++" -> "main.cpp";
+            default -> "main.py";
+        });
+        language.setImage("legacy-vendor/toolchain:old");
+        language.setEnv("retired-custom-environment");
+        language.setCompileCmd(null);
+        language.setRunCmd("");
+        language.setVersion("legacy-version");
+        doReturn(query(problem())).when(problems).lambdaQuery();
+        doReturn(query(language)).when(languages).lambdaQuery();
+        doReturn(query(version())).when(versions).lambdaQuery();
+        when(testData.getCurrentVersion(10L)).thenReturn(77L);
+        when(judges.save(any())).thenReturn(true);
+        JudgeDTO request = request(false);
+        request.setLanguage(name);
+
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+             MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
+            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+            ip.when(IpUtils::getIpAddr).thenReturn("127.0.0.1");
+            service.submitJudge(request);
+        }
+        ArgumentCaptor<JudgeDispatch> created = ArgumentCaptor.forClass(JudgeDispatch.class);
+        verify(dispatches).save(created.capture());
+        String historicalPayload = created.getValue().getTaskPayload();
+        language.setImage("updated-image");
+        language.setEnv("updated-environment");
+        language.setCompileCmd("updated-compile-command");
+        language.setRunCmd("updated-run-command");
+        language.setVersion("updated-version");
+
+        JudgeTask historical = codec.task(historicalPayload);
+        assertEquals(name, historical.getLanguageConfig().getName());
+        assertEquals("legacy-vendor/toolchain:old", historical.getLanguageConfig().getImage());
+        assertEquals("retired-custom-environment", historical.getLanguageConfig().getEnv());
+        assertNull(historical.getLanguageConfig().getCompileCmd());
+        assertEquals("", historical.getLanguageConfig().getRunCmd());
+        assertEquals("legacy-version", historical.getLanguageConfig().getVersion());
+        assertEquals(77L, historical.getTestDataVersionId());
+        verify(languages, never()).lambdaUpdate();
     }
 
     @Test

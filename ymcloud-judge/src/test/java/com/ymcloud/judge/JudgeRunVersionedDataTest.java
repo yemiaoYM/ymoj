@@ -1,15 +1,11 @@
 package com.ymcloud.judge;
 
-import com.github.dockerjava.api.DockerClient;
-import com.ymcloud.judge.bo.CodeRunResult;
 import com.ymcloud.judge.config.WorkerProperties;
 import com.ymcloud.judge.data.TestDataCache;
-import com.ymcloud.judge.docker.container.CodeExecContainer;
-import com.ymcloud.judge.docker.factory.CodeExecContainerFactory;
 import com.ymcloud.judge.exception.CompileException;
-import com.ymcloud.judge.exception.SandBoxException;
-import com.ymcloud.judge.sandbox.SandBox;
-import com.ymcloud.judge.sandbox.SandBoxFactory;
+import com.ymcloud.judge.gojudge.GoJudgeCapacityException;
+import com.ymcloud.judge.gojudge.GoJudgeExecutor;
+import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
 import com.ymcloud.judge.strategy.JudgeRun;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
@@ -17,16 +13,13 @@ import com.ymcloud.pojo.contract.judge.JudgeVerdict;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
-import org.mockito.MockedConstruction;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,45 +31,40 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockConstruction;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 不启动 Docker，验证固定版本租约、逐点流式读取、评分、资源单位和错误边界。
+ * 验证固定版本租约、逐点流式读取、原有评分及 go-judge 的资源和故障边界。
  */
 @ExtendWith(MockitoExtension.class)
 class JudgeRunVersionedDataTest {
 
     @Mock
-    DockerClient docker;
+    GoJudgeExecutor executor;
     @Mock
     TestDataCache cache;
     @Mock
-    CodeExecContainer container;
-    @Mock
-    SandBox sandbox;
-    @TempDir
-    Path directory;
+    GoJudgeTaskSession session;
+
+    final GoJudgeExecutor.PreparedProgram program = new GoJudgeExecutor.PreparedProgram("Java", "program.jar", "artifact");
     JudgeRun runner;
     List<JudgeResult> progress;
 
     @BeforeEach
     void setup() {
-        WorkerProperties properties = new WorkerProperties();
-        properties.setWorkDir(directory);
-        runner = new JudgeRun(docker, cache, properties);
+        runner = new JudgeRun(executor, cache, new WorkerProperties());
         progress = new ArrayList<>();
     }
 
     @Test
-    void formalTaskUsesPinnedVersionAndStreamsOnlyThePointBeingExecuted() throws Exception {
+    void formalTaskUsesPinnedVersionStreamsEachPointAndKeepsMaximumStatistics() throws Exception {
         JudgeTask task = WorkerFixtures.task(0, 0);
+        prepare(task);
         TestDataCache.Lease lease = mock(TestDataCache.Lease.class);
         TestDataCache.CachedCase first = mock(TestDataCache.CachedCase.class);
         TestDataCache.CachedCase second = mock(TestDataCache.CachedCase.class);
@@ -88,103 +76,121 @@ class JudgeRunVersionedDataTest {
         when(first.openOutput()).thenReturn(stream("answer  \r\n\n"));
         when(second.openInput()).thenReturn(stream("second"));
         when(second.openOutput()).thenReturn(stream("answer"));
-        when(container.isRunning()).thenReturn(true);
         List<String> inputs = new ArrayList<>();
-        when(sandbox.execute(eq(container), any(InputStream.class), eq(1200L), anyLong()))
+        when(executor.run(eq(session), eq(program), any(InputStream.class)))
                 .thenAnswer(invocation -> {
-                    InputStream input = invocation.getArgument(1);
+                    InputStream input = invocation.getArgument(2);
                     inputs.add(new String(input.readAllBytes(), StandardCharsets.UTF_8));
-                    return new CodeRunResult("answer\n", null, 3L, 20L);
+                    return accepted("answer\n", inputs.size() == 1 ? 12L : 3L, inputs.size() == 1 ? 20L : 30L);
                 });
-        JudgeResult result = run(task);
+        JudgeResult result = runner.execute(task, progress::add);
         assertEquals(List.of("  first\r\n\n", "second"), inputs);
         assertEquals(JudgeVerdict.STATUS_ACCEPTED, result.getStatus());
         assertEquals(100, result.getScore());
-        var order = inOrder(first, second, sandbox, lease);
+        assertEquals(12L, result.getTime());
+        assertEquals(30L, result.getMemory());
+        var order = inOrder(first, second, executor, lease, session);
         order.verify(first).openInput();
-        order.verify(sandbox).execute(eq(container), any(InputStream.class), eq(1200L), anyLong());
+        order.verify(executor).run(eq(session), eq(program), any(InputStream.class));
         order.verify(first).openOutput();
         order.verify(second).openInput();
-        order.verify(sandbox).execute(eq(container), any(InputStream.class), eq(1200L), anyLong());
+        order.verify(executor).run(eq(session), eq(program), any(InputStream.class));
         order.verify(second).openOutput();
+        order.verify(session).close();
         order.verify(lease).close();
         assertTrue(result.isTerminal());
         assertEquals(task.getExecutionId(), result.getExecutionId());
         assertEquals(List.of(1, 2), progress.stream().map(JudgeResult::getSequence).toList());
-        verify(container).remove(true);
     }
 
     @Test
-    void selfTestKeepsUnicodeAndWhitespaceAndNeverUsesCache() throws Exception {
-        JudgeTask task = WorkerFixtures.task(1, 0);
-        task.setInput(" \t中文😀\r\ntrailing  \n\n");
-        when(container.isRunning()).thenReturn(true);
-        when(sandbox.execute(eq(container), any(InputStream.class), anyLong(), anyLong()))
-                .thenAnswer(invocation -> {
-                    InputStream input = invocation.getArgument(1);
-                    assertArrayEquals(task.getInput().getBytes(StandardCharsets.UTF_8), input.readAllBytes());
-                    return new CodeRunResult("answer\n", null, 5L, 30L);
-                });
-        JudgeResult result = run(task);
-        assertEquals(JudgeVerdict.STATUS_ACCEPTED, result.getStatus());
+    void selfTestPreservesUnicodeWhitespaceAndEmptyInputWithoutDataCache() throws Exception {
+        for (String value : List.of("", " \t中文😀\r\ntrailing  \n\n")) {
+            JudgeTask task = WorkerFixtures.task(1, 0);
+            task.setInput(value);
+            prepare(task);
+            doAnswer(invocation -> {
+                InputStream input = invocation.getArgument(2);
+                assertArrayEquals(value.getBytes(StandardCharsets.UTF_8), input.readAllBytes());
+                return accepted("answer\n", 5L, 30L);
+            }).when(executor).run(eq(session), eq(program), any(InputStream.class));
+            assertEquals(JudgeVerdict.STATUS_ACCEPTED, runner.execute(task, progress::add).getStatus());
+        }
         verifyNoInteractions(cache);
     }
 
     @Test
-    void memoryIsComparedInKiBAndOiRuleRemainsCompatible() throws Exception {
+    void normalExitStillRequiresOutputComparison() throws Exception {
         JudgeTask task = WorkerFixtures.task(1, 0);
-        when(container.isRunning()).thenReturn(true);
-        when(sandbox.execute(eq(container), any(InputStream.class), anyLong(), anyLong()))
-                .thenReturn(new CodeRunResult("answer", null, 5L, task.getMemoryLimit() + 1));
-        JudgeResult result = run(task);
+        prepare(task);
+        when(executor.run(eq(session), eq(program), any(InputStream.class))).thenReturn(accepted("wrong", 2L, 20L));
+        assertEquals(JudgeVerdict.STATUS_WRONG_ANSWER, runner.execute(task, progress::add).getStatus());
+    }
+
+    @Test
+    void resourceFailureKeepsStructuredStatisticsAndNeverComparesOutput() throws Exception {
+        JudgeTask task = WorkerFixtures.task(1, 0);
+        prepare(task);
+        when(executor.run(eq(session), eq(program), any(InputStream.class)))
+                .thenReturn(new GoJudgeExecutor.ExecutionResult(JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED,
+                        "answer", null, 5L, task.getMemoryLimit() + 1));
+        JudgeResult result = runner.execute(task, progress::add);
         assertEquals(JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED, result.getStatus());
-        assertEquals(0, result.getScore());
         assertEquals(task.getMemoryLimit() + 1, result.getMemory());
+        assertEquals(0, result.getScore());
     }
 
     @Test
-    void compileFailureIsCeButSandboxFailurePropagatesForBoundedRetry() throws Exception {
+    void compilationIsCeButInfrastructureFailurePropagatesForBoundedRetry() throws Exception {
         JudgeTask task = WorkerFixtures.task(1, 0);
-        doThrow(new CompileException("syntax")).when(sandbox).compile(eq(container), anyLong());
-        assertEquals(JudgeVerdict.STATUS_COMPILE_ERROR, run(task).getStatus());
-        reset(sandbox);
-        doThrow(new SandBoxException("Docker unavailable")).when(sandbox).compile(eq(container), anyLong());
-        assertThrows(SandBoxException.class, () -> run(task));
+        when(executor.openTask(task)).thenReturn(session);
+        when(executor.compile(session)).thenThrow(new CompileException("syntax"), new IOException("service restarted"));
+        assertEquals(JudgeVerdict.STATUS_COMPILE_ERROR, runner.execute(task, progress::add).getStatus());
+        assertThrows(IOException.class, () -> runner.execute(task, progress::add));
     }
 
     @Test
-    void cacheFailureOrExpiredDeadlinePreventsStartingSandbox() throws Exception {
+    void capacityFailureProducesTerminalSeBeforePreparingDataOrRunningCompiler() throws Exception {
         JudgeTask task = WorkerFixtures.task(0, 0);
-        when(cache.acquire(anyLong(), anyLong(), anyString())).thenThrow(new java.io.IOException("hash mismatch"));
-        assertThrows(java.io.IOException.class, () -> runner.execute(task, progress::add));
-        task.setDeadlineEpochMs(System.currentTimeMillis() - 1);
-        assertThrows(SandBoxException.class, () -> runner.execute(task, progress::add));
-        verifyNoInteractions(docker, container, sandbox);
+        when(executor.capacityFailure(task)).thenReturn("题目内存限制超过当前评测部署容量");
+        JudgeResult result = runner.execute(task, progress::add);
+        assertEquals(JudgeVerdict.STATUS_SYSTEM_ERROR, result.getStatus());
+        assertTrue(result.isTerminal());
+        assertTrue(progress.isEmpty());
+        verifyNoInteractions(cache, session);
+        verify(executor).capacityFailure(task);
     }
 
     @Test
-    void newlyCreatedContainerIsRemovedWhenStartupFails() throws Exception {
+    void oversizedInputProducesExplicitTerminalSeWithoutRetrying() throws Exception {
         JudgeTask task = WorkerFixtures.task(1, 0);
-        doThrow(new SandBoxException("Docker start unavailable")).when(container).start();
-        try (MockedConstruction<CodeExecContainerFactory> factories = mockConstruction(
-                CodeExecContainerFactory.class,
-                (factory, context) -> when(factory.createDockerContainer()).thenReturn(container))) {
-            assertThrows(SandBoxException.class, () -> runner.execute(task, progress::add));
-        }
-        verify(container).remove(true);
-        try (var workDirectories = Files.list(directory)) {
-            assertEquals(0, workDirectories.count());
-        }
-        verifyNoInteractions(sandbox, cache);
+        prepare(task);
+        when(executor.run(eq(session), eq(program), any(InputStream.class)))
+                .thenThrow(new GoJudgeCapacityException("输入文件超过当前部署的单文件容量"));
+        JudgeResult result = runner.execute(task, progress::add);
+        assertEquals(JudgeVerdict.STATUS_SYSTEM_ERROR, result.getStatus());
+        assertTrue(result.isTerminal());
+        assertEquals("输入文件超过当前部署的单文件容量", result.getErrorMessage());
+        verify(session).close();
     }
 
-    private JudgeResult run(JudgeTask task) throws Exception {
-        try (MockedConstruction<CodeExecContainerFactory> factories = mockConstruction(CodeExecContainerFactory.class,
-                (factory, context) -> when(factory.createDockerContainer()).thenReturn(container));
-             MockedConstruction<SandBoxFactory> sandboxes = mockConstruction(SandBoxFactory.class,
-                     (factory, context) -> when(factory.createSandBox(container)).thenReturn(sandbox))) {
-            return runner.execute(task, progress::add);
-        }
+    @Test
+    void cacheFailureAndDeadlinePreventSandboxStartup() throws Exception {
+        JudgeTask task = WorkerFixtures.task(0, 0);
+        when(cache.acquire(anyLong(), anyLong(), anyString())).thenThrow(new IOException("hash mismatch"));
+        assertThrows(IOException.class, () -> runner.execute(task, progress::add));
+        task.setDeadlineEpochMs(System.currentTimeMillis() - 1);
+        assertThrows(IOException.class, () -> runner.execute(task, progress::add));
+        verifyNoInteractions(session);
+    }
+
+    private void prepare(JudgeTask task) throws IOException {
+        when(executor.openTask(task)).thenReturn(session);
+        when(executor.compile(session)).thenReturn(program);
+    }
+
+    private GoJudgeExecutor.ExecutionResult accepted(String output, long time, long memory) {
+        return new GoJudgeExecutor.ExecutionResult(JudgeVerdict.STATUS_ACCEPTED, output, null, time, memory);
     }
 
     private InputStream stream(String value) {

@@ -1,0 +1,15 @@
+# 只发送统一镜像所需文件，禁止把凭据、测试数据、Git 和前端依赖送入构建上下文。
+**
+!docker/
+!docker/go-judge/
+!docker/go-judge/Dockerfile
+!docker/go-judge/packages.lock
+!docker/go-judge/mount.yaml
+!docker/go-judge/*.py
+!ymcloud-judge/
+!ymcloud-judge/src/
+!ymcloud-judge/src/main/
+!ymcloud-judge/src/main/c/
+!ymcloud-judge/src/main/c/*.c
+!ymcloud-judge/target/
+!ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar

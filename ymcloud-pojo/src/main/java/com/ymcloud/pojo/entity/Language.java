@@ -14,13 +14,13 @@ public class Language {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 语言名称，如 C++ 17 */
+    /** 固定语言入口：Java、C、C++ 或 Python */
     private String name;
 
-    /** docker语言镜像，如：gcc:10,openjdk:17-slim */
+    /** 历史镜像兼容元数据，不用于执行或镜像校验 */
     private String image;
 
-    /** docker自定义镜像环境,如oj-cpp-env */
+    /** 历史运行环境兼容元数据，不用于执行或镜像校验 */
     private String env;
 
     /** 语言版本信息，如 g++ 9.4 / Python 3.10 */
@@ -35,10 +35,10 @@ public class Language {
     /** 默认文件扩展名，如 .cpp、.py */
     private String fileExtension;
 
-    /** 编译指令，编译型语言需要，如 g++ main.cpp -o main */
+    /** 历史编译指令兼容元数据，Worker 使用固定工具链命令 */
     private String compileCmd;
 
-    /** 运行指令，如 ./main、python3 main.py */
+    /** 历史运行指令兼容元数据，Worker 使用固定语言入口 */
     private String runCmd;
 
     /** 语言默认代码模板，显示在编辑器中 */

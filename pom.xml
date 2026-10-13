@@ -43,7 +43,6 @@
         <jwt.version>0.9.1</jwt.version>
         <mybatis-plus.version>3.5.10.1</mybatis-plus.version>
         <javax.mail.version>1.6.2</javax.mail.version>
-        <docker.version>3.4.0</docker.version>
         <aws.sdk.version>2.55.12</aws.sdk.version>
         <aliyun.oss.version>3.18.4</aliyun.oss.version>
     </properties>
@@ -123,18 +122,6 @@
                 <artifactId>javax.mail</artifactId>
                 <version>${javax.mail.version}</version>
             </dependency>
-            <!-- docker-api -->
-            <dependency>
-                <groupId>com.github.docker-java</groupId>
-                <artifactId>docker-java</artifactId>
-                <version>${docker.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.docker-java</groupId>
-                <artifactId>docker-java-transport-httpclient5</artifactId>
-                <version>${docker.version}</version>
-            </dependency>
-
         </dependencies>
     </dependencyManagement>
 

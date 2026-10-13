@@ -62,7 +62,7 @@ class WorkerMessageLifecycleTest {
         result = JudgeResult.builder().executionId(task.getExecutionId()).submissionId(task.getSubmissionId())
                 .problemId(task.getProblemId()).testDataVersionId(task.getTestDataVersionId())
                 .strategy(task.getStrategy()).terminal(true).sequence(3).status(JudgeVerdict.STATUS_ACCEPTED).build();
-        listener = new JudgeListener(mapper, new WorkerTaskValidator(properties), store, journal,
+        listener = new JudgeListener(mapper, new WorkerTaskValidator(), store, journal,
                 publisher, runner, properties, new SimpleMeterRegistry());
     }
 

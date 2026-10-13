@@ -62,7 +62,25 @@ ymcloud:
         # 已完成结果与去重状态保存 7 天，单位为毫秒。
         retention-millis: 604800000
         # 每次受限进程 stdout + stderr 的上限，单位字节，默认 1 MiB。
-        max-output-bytes: 1048576
+        max-output-bytes: ${YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES:1048576}
+        go-judge:
+            # 单一执行服务；HTTP 仅允许回环地址，令牌必须独立且至少 32 字符。
+            base-url: ${YMCLOUD_GO_JUDGE_URL:http://127.0.0.1:5050}
+            token: ${YMCLOUD_GO_JUDGE_TOKEN:}
+            connect-timeout: 3s
+            # 覆盖最高 60 秒题目限时，并为传输和返回保留边界。
+            request-timeout: ${YMCLOUD_GO_JUDGE_REQUEST_TIMEOUT:90s}
+            max-response-bytes: ${YMCLOUD_GO_JUDGE_MAX_RESPONSE_BYTES:8388608}
+            max-request-bytes: ${YMCLOUD_GO_JUDGE_MAX_REQUEST_BYTES:25165824}
+            # 单文件和编译产物 16 MiB；内存单位明确区分 bytes 与 KiB。
+            max-file-bytes: ${YMCLOUD_GO_JUDGE_MAX_FILE_BYTES:16777216}
+            max-problem-memory-ki-b: ${YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB:524288}
+            compile-memory-bytes: ${YMCLOUD_GO_JUDGE_COMPILE_MEMORY_BYTES:536870912}
+            compile-wall-time-millis: ${YMCLOUD_GO_JUDGE_COMPILE_WALL_MS:10000}
+            process-limit: ${YMCLOUD_GO_JUDGE_PROCESS_LIMIT:64}
+            sandbox-concurrency: ${YMCLOUD_GO_JUDGE_CONCURRENCY:1}
+            service-memory-bytes: ${YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES:1073741824}
+            cpu-rate-limit: ${YMCLOUD_GO_JUDGE_CPU_RATE:1000}
         cache:
             # 私有测试版本缓存，禁止多个 Worker 共用同一目录。
             directory: ${YMCLOUD_JUDGE_CACHE_DIR:./files/worker/cache}

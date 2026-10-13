@@ -97,8 +97,8 @@ CREATE TABLE `system_setting` (
 CREATE TABLE `language` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '语言ID',
   `name` varchar(100) NOT NULL COMMENT '语言名称：C++、C、Java、Python',
-  `image` varchar(100) NOT NULL COMMENT 'docker语言镜像，如：gcc:10,openjdk:17-slim',
-  `env` varchar(100) NOT NULL COMMENT 'docker自定义镜像环境,如oj-cpp-env',
+  `image` varchar(100) NOT NULL COMMENT '兼容语言镜像元数据，不用于执行或校验',
+  `env` varchar(100) NOT NULL COMMENT '兼容环境元数据，不用于执行或校验',
   `version` varchar(100) DEFAULT NULL COMMENT '语言版本信息，如 g++ 9.4 / Python 3.10',
   `content_type` varchar(100) DEFAULT NULL COMMENT 'MIME类型，用于前端代码高亮，如 text/x-c++src',
   `file_name` varchar(100) NOT NULL COMMENT '默认文件名，如main.py,Main.java,main.cpp,main.c',
@@ -569,10 +569,10 @@ INSERT INTO `role_auth` (`role_id`, `auth_id`) VALUES
     (3, 518),
     (3, 532);
 
--- 名称与来源必须匹配现有判题工厂；myy 是当前代码的本地 OJ 标识。
+-- 四个固定语言入口由 go-judge 统一执行；image/env 仅保留兼容元数据。
 
 INSERT INTO `language` (`id`, `name`, `image`, `env`, `version`, `content_type`, `file_name`, `file_extension`, `compile_cmd`, `run_cmd`, `template_code`, `code_template`, `type`, `status`, `oj`) VALUES
-    (1, 'C++', 'gcc:10', 'oj-cpp-env', 'g++ 10', 'text/x-c++src', 'main.cpp', '.cpp', 'g++ -O2 -w -fmax-errors=3 -std=c++17 main.cpp -lm -o main', './main', '#include <iostream>
+    (1, 'C++', 'go-judge:v1.13.3', 'debian12-toolchains', 'G++ 12.2.0 (C++17)', 'text/x-c++src', 'main.cpp', '.cpp', 'g++ -O2 -w -fmax-errors=3 -std=c++17 main.cpp -lm -o main', './main', '#include <iostream>
 using namespace std;
 
 int main() {
@@ -582,14 +582,14 @@ int main() {
     return 0;
 }
 ', NULL, 0, 1, 'myy'),
-    (2, 'C', 'gcc:10', 'oj-cpp-env', 'gcc 10', 'text/x-csrc', 'main.c', '.c', 'gcc -O2 -w -fmax-errors=3 -std=c11 main.c -lm -o main', './main', '#include <stdio.h>
+    (2, 'C', 'go-judge:v1.13.3', 'debian12-toolchains', 'GCC 12.2.0 (C11)', 'text/x-csrc', 'main.c', '.c', 'gcc -O2 -w -fmax-errors=3 -std=c11 main.c -lm -o main', './main', '#include <stdio.h>
 
 int main(void) {
     // 在这里编写解题代码
     return 0;
 }
 ', NULL, 0, 1, 'myy'),
-    (3, 'Java', 'openjdk:17-slim', 'oj-java-env', 'OpenJDK 17', 'text/x-java', 'Main.java', '.java', 'javac -encoding UTF8 Main.java', 'java Main', 'import java.util.Scanner;
+    (3, 'Java', 'go-judge:v1.13.3', 'debian12-toolchains', 'OpenJDK 17.0.20.1', 'text/x-java', 'Main.java', '.java', 'javac -encoding UTF8 Main.java', 'java Main', 'import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
@@ -598,7 +598,7 @@ public class Main {
     }
 }
 ', NULL, 0, 1, 'myy'),
-    (4, 'Python', 'python:3.11-slim-bookworm', 'oj-python-env', 'Python 3.11', 'text/x-python', 'main.py', '.py', 'python3 -m py_compile main.py', 'python3 main.py', 'def main():
+    (4, 'Python', 'go-judge:v1.13.3', 'debian12-toolchains', 'Python 3.11.2', 'text/x-python', 'main.py', '.py', 'python3 -m py_compile main.py', 'python3 main.py', 'def main():
     # 在这里编写解题代码
     pass
 
