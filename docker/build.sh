@@ -5,25 +5,33 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$ROOT/target/phase3-verification"
 mkdir -p "$OUT/packages"
 cd "$ROOT"
-test -f ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar || {
+YMCLOUD_VERSION="$(python3 docker/project_version.py)"
+test -f ymcloud-judge/target/ymcloud-judge.jar || {
     echo '请先运行 mvn -pl ymcloud-judge -am package -DskipTests' >&2
     exit 1
 }
 test "$(docker info --format '{{.OSType}}')" = linux
 python3 - <<'PY'
 import sys
-import zipfile
-with zipfile.ZipFile('ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar') as archive:
-    private = {'BOOT-INF/classes/application-dev.yml', 'BOOT-INF/classes/application-prod.yml'}
-    if private.intersection(archive.namelist()):
-        sys.exit('Worker jar 包含私有环境配置；清理模块构建产物后重新打包')
+from pathlib import Path
+
+sys.path.insert(0, 'docker')
+from project_version import project_version
+from release import validate_jar
+
+validate_jar(Path('ymcloud-judge/target/ymcloud-judge.jar'), project_version())
 PY
 
 for target in runtime worker; do
+    service=go-judge
+    if [ "$target" = worker ]; then
+        service=worker
+    fi
     docker buildx build --platform linux/amd64 --load \
         --build-context "deb-cache=$OUT/packages" \
         --target "$target" --file docker/go-judge/Dockerfile \
-        --tag "ymcloud-judge-$target:v1.13.3" \
+        --build-arg "YMCLOUD_VERSION=$YMCLOUD_VERSION" \
+        --tag "ymcloud-$service:$YMCLOUD_VERSION" \
         --metadata-file "$OUT/$target.metadata.json" \
         --iidfile "$OUT/$target.iid" .
     check_args=()
@@ -34,12 +42,6 @@ for target in runtime worker; do
         "$(cat "$OUT/$target.iid")" /opt/ymcloud/verify_versions.py "${check_args[@]}"
 done
 
-# 本地交付不发布仓库。Compose 使用不可变内容 ID，归档保留构建导出证据。
+# Compose 使用不可变内容 ID；仓库地址确定后再接入镜像推送。
 python3 docker/go-judge/lock_images.py "$OUT"
-docker image save --output "$OUT/images.tar" \
-    "$(cat "$OUT/runtime.iid")" "$(cat "$OUT/worker.iid")"
-(
-    cd "$OUT"
-    sha256sum images.tar > images.tar.sha256
-)
-echo "统一运行镜像与 Worker 已构建并锁定，产物：$OUT"
+echo "ymcloud $YMCLOUD_VERSION 统一运行镜像与 Worker 已构建并锁定，产物：$OUT"

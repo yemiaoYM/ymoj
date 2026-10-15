@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -147,6 +148,7 @@ class JudgeRunVersionedDataTest {
         when(executor.compile(session)).thenThrow(new CompileException("syntax"), new IOException("service restarted"));
         assertEquals(JudgeVerdict.STATUS_COMPILE_ERROR, runner.execute(task, progress::add).getStatus());
         assertThrows(IOException.class, () -> runner.execute(task, progress::add));
+        verify(session, times(2)).close();
     }
 
     @Test

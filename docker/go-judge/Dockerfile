@@ -42,10 +42,13 @@ COPY docker/go-judge/verify_versions.py docker/go-judge/healthcheck.py /opt/ymcl
 RUN python3 /opt/ymcloud/verify_versions.py --toolchain-only
 
 FROM toolchain AS runtime
+ARG YMCLOUD_VERSION
+LABEL org.opencontainers.image.version="${YMCLOUD_VERSION}"
 COPY --from=upstream /opt/go-judge /opt/go-judge
 COPY docker/go-judge/mount.yaml /opt/mount.yaml
 COPY docker/go-judge/entrypoint.py /opt/ymcloud/entrypoint.py
-RUN mkdir -p /var/lib/go-judge/files /var/lib/go-judge/run \
+RUN test -n "$YMCLOUD_VERSION" \
+    && mkdir -p /var/lib/go-judge/files /var/lib/go-judge/run \
     && chmod 0700 /var/lib/go-judge/files /var/lib/go-judge/run \
     && python3 /opt/ymcloud/verify_versions.py
 WORKDIR /opt
@@ -56,12 +59,37 @@ ENTRYPOINT ["python3", "/opt/ymcloud/entrypoint.py"]
 
 # Worker 与沙箱共用只读软件层；Worker 不具有 Docker 或主机管理权限。
 FROM toolchain AS worker
-RUN groupadd --gid 10001 ymcloud \
+ARG YMCLOUD_VERSION
+LABEL org.opencontainers.image.version="${YMCLOUD_VERSION}"
+RUN test -n "$YMCLOUD_VERSION" \
+    && groupadd --gid 10001 ymcloud \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin ymcloud \
-    && mkdir -p /app /data/work /data/cache /data/results \
+    && mkdir -p /app /data/work /data/cache /data/results /data/logs \
     && chown -R 10001:10001 /data
-COPY ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar /app/worker.jar
+COPY ymcloud-judge/target/ymcloud-judge.jar /app/worker.jar
 COPY docker/go-judge/worker-entrypoint.py docker/go-judge/worker-healthcheck.py /opt/ymcloud/
+ENV LOGGING_FILE_PATH=/data/logs
 USER 10001:10001
 WORKDIR /app
 ENTRYPOINT ["python3", "/opt/ymcloud/worker-entrypoint.py"]
+
+# Web 与 Worker 复用固定 JDK 软件层；业务文件只写入独立数据卷。
+FROM toolchain AS web
+ARG YMCLOUD_VERSION
+LABEL org.opencontainers.image.version="${YMCLOUD_VERSION}"
+RUN test -n "$YMCLOUD_VERSION" \
+    && groupadd --gid 10001 ymcloud \
+    && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin ymcloud \
+    && mkdir -p /app /data/files /data/logs \
+    && chown -R 10001:10001 /data
+COPY ymcloud-web/target/ymcloud-web.jar /app/web.jar
+COPY docker/web/entrypoint.py /opt/ymcloud/entrypoint.py
+COPY docker/web/healthcheck.py /opt/ymcloud/web-healthcheck.py
+COPY docker/web/preflight.py /opt/ymcloud/deployment-preflight.py
+ENV SERVER_ADDRESS=0.0.0.0 YMCLOUD_FILE_BASE_DIR=/data/files LOGGING_FILE_PATH=/data/logs
+USER 10001:10001
+WORKDIR /app
+EXPOSE 9091
+HEALTHCHECK --interval=15s --timeout=10s --start-period=90s --retries=3 \
+    CMD ["python3", "/opt/ymcloud/web-healthcheck.py"]
+ENTRYPOINT ["python3", "/opt/ymcloud/entrypoint.py"]

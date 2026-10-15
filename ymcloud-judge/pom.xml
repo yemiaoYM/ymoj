@@ -4,7 +4,7 @@
     <parent>
         <groupId>com.ymcloud</groupId>
         <artifactId>ymcloud</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>${revision}</version>
     </parent>
 
     <groupId>com.ymcloud.judge</groupId>
@@ -23,7 +23,7 @@
         <dependency>
             <groupId>com.ymcloud.pojo</groupId>
             <artifactId>ymcloud-pojo</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -57,8 +57,8 @@
                 <directory>src/main/resources</directory>
                 <excludes>
                     <!-- 私有环境配置不进入可交付 Worker 镜像。 -->
-                    <exclude>application-dev.yml</exclude>
-                    <exclude>application-prod.yml</exclude>
+                    <exclude>application-dev.*</exclude>
+                    <exclude>application-prod.*</exclude>
                 </excludes>
             </resource>
         </resources>

@@ -67,6 +67,10 @@ public class JudgeDispatchIdAllocator {
                     if (!hasAutoIncrementColumn(statement)) {
                         return null;
                     }
+                    // InnoDB 冷启动时未打开的表可能返回旧计数；先实际读取表，再查询实时自增值。
+                    try (ResultSet row = statement.executeQuery("SELECT id FROM judge_dispatch LIMIT 1")) {
+                        row.next();
+                    }
                     Long next = null;
                     try (ResultSet counter = statement.executeQuery(COUNTER_SQL)) {
                         if (!counter.next()) {

@@ -3,14 +3,16 @@ package com.ymcloud.judge.gojudge;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ymcloud.judge.http.ServiceEndpoint;
 import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.ProxySelector;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -18,6 +20,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * JDK 17 HTTP 客户端。关闭重定向，限制完整传输及响应大小，不传播远端响应正文。
  * 取消 HTTP/1.1 请求会关闭连接，上游将请求 Context 传递给 Worker 以回收整个进程组。
  */
+@Slf4j
 @Component
 public class GoJudgeClient implements AutoCloseable {
 
@@ -47,7 +51,7 @@ public class GoJudgeClient implements AutoCloseable {
 
     private final GoJudgeProperties properties;
     private final ObjectMapper mapper;
-    private final URI base;
+    private final ServiceEndpoint endpoint;
     private final HttpClient http;
     private final ExecutorService uploadReaders;
     private final Set<Future<?>> pending = ConcurrentHashMap.newKeySet();
@@ -58,10 +62,11 @@ public class GoJudgeClient implements AutoCloseable {
         properties.validate();
         this.properties = properties;
         this.mapper = mapper;
-        this.base = validateBase(properties.getBaseUrl());
+        this.endpoint = new ServiceEndpoint(properties.getBaseUrl(), properties.isAllowPrivateNetworkHttp(), false);
         this.http = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .followRedirects(HttpClient.Redirect.NEVER)
+                .proxy(ProxySelector.of(null))
                 .connectTimeout(properties.getConnectTimeout())
                 .build();
         this.uploadReaders = Executors.newFixedThreadPool(properties.getSandboxConcurrency(), runnable -> {
@@ -84,6 +89,16 @@ public class GoJudgeClient implements AutoCloseable {
         }
         JsonNode result = parse(request("POST", "/run", HttpRequest.BodyPublishers.ofByteArray(body),
                 "application/json", deadline, true, 200));
+        try {
+            return validateResults(command, result);
+        } catch (GoJudgeException rejectedResponse) {
+            // 响应尚未交给任务会话；即使判定或统计无效，也要回收已经返回的缓存文件。
+            discardResponseFiles(result);
+            throw rejectedResponse;
+        }
+    }
+
+    private List<JsonNode> validateResults(Map<String, Object> command, JsonNode result) throws GoJudgeException {
         Object commands = command.get("cmd");
         if (!(commands instanceof List<?> requested) || !result.isArray() || result.isEmpty()
                 || result.size() != requested.size()) {
@@ -108,6 +123,56 @@ public class GoJudgeClient implements AutoCloseable {
             results.add(entry);
         }
         return results;
+    }
+
+    private void discardResponseFiles(JsonNode result) {
+        Set<String> fileIds = new LinkedHashSet<>();
+        if (result.isArray()) {
+            for (JsonNode response : result) {
+                collectFileIds(response, fileIds);
+            }
+        } else {
+            collectFileIds(result, fileIds);
+        }
+        long deadline = System.currentTimeMillis() + 2000L;
+        boolean interrupted = Thread.interrupted();
+        try {
+            for (String fileId : Set.copyOf(fileIds)) {
+                if (System.currentTimeMillis() >= deadline) {
+                    break;
+                }
+                if (Thread.interrupted()) {
+                    interrupted = true;
+                }
+                try {
+                    delete(fileId, deadline);
+                    fileIds.remove(fileId);
+                } catch (GoJudgeFileMissingException absent) {
+                    fileIds.remove(fileId);
+                } catch (GoJudgeException unavailable) {
+                    // 未知或无法访问的文件仍由 go-judge 文件 TTL 兜底，不覆盖原始系统故障。
+                }
+            }
+            if (!fileIds.isEmpty()) {
+                log.warn("无效沙箱响应的缓存文件未能全部清理 remaining={}", fileIds.size());
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private static void collectFileIds(JsonNode response, Set<String> fileIds) {
+        JsonNode files = response.path("fileIds");
+        if (!files.isObject()) {
+            return;
+        }
+        for (JsonNode fileId : files) {
+            if (fileId.isTextual() && validFileId(fileId.textValue())) {
+                fileIds.add(fileId.textValue());
+            }
+        }
     }
 
     public String upload(InputStream input, String name, long deadlineEpochMillis) throws GoJudgeException {
@@ -191,7 +256,15 @@ public class GoJudgeClient implements AutoCloseable {
     private byte[] request(String method, String path, HttpRequest.BodyPublisher body, String contentType,
                            long deadline, boolean authenticated, int expectedStatus) throws GoJudgeException {
         checkActive(deadline);
-        HttpRequest.Builder builder = HttpRequest.newBuilder(base.resolve(path))
+        URI target;
+        try {
+            target = endpoint.requestUri(path, Math.min(properties.getConnectTimeout().toNanos(),
+                    deadline - System.nanoTime()));
+        } catch (IOException e) {
+            throw new GoJudgeException("go-judge 服务地址解析未通过私网限制");
+        }
+        checkActive(deadline);
+        HttpRequest.Builder builder = HttpRequest.newBuilder(target)
                 .timeout(Duration.ofNanos(Math.max(1, deadline - System.nanoTime())))
                 .header("Accept", "application/json")
                 .method(method, body);
@@ -312,23 +385,6 @@ public class GoJudgeClient implements AutoCloseable {
 
     private static boolean validFileId(String value) {
         return value != null && value.matches("[A-Za-z0-9_-]{1,128}");
-    }
-
-    private static URI validateBase(String configured) {
-        try {
-            URI uri = new URI(configured == null ? "" : configured);
-            String host = uri.getHost();
-            boolean loopback = "127.0.0.1".equals(host) || "localhost".equalsIgnoreCase(host)
-                    || "[::1]".equals(host) || "::1".equals(host);
-            if (!("https".equalsIgnoreCase(uri.getScheme()) || ("http".equalsIgnoreCase(uri.getScheme()) && loopback))
-                    || host == null || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null
-                    || uri.getPort() > 65535 || (!uri.getPath().isEmpty() && !"/".equals(uri.getPath()))) {
-                throw new IllegalArgumentException("go-judge 地址必须使用 HTTPS，本机回环地址可使用 HTTP");
-            }
-            return uri;
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("go-judge 服务地址无效");
-        }
     }
 
     private static void closeQuietly(InputStream input) {

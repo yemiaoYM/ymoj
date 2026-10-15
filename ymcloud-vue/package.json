@@ -1,14 +1,18 @@
 {
   "name": "vue-project",
-  "version": "0.0.0",
+  "version": "4.0.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/sync-version.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/sync-version.mjs",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
+    "prebuild-only": "node scripts/sync-version.mjs",
     "build-only": "vite build",
-    "type-check": "vue-tsc --build"
+    "type-check": "vue-tsc --build",
+    "test:version": "node --test src/test/version.test.mjs"
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",

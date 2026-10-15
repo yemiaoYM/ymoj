@@ -1,5 +1,6 @@
 package com.ymcloud.judge.data;
 
+import com.ymcloud.judge.http.ServiceEndpoint;
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -10,12 +11,9 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.Proxy;
 import java.net.SocketTimeoutException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.time.Duration;
-import java.util.Locale;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
@@ -33,7 +31,7 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
     public static final String TOKEN_HEADER = JudgeProtocol.SERVICE_TOKEN_HEADER;
     private static final String DATA_PREFIX = "/internal/judge-worker/problems/";
 
-    private final URI base;
+    private final ServiceEndpoint endpoint;
     private final String token;
     private final int connectTimeout;
     private final int readTimeout;
@@ -46,7 +44,7 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
         if (properties == null || cacheProperties == null) {
             throw new IllegalArgumentException("Worker 数据接口配置缺失");
         }
-        this.base = validateBase(properties.getBaseUrl());
+        this.endpoint = new ServiceEndpoint(properties.getBaseUrl(), properties.isAllowPrivateNetworkHttp(), true);
         this.token = properties.getToken();
         if (token == null || token.length() < 32 || token.length() > 512
                 || token.chars().anyMatch(character -> character <= 32 || character >= 127)) {
@@ -107,8 +105,10 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
         }
         String path = DATA_PREFIX + problemId + "/versions/" + versionId
                 + (fileId == null ? "/manifest" : "/files/" + fileId);
-        HttpURLConnection connection = (HttpURLConnection) URI.create(base.toString() + path)
-                .toURL().openConnection();
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(readTimeout);
+        HttpURLConnection connection = (HttpURLConnection) endpoint.requestUri(path,
+                        TimeUnit.MILLISECONDS.toNanos(Math.min(connectTimeout, readTimeout)))
+                .toURL().openConnection(Proxy.NO_PROXY);
         connection.setRequestMethod("GET");
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(connectTimeout);
@@ -123,13 +123,12 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
             throw new IOException("Worker 数据客户端已经关闭");
         }
         AtomicBoolean expired = new AtomicBoolean();
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(readTimeout);
         ScheduledFuture<?> timer;
         try {
             timer = deadlines.schedule(() -> {
                 expired.set(true);
                 connection.disconnect();
-            }, readTimeout, TimeUnit.MILLISECONDS);
+            }, Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
         } catch (RuntimeException e) {
             connections.remove(connection);
             connection.disconnect();
@@ -138,6 +137,9 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
         boolean opened = false;
         int status = -1;
         try {
+            if (expired.get() || System.nanoTime() >= deadline) {
+                throw new SocketTimeoutException("读取测试数据接口超时");
+            }
             status = connection.getResponseCode();
             if (closed.get() || Thread.currentThread().isInterrupted()) {
                 throw new IOException("Worker 数据请求已经停止");
@@ -168,33 +170,6 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
                 connection.disconnect();
             }
         }
-    }
-
-    private static URI validateBase(String configured) {
-        try {
-            URI uri = new URI(configured == null ? "" : configured);
-            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-            String host = uri.getHost();
-            if ((!"http".equals(scheme) && !"https".equals(scheme)) || host == null || host.isBlank()
-                    || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null
-                    || uri.getPort() > 65535
-                    || Objects.toString(uri.getRawPath(), "").contains("%") || !uri.normalize().equals(uri)
-                    || ("http".equals(scheme) && !isLoopback(host))) {
-                throw new IllegalArgumentException("Worker 数据接口必须使用 HTTPS，本机回环地址可使用 HTTP");
-            }
-            String normalized = uri.toString();
-            while (normalized.endsWith("/")) {
-                normalized = normalized.substring(0, normalized.length() - 1);
-            }
-            return URI.create(normalized);
-        } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Worker 数据接口地址无效", e);
-        }
-    }
-
-    private static boolean isLoopback(String host) {
-        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)
-                || "::1".equals(host) || "[::1]".equals(host);
     }
 
     private static int timeout(Duration duration, Duration maximum) {

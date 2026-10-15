@@ -4,7 +4,7 @@
     <parent>
         <groupId>com.ymcloud</groupId>
         <artifactId>ymcloud</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <version>${revision}</version>
     </parent>
 
     <groupId>com.ymcloud.core</groupId>
@@ -41,13 +41,13 @@
         <dependency>
             <groupId>com.ymcloud.common</groupId>
             <artifactId>ymcloud-common</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
+            <version>${project.version}</version>
         </dependency>
         <!--ymcloud-pojo实体类包-->
         <dependency>
             <groupId>com.ymcloud.pojo</groupId>
             <artifactId>ymcloud-pojo</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
+            <version>${project.version}</version>
         </dependency>
         <!--系统调用-->
         <dependency>

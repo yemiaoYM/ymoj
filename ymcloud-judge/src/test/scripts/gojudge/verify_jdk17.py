@@ -39,7 +39,7 @@ def main():
         fixture.mkdir(parents=True, exist_ok=False)
         if os.name != "nt":
             fixture.chmod(0o755)
-        support.extract_worker(ROOT / "ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar", fixture)
+        support.extract_worker(ROOT / "ymcloud-judge/target/ymcloud-judge.jar", fixture)
         shutil.copyfile(ROOT / "ymcloud-judge/src/test/java/com/ymcloud/judge/GoJudgeJdk17Smoke.java",
                         fixture / "GoJudgeJdk17Smoke.java")
         if os.name != "nt":

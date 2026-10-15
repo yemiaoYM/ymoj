@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="ymcloud-judge-worker"/>
+    <springProperty scope="context" name="APP_LOG_DIR" source="logging.file.path" defaultValue="./files/logs/worker"/>
+    <springProperty scope="context" name="APP_LOG_LEVEL" source="logging.level.root" defaultValue="INFO"/>
+    <springProperty scope="context" name="APP_LOG_MAX_FILE_SIZE" source="logging.logback.rollingpolicy.max-file-size" defaultValue="20MB"/>
+    <springProperty scope="context" name="APP_LOG_MAX_HISTORY" source="logging.logback.rollingpolicy.max-history" defaultValue="15"/>
+    <springProperty scope="context" name="APP_LOG_TOTAL_SIZE_CAP" source="logging.logback.rollingpolicy.total-size-cap" defaultValue="200MB"/>
+
+    <!-- 控制台按终端能力着色；文件保持纯文本，包含完整异常堆栈。 -->
+    <property name="APP_CONSOLE_PATTERN" value="%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr([${APP_NAME}]){blue} [%thread] %clr(%-5level) %clr(%logger{50}){cyan} - %msg%n%ex"/>
+    <property name="APP_FILE_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [${APP_NAME}] [%thread] %-5level %logger{50} - %msg%n%ex"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${APP_CONSOLE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="APPLICATION" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${APP_LOG_DIR}/application.log</file>
+        <encoder>
+            <pattern>${APP_FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${APP_LOG_DIR}/archive/application.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${APP_LOG_MAX_FILE_SIZE}</maxFileSize>
+            <maxHistory>${APP_LOG_MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${APP_LOG_TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <appender name="ERROR" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- ERROR 同时保留在应用日志；错误文件不混入 INFO、WARN。 -->
+        <file>${APP_LOG_DIR}/error.log</file>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>${APP_FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${APP_LOG_DIR}/archive/error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${APP_LOG_MAX_FILE_SIZE}</maxFileSize>
+            <maxHistory>${APP_LOG_MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${APP_LOG_TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <!-- 不采集调用栈位置；队列满时等待，正常关闭时最多等待 5 秒写完。 -->
+    <appender name="APPLICATION_ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+        <neverBlock>false</neverBlock>
+        <maxFlushTime>5000</maxFlushTime>
+        <appender-ref ref="APPLICATION"/>
+    </appender>
+    <appender name="ERROR_ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+        <neverBlock>false</neverBlock>
+        <maxFlushTime>5000</maxFlushTime>
+        <appender-ref ref="ERROR"/>
+    </appender>
+
+    <!-- 所有环境保留控制台日志，Docker logs 可直接观察启动、判题及恢复过程。 -->
+    <root level="${APP_LOG_LEVEL}">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="APPLICATION_ASYNC"/>
+        <appender-ref ref="ERROR_ASYNC"/>
+    </root>
+</configuration>

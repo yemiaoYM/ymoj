@@ -4,11 +4,9 @@ import com.ymcloud.core.storage.StorageDirectoryResolver;
 import com.ymcloud.core.storage.StorageProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
-import org.springframework.core.io.ClassPathResource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -43,16 +41,9 @@ class StorageDirectoryConfigurationTest {
     }
 
     @Test
-    void developmentAndProductionProfilesInheritStorageWithoutWorkerDirectories() throws Exception {
-        YamlPropertySourceLoader yaml = new YamlPropertySourceLoader();
+    void developmentAndProductionProfilesInheritPublicStorageDefaultsWithoutPrivateConfiguration() {
+        // 可交付应用不包含私有 profile；这里只激活 profile 名称并读取公开主配置。
         for (String profile : List.of("dev", "prod")) {
-            for (var source : yaml.load("profile-directory-" + profile,
-                    new ClassPathResource("application-" + profile + ".yml"))) {
-                assertNull(source.getProperty("ymcloud.file.base-dir"),
-                        "Profiles must inherit the file directory from main configuration.");
-                assertNull(source.getProperty("ymcloud.docker.host-working-dir"),
-                        "Web profiles must not configure the independent Worker directory.");
-            }
             ConfigurableEnvironment environment = configuration(Map.of("spring.profiles.active", profile));
             assertEquals("./files", environment.getRequiredProperty("ymcloud.file.base-dir"));
             assertNull(environment.getProperty("ymcloud.docker.host-working-dir"));

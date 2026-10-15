@@ -8,8 +8,13 @@ import subprocess
 import sys
 
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from project_version import project_version
+
+
 def main():
     destination = pathlib.Path(sys.argv[1])
+    version = project_version()
     records = {}
     for target in ("runtime", "worker"):
         image_id = (destination / f"{target}.iid").read_text(encoding="utf-8").strip()
@@ -20,6 +25,9 @@ def main():
         ))[0]
         if image["Id"] != image_id or image["Os"] != "linux" or image["Architecture"] != "amd64":
             raise SystemExit("运行镜像与构建锁不一致")
+        labels = image.get("Config", {}).get("Labels") or {}
+        if labels.get("org.opencontainers.image.version") != version:
+            raise SystemExit("运行镜像版本与父 POM 不一致，必须重新构建")
         metadata = json.loads((destination / f"{target}.metadata.json").read_text(encoding="utf-8"))
         digest = metadata.get("containerimage.digest", "")
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
@@ -27,10 +35,12 @@ def main():
         if metadata.get("containerimage.config.digest") != image_id:
             raise SystemExit("构建 config digest 与实际 image ID 不一致")
         records[target] = {
+            "version": version,
             "imageId": image_id,
             "exporterDigest": digest,
             "digestKind": "docker-config" if digest == image_id else "image-manifest",
         }
+    records["version"] = version
     (destination / "images.lock.json").write_text(
         json.dumps(records, indent=2) + "\n", encoding="utf-8",
     )

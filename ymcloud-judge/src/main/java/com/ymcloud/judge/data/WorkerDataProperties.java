@@ -15,6 +15,7 @@ import java.time.Duration;
 public class WorkerDataProperties {
 
     private String baseUrl = "http://127.0.0.1:9091";
+    private boolean allowPrivateNetworkHttp;
     private String token;
     private Duration connectTimeout = Duration.ofSeconds(5);
     private Duration readTimeout = Duration.ofSeconds(60);

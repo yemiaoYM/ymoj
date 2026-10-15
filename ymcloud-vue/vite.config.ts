@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { createVersionPlugin } from './scripts/sync-version.mjs';
 //仅引入用到的组件与样式
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver, NaiveUiResolver } from 'unplugin-vue-components/resolvers'
@@ -9,6 +10,7 @@ import viteCompression from 'vite-plugin-compression';
 
 export default defineConfig({
   plugins: [
+    createVersionPlugin(fileURLToPath(new URL('../pom.xml', import.meta.url))),
     vue(),
     Components({
       resolvers: [ElementPlusResolver(), NaiveUiResolver()],

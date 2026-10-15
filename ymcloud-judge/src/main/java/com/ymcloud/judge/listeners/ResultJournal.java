@@ -24,6 +24,8 @@ import java.util.UUID;
 @Slf4j
 public class ResultJournal {
 
+    private static final long TEMPORARY_RETENTION_MILLIS = 60 * 60 * 1000L;
+
     private final ObjectMapper mapper;
     private final Path directory;
     private final long retentionMillis;
@@ -81,27 +83,41 @@ public class ResultJournal {
     }
 
     /**
-     * 清理超过恢复保留期的已命名结果；写入、读取和清理互斥，不扫描沙箱或数据目录。
+     * 正式结果按恢复保留期清理，异常退出的临时文件至少保留一小时。
+     * 写入、读取和清理互斥，不能删除本实例正在写入的临时文件，不扫描沙箱或数据目录。
      */
     public synchronized void prune() throws IOException {
         WorkerPaths.rejectSymbolicLinks(directory);
-        long cutoff = System.currentTimeMillis() - retentionMillis;
+        long now = System.currentTimeMillis();
+        long cutoff = now - retentionMillis;
+        long temporaryCutoff = now - TEMPORARY_RETENTION_MILLIS;
         int removed = 0;
+        int temporaryRemoved = 0;
         try (var files = Files.list(directory)) {
             var iterator = files.iterator();
             while (iterator.hasNext()) {
                 Path path = iterator.next();
                 String name = path.getFileName().toString();
+                if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                    continue;
+                }
+                long modified = Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS).toMillis();
                 if (name.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json")
-                        && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                        && Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS).toMillis() < cutoff) {
+                        && modified < cutoff) {
                     Files.deleteIfExists(path);
                     removed++;
+                } else if (name.matches("\\.result-[0-9]{1,20}\\.tmp") && modified < temporaryCutoff) {
+                    // 仅识别 createTempFile 生成的十进制随机后缀；其他文件名不属于本组件。
+                    Files.deleteIfExists(path);
+                    temporaryRemoved++;
                 }
             }
         }
         if (removed > 0) {
             log.info("Worker 清理过期终态记录 count={}", removed);
+        }
+        if (temporaryRemoved > 0) {
+            log.info("Worker 清理异常退出残留的结果临时文件 count={}", temporaryRemoved);
         }
     }
 

@@ -128,9 +128,10 @@ user:
 logging:
     charset:
         # 控制台与日志文件统一 UTF-8，避免 Windows 默认编码造成中文乱码。
-        # console: UTF-8
+        console: UTF-8
         file: UTF-8
+    file:
+        # 可用 LOGGING_FILE_PATH 覆盖；Docker 镜像默认写入持久化的 /data/logs。
+        path: ./files/logs/web
     level:
-        com.baomidou.mybatis-plus: DEBUG
-    pattern:
-        dateformat: MM-dd HH:mm:ss:SSS
+        root: INFO

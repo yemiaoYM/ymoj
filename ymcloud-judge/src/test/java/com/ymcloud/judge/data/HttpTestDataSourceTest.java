@@ -178,6 +178,20 @@ class HttpTestDataSourceTest {
     }
 
     @Test
+    void privateHttpRequiresExplicitDeploymentOptInAndStillRejectsPublicDestinations() {
+        properties.setBaseUrl("http://172.18.0.3:9091");
+        assertThrows(IllegalArgumentException.class, this::source);
+        properties.setAllowPrivateNetworkHttp(true);
+        try (HttpTestDataSource ignored = source()) {
+            assertEquals(0, requests.get());
+        }
+        properties.setBaseUrl("http://169.254.169.254");
+        assertThrows(IllegalArgumentException.class, this::source);
+        properties.setBaseUrl("http://8.8.8.8");
+        assertThrows(IllegalArgumentException.class, this::source);
+    }
+
+    @Test
     void weakInvalidTokensAndInvalidTimeoutsFailWithoutNetworkRequests() {
         for (String invalid : List.of("short", TEST_TOKEN + "\n", TEST_TOKEN + "\r", TEST_TOKEN + " ")) {
             properties.setToken(invalid);

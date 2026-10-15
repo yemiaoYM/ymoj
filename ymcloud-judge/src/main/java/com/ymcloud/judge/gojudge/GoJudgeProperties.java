@@ -18,6 +18,7 @@ import java.time.Duration;
 public class GoJudgeProperties {
 
     private String baseUrl = "http://127.0.0.1:5050";
+    private boolean allowPrivateNetworkHttp;
     private String token;
     private Duration connectTimeout = Duration.ofSeconds(3);
     private Duration requestTimeout = Duration.ofSeconds(90);

@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -185,11 +186,14 @@ class GoJudgeExecutorTest {
         when(client.upload(any(InputStream.class), anyString(), anyLong())).thenReturn("source-id");
         for (String status : List.of("Nonzero Exit Status", "Time Limit Exceeded", "Memory Limit Exceeded",
                 "Output Limit Exceeded", "Signalled")) {
-            when(client.execute(any(), anyLong())).thenReturn(List.of(result(status)));
+            ObjectNode response = result(status);
+            response.putObject("fileIds").put("program.jar", "partial-artifact");
+            when(client.execute(any(), anyLong())).thenReturn(List.of(response));
             try (GoJudgeTaskSession session = executor.openTask(task)) {
                 assertThrows(CompileException.class, () -> executor.compile(session));
             }
         }
+        verify(client, times(5)).delete(eq("partial-artifact"), anyLong());
         ObjectNode tooLarge = result("File Error");
         tooLarge.putArray("fileError").addObject().put("type", "CopyOutSizeExceeded");
         when(client.execute(any(), anyLong())).thenReturn(List.of(tooLarge));
@@ -274,6 +278,65 @@ class GoJudgeExecutorTest {
             }
         }
         verify(client, times(2)).delete(eq("input-id"), anyLong());
+    }
+
+    @Test
+    void serviceFileLossReleasesTheAttemptBeforeRecompilingWithNewFileIds() throws Exception {
+        when(client.upload(any(InputStream.class), anyString(), anyLong()))
+                .thenReturn("source-one", "input-one", "source-two", "input-two");
+        ObjectNode first = result("Accepted");
+        first.putObject("fileIds").put("program.jar", "artifact-one");
+        ObjectNode second = result("Accepted");
+        second.putObject("fileIds").put("program.jar", "artifact-two");
+        when(client.execute(any(), anyLong()))
+                .thenReturn(List.of(first))
+                .thenThrow(new GoJudgeFileMissingException())
+                .thenReturn(List.of(second))
+                .thenReturn(List.of(result("Accepted")));
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            GoJudgeExecutor.PreparedProgram program = executor.compile(session);
+            assertThrows(GoJudgeFileMissingException.class, () -> executor.run(session, program, stream("first")));
+        }
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            GoJudgeExecutor.PreparedProgram program = executor.compile(session);
+            assertEquals("artifact-two", program.fileId());
+            assertEquals(JudgeVerdict.STATUS_ACCEPTED, executor.run(session, program, stream("second")).status());
+        }
+        var order = inOrder(client);
+        order.verify(client).delete(eq("source-one"), anyLong());
+        order.verify(client).delete(eq("input-one"), anyLong());
+        order.verify(client).delete(eq("artifact-one"), anyLong());
+        order.verify(client).upload(any(InputStream.class), eq("Main.java"), anyLong());
+        order.verify(client).delete(eq("source-two"), anyLong());
+        order.verify(client).delete(eq("input-two"), anyLong());
+        order.verify(client).delete(eq("artifact-two"), anyLong());
+    }
+
+    @Test
+    void cancelledExecutionStillDeletesInputAndArtifactWithoutLosingTheInterrupt() throws Exception {
+        when(client.upload(any(InputStream.class), anyString(), anyLong())).thenReturn("source-id", "input-id");
+        ObjectNode compiled = result("Accepted");
+        compiled.putObject("fileIds").put("program.jar", "artifact-id");
+        when(client.execute(any(), anyLong())).thenReturn(List.of(compiled)).thenAnswer(invocation -> {
+            Thread.currentThread().interrupt();
+            throw new GoJudgeException("cancelled");
+        });
+        doAnswer(invocation -> {
+            assertFalse(Thread.currentThread().isInterrupted(), "租约中断不能阻止远端文件清理");
+            return null;
+        }).when(client).delete(anyString(), anyLong());
+        try {
+            try (GoJudgeTaskSession session = executor.openTask(task)) {
+                GoJudgeExecutor.PreparedProgram program = executor.compile(session);
+                assertThrows(GoJudgeException.class, () -> executor.run(session, program, stream("")));
+            }
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+        verify(client).delete(eq("source-id"), anyLong());
+        verify(client).delete(eq("input-id"), anyLong());
+        verify(client).delete(eq("artifact-id"), anyLong());
     }
 
     private ObjectNode result(String status) {

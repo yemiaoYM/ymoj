@@ -4,11 +4,18 @@
 
 Web 和 Java Judge Worker 分别启动：Web 负责提交鉴权、任务持久化及结果落库，Worker 通过 RabbitMQ 消费任务，下载固定版本的私有测试数据，通过唯一的 go-judge v1.13.3 HTTP 执行服务运行 Java、C、C++ 和 Python 程序。
 
+**完整网站部署请先看 [单机 Docker 部署](deploy/README.md)。** 下载或克隆已发布版本的源码，进入 `deploy`，按需修改 `.env`，执行 `docker compose up -d` 即可拉取镜像并启动整个网站，无需安装 Java、Maven、Node 或 Python。默认从腾讯云的 `ccr.ccs.tencentyun.com/ymoj/ymcloud` 拉取；拉取失败时，只需将 `.env` 中的 `IMAGE_REPOSITORY` 改为 Docker Hub 主仓库 `docker.io/yemiao1/ymoj`。Compose 已填写七个镜像的版本标签，无需再填写版本号。**默认密码和密钥仅用于快速部署测试，正式上线前必须修改。** 维护者仍可执行 `python docker/release.py` 构建本地镜像和独立部署目录。以下“首次启动”章节保留给需要分别运行前后端的源码开发者；`docker/go-judge` 的两服务部署适用于已有 Web 和中间件的节点。
+
+项目从 **v4.0.0** 开始统一发布版本。构建版本统一在根 `pom.xml` 的 `<revision>` 设置：子模块继承父版本，内部模块依赖使用同一项目版本；前端开发或构建时自动同步 `package.json` 与锁文件的项目版本，镜像构建脚本也从父 POM 读取版本。本机构建使用 `ymcloud-web:4.0.0`、`ymcloud-worker:4.0.0`、`ymcloud-frontend:4.0.0`、`ymcloud-go-judge:4.0.0` 等标签；公开仓库对应使用 `web-4.0.0`、`worker-4.0.0`、`frontend-4.0.0`、`go-judge-4.0.0` 标签，由该版本的部署配置统一提供。go-judge 二进制及 MySQL 等第三方组件继续使用各自的上游版本。
+
+Java 构建产物采用稳定文件名 `ymcloud-web.jar`、`ymcloud-judge.jar`，实际版本保存在 JAR 的 Maven 元数据中；前端构建生成 `dist/version.json`。发布脚本会检查这些版本，拒绝把旧产物标记为新版本。Maven 安装时通过 Flatten 插件解析版本占位，确保模块之间的依赖可用。
+
 ## 项目结构
 
 ```text
 ymcloud/
 ├── docker/                # 统一 go-judge 镜像、低配 Compose 及验证脚本
+├── deploy/                # 完整网站的单机 Compose、统一 .env 与部署说明
 ├── seaweedfs/             # 可选的 SeaweedFS Docker 安装工具
 ├── sql/ymcloud.sql        # 当前版本的建库结构与初始化数据
 ├── files/                 # 启动后创建的本地文件目录，不提交 Git
@@ -152,20 +159,20 @@ bash docker/build.sh
 
 ```text
 mvn package -DskipTests
-java -jar ymcloud-web/target/ymcloud-web-0.0.1-SNAPSHOT.jar
+java -jar ymcloud-web/target/ymcloud-web.jar --spring.config.additional-location=file:./ymcloud-web/src/main/resources/
 ```
 
-也可以在 IDE 中运行 `com.ymcloud.YmCloudWebApplication`。默认后端监听 `127.0.0.1:9091`。
+也可以在 IDE 中运行 `com.ymcloud.YmCloudWebApplication`，工作目录为项目根目录，程序参数填写 `--spring.config.additional-location=file:./ymcloud-web/src/main/resources/`。Web 和 Worker 的私有 dev/prod 配置均不进入发布 jar；开发时显式读取上述配置目录，完整 Docker 部署则统一读取 `.env`。默认后端监听 `127.0.0.1:9091`。
 
 另一个终端启动 Worker。它不连接 MySQL，也不需要存储服务的地址、桶或访问密钥。使用与 Web 相同的开发 Redis、RabbitMQ virtual host 和服务身份，并设置 Worker 可访问的 Web 地址：
 
 ```text
-java -jar ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar --spring.config.additional-location=file:./ymcloud-judge/src/main/resources/
+java -jar ymcloud-judge/target/ymcloud-judge.jar --spring.config.additional-location=file:./ymcloud-judge/src/main/resources/
 ```
 
 Worker 与 Web 一样默认启用 `dev`。在 `ymcloud-judge/src/main/resources/application-dev.yml` 中填写与 Web 开发环境一致的 `spring.data.redis`、`spring.rabbitmq` 和 `ymcloud.worker.data` 配置。Worker 私有 dev/prod 配置不进入 jar，上述开发命令显式读取源码旁的配置目录；生产使用外置配置目录或环境变量。不要复制包含业务数据库凭据的 Web 配置到 Worker。也可通过 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD`、`REDIS_DATABASE` 和 `RABBITMQ_HOST`、`RABBITMQ_PORT`、`RABBITMQ_USERNAME`、`RABBITMQ_PASSWORD`、`RABBITMQ_VHOST` 设置基础连接默认值；实际环境配置中的显式值会覆盖这些默认值。`YMCLOUD_WORKER_API_URL` 默认为 `http://127.0.0.1:9091`。
 
-远程 Worker 访问 Web 必须使用 HTTPS；只有本机回环地址允许 HTTP，客户端不跟随重定向。反向代理只向判题节点开放 `/internal/judge-worker/**`；无需向浏览器提供该入口。
+远程 Worker 访问 Web 默认必须使用 HTTPS，本机回环地址可用 HTTP。完整单机 Compose 显式允许其隔离容器网络中的 RFC1918 私网 HTTP；客户端校验全部 DNS 结果并使用已验证 IP，不跟随重定向。反向代理只向判题节点开放 `/internal/judge-worker/**`；无需向浏览器提供该入口。
 
 双方会声明以下新交换机和队列：
 
@@ -224,8 +231,8 @@ OJ 首次保存存储配置时自动生成 `files/.secrets/storage-config.key`�
 开发连接写入 `application-dev.yml`，生产连接写入 `application-prod.yml`。生产启动时显式选择环境：
 
 ```text
-java -Xms64m -Xmx256m -jar ymcloud-web/target/ymcloud-web-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
-java -Xms32m -Xmx128m -jar ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod --spring.config.additional-location=file:./config/
+java -Xms64m -Xmx256m -jar ymcloud-web/target/ymcloud-web.jar --spring.profiles.active=prod --spring.config.additional-location=file:./config/
+java -Xms32m -Xmx128m -jar ymcloud-judge/target/ymcloud-judge.jar --spring.profiles.active=prod --spring.config.additional-location=file:./config/
 ```
 
 以上为单 Worker、低并发部署的 JVM 堆起点，堆上限不等于进程总内存。操作系统、MySQL、Redis、RabbitMQ 和判题容器仍需各自预留空间；编译和用户程序在 Docker 内运行，不占 Worker 的 Java 堆。题目的时间、内存限制决定评测语义，增加或减少 Worker 堆不会改变这些限制。
@@ -260,6 +267,10 @@ Worker 已记录队列等待时间、执行耗时、缓存命中、下载失败�
 
 Worker 的 INFO 日志记录启动、任务接收、数据准备、编译完成、终态发布及恢复；WARN 记录下载校验、租约、重试和系统故障。日志包含提交、执行和数据版本标识，耗时使用毫秒，内存使用 KiB，不记录源码、测试输入输出或凭据。开发时可在私有配置中将 `logging.level.com.ymcloud.judge` 和 `logging.level.com.ymcloud.web.judge` 设为 `DEBUG`，查看测试点、缓存命中及消息进度；生产默认保持 INFO。
 
+Web 和 Worker 使用各自的 `logback-spring.xml`：控制台保留 INFO 并按终端能力着色；`application.log` 保存应用日志，`error.log` 单独保存 ERROR，文件统一 UTF-8、无颜色字符。默认目录分别为 `./files/logs/web`、`./files/logs/worker`（相对于进程工作目录），可用 `LOGGING_FILE_PATH` 覆盖。Docker 镜像写入 `/data/logs` 的持久卷。日志按天或 20MB 滚动并 gzip 压缩，每类归档最多 15 天、200MB，启动时清理过期归档；应用日志上限与判题结果记录的保留期互不影响。完整部署可在 `.env` 的日志部分调整这些值。
+
+判题源码从内存上传，编译结束即删除上传文件；每点输入在执行结束后删除，编译产物在全部测试点完成或任务异常退出时删除。已收到但校验无效的沙箱响应也会回收其中合法文件 ID；清理失败或断连未返回 ID 时由 go-judge 默认 1 小时 TTL 兜底。沙箱启动清理独占 `files`、`run` 两个子目录，Worker 容器启动仅清工作目录。测试版本缓存按 5GiB 容量淘汰无引用版本；正式结果记录保留 7 天，每分钟检查，异常退出的 `.result-*.tmp` 超过 1 小时后回收。源码、产物与临时文件不能和测试数据缓存、结果恢复记录一并清空。
+
 ## 开发验证
 
 修改前端后运行 `npm run type-check` 和 `npm run build`。Java 单元测试可按涉及的模块与测试类筛选执行。旧版 `WebTest` 是依赖业务数据、邮件服务和固定脚本的手工调试用例，默认跳过；仅在准备好对应开发环境后显式设置 `YMCLOUD_RUN_LEGACY_WEB_TESTS=true`，不要用于隔离回归。
@@ -284,7 +295,7 @@ python -B ymcloud-web/src/test/scripts/judge/verify_linux.py
 
 ## 第三阶段升级
 
-上线前暂停提交，排空任务、重试和结果队列，并确认 `judge_dispatch` 未完成任务及活跃租约收敛。然后执行可重跑的 [语言版本元数据迁移](sql/migrations/phase3-language-versions.sql)，更新为统一工具链版本；迁移不修改历史提交和任务快照，`image/env` 仅保留兼容元数据。替换 Worker 与 go-judge 后完成四语言及普通提交、比赛、自测、状态轮询和 AC 统计冒烟，再恢复提交。恢复旧部署采用整份发布包恢复，代码没有双引擎开关。
+上线前暂停提交，排空任务、重试和结果队列，并确认 `judge_dispatch` 未完成任务及活跃租约收敛。然后执行可重跑的 [语言版本元数据迁移](sql/migrations/phase3-language-versions.sql)，更新为统一工具链版本；迁移不修改历史提交和任务快照，`image/env` 仅保留兼容元数据。替换 Worker 与 go-judge 后完成四语言及普通提交、比赛、自测、状态轮询和 AC 统计冒烟，再恢复提交。恢复旧部署时成套恢复上一版本的部署配置、固定镜像及对应数据，代码没有双引擎开关。
 
 完整上线、恢复、回归矩阵及墙钟公平性门槛见 [部署与故障排查说明](docker/go-judge/README.md)。SQL、配置及文档仍需按具体文件审批后才能提交或推送，`AGENTS.md` 仅保留本地。
 

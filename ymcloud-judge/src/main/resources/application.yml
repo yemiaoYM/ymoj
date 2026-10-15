@@ -64,8 +64,10 @@ ymcloud:
         # 每次受限进程 stdout + stderr 的上限，单位字节，默认 1 MiB。
         max-output-bytes: ${YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES:1048576}
         go-judge:
-            # 单一执行服务；HTTP 仅允许回环地址，令牌必须独立且至少 32 字符。
+            # 单一执行服务；默认 HTTP 仅允许回环地址，令牌必须独立且至少 32 字符。
             base-url: ${YMCLOUD_GO_JUDGE_URL:http://127.0.0.1:5050}
+            # 仅在受控 Docker 私网内开启；公网与链路本地 HTTP 始终拒绝。
+            allow-private-network-http: ${YMCLOUD_GO_JUDGE_ALLOW_PRIVATE_HTTP:false}
             token: ${YMCLOUD_GO_JUDGE_TOKEN:}
             connect-timeout: 3s
             # 覆盖最高 60 秒题目限时，并为传输和返回保留边界。
@@ -89,8 +91,10 @@ ymcloud:
             max-version-bytes: 1073741824
             max-file-bytes: 52428800
         data:
-            # Worker 可达的 Web 地址；回环地址可用 HTTP，远程必须使用 HTTPS。
+            # Worker 可达的 Web 地址；默认回环地址可用 HTTP，远程使用 HTTPS。
             base-url: ${YMCLOUD_WORKER_API_URL:http://127.0.0.1:9091}
+            # 单机 Compose 通过服务名通信时开启，限制所有解析结果为私网或回环。
+            allow-private-network-http: ${YMCLOUD_WORKER_ALLOW_PRIVATE_HTTP:false}
             # 与 Web 的 worker-api.token 相同，至少 32 个字符，不复用用户 JWT 或存储密钥。
             token: ${YMCLOUD_WORKER_SERVICE_TOKEN:}
             # 连接建立超时与一次文件下载的总超时，支持 s/m 等时间单位。
@@ -99,5 +103,10 @@ ymcloud:
 logging:
     charset:
         # 控制台和日志文件统一编码，独立 Worker 日志也可以直接按 UTF-8 读取。
-        # console: UTF-8
+        console: UTF-8
         file: UTF-8
+    file:
+        # 运行诊断日志与 results 结果恢复记录分开，不能按同一保留期清理。
+        path: ./files/logs/worker
+    level:
+        root: INFO

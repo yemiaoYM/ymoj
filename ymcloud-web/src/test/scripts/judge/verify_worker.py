@@ -397,7 +397,7 @@ class Regression:
 
     def start(self, kind):
         jar = PROJECT_ROOT / ("ymcloud-web" if kind == "web" else "ymcloud-judge") / "target" / (
-            "ymcloud-web-0.0.1-SNAPSHOT.jar" if kind == "web" else "ymcloud-judge-0.0.1-SNAPSHOT.jar")
+            "ymcloud-web.jar" if kind == "web" else "ymcloud-judge.jar")
         require(jar.is_file(), "Build both current Boot jars before running E2E")
         configuration = self.web_config if kind == "web" else self.worker_config
         log_path = self.folder / (kind + "-" + str(len(self.processes)) + ".log")

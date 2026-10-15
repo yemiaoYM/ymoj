@@ -14,6 +14,8 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -154,6 +156,110 @@ class GoJudgeClientTest {
     }
 
     @Test
+    void rejectedResponsesDeleteAllValidCachedFilesBeforeReturningTheSystemFailure() {
+        String cached = ACCEPTED.replace("\"files\":", "\"fileIds\":{\"program\":\"artifact-one\","
+                + "\"extra\":\"artifact-two\"},\"files\":");
+        List<String> deleted = new CopyOnWriteArrayList<>();
+        try (GoJudgeClient client = client()) {
+            for (String invalid : List.of(
+                    cached.replace("Accepted", "Internal Error"),
+                    cached.replace("2000000", "-1"),
+                    cached.replace("\"exitStatus\":0", "\"exitStatus\":null"),
+                    cached.replace("\"files\":", "\"files\":123,\"ignored\":"),
+                    cached.replace("\"extra\":\"artifact-two\"",
+                            "\"unsafe\":\"../escape\",\"invalid\":17,\"extra\":\"artifact-two\""),
+                    cached.substring(0, cached.length() - 1) + "," + cached.substring(1),
+                    cached.substring(1, cached.length() - 1))) {
+                deleted.clear();
+                handler.set(exchange -> {
+                    if ("DELETE".equals(exchange.getRequestMethod())) {
+                        deleted.add(exchange.getRequestURI().getPath());
+                        respond(exchange, 200, "{}");
+                    } else {
+                        respond(exchange, 200, invalid);
+                    }
+                });
+                assertThrows(GoJudgeException.class, () -> client.execute(command(), deadline()));
+                assertEquals(Set.of("/file/artifact-one", "/file/artifact-two"), Set.copyOf(deleted));
+                assertEquals(2, deleted.size(), "重复 ID 只清理一次，无效 ID 不得进入删除请求");
+            }
+        }
+    }
+
+    @Test
+    void rejectedResponseCleanupTreatsMissingFilesAsReleasedAndPreservesTheOriginalFailure() {
+        String cached = ACCEPTED.replace("Accepted", "Internal Error")
+                .replace("\"files\":", "\"fileIds\":{\"program\":\"artifact-one\"},\"files\":");
+        AtomicInteger deleted = new AtomicInteger();
+        try (GoJudgeClient client = client()) {
+            for (int status : List.of(404, 503)) {
+                handler.set(exchange -> {
+                    if ("DELETE".equals(exchange.getRequestMethod())) {
+                        deleted.incrementAndGet();
+                        respond(exchange, status, "private content");
+                    } else {
+                        respond(exchange, 200, cached);
+                    }
+                });
+                GoJudgeException error = assertThrows(GoJudgeException.class,
+                        () -> client.execute(command(), deadline()));
+                assertEquals("go-judge 返回未知状态或内部错误", error.getMessage());
+            }
+        }
+        assertEquals(2, deleted.get());
+    }
+
+    @Test
+    void rejectedResponseCleanupHasAnIndependentDeadlineAndPreservesInterrupts() throws Exception {
+        String cached = ACCEPTED.replace("Accepted", "Internal Error")
+                .replace("\"files\":", "\"fileIds\":{\"program\":\"artifact-one\"},\"files\":");
+        CountDownLatch deleting = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicReference<Boolean> interrupted = new AtomicReference<>();
+        handler.set(exchange -> {
+            if ("DELETE".equals(exchange.getRequestMethod())) {
+                deleting.countDown();
+                exchange.sendResponseHeaders(200, 0);
+                try (exchange; var body = exchange.getResponseBody()) {
+                    for (int index = 0; index < 100; index++) {
+                        body.write(' ');
+                        body.flush();
+                        Thread.sleep(25);
+                    }
+                } catch (IOException ignored) {
+                    // 客户端达到清理截止或被租约中断时关闭连接。
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            } else {
+                respond(exchange, 200, cached);
+            }
+        });
+        try (GoJudgeClient client = client()) {
+            Thread worker = new Thread(() -> {
+                try {
+                    client.execute(command(), deadline());
+                } catch (Throwable error) {
+                    failure.set(error);
+                    interrupted.set(Thread.currentThread().isInterrupted());
+                }
+            });
+            worker.start();
+            assertTrue(deleting.await(3, TimeUnit.SECONDS));
+            worker.interrupt();
+            worker.join(1500);
+            assertFalse(worker.isAlive());
+            assertTrue(failure.get() instanceof GoJudgeException);
+            assertEquals("go-judge 返回未知状态或内部错误", failure.get().getMessage());
+            assertEquals(Boolean.TRUE, interrupted.get());
+            long started = System.nanoTime();
+            assertThrows(GoJudgeException.class, () -> client.execute(command(), deadline()));
+            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 3500,
+                    "清理不得占满任务原本的请求预算");
+        }
+    }
+
+    @Test
     void redirectsDoNotForwardCredentialsAndErrorsDoNotExposeBodies() {
         handler.set(exchange -> {
             exchange.getResponseHeaders().set("Location", properties.getBaseUrl() + "/escape");
@@ -247,6 +353,20 @@ class GoJudgeClientTest {
             assertThrows(IllegalArgumentException.class, this::client, address);
         }
         assertEquals(0, requests.get());
+    }
+
+    @Test
+    void privateHttpRequiresExplicitDeploymentOptInAndStillRejectsPublicDestinations() {
+        properties.setBaseUrl("http://172.18.0.3:5050");
+        assertThrows(IllegalArgumentException.class, this::client);
+        properties.setAllowPrivateNetworkHttp(true);
+        try (GoJudgeClient ignored = client()) {
+            assertEquals(0, requests.get());
+        }
+        properties.setBaseUrl("http://169.254.169.254");
+        assertThrows(IllegalArgumentException.class, this::client);
+        properties.setBaseUrl("http://8.8.8.8");
+        assertThrows(IllegalArgumentException.class, this::client);
     }
 
     private CountDownLatch streamingResponse() {

@@ -334,7 +334,7 @@ def cleanup_container(container, identifier):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jar", type=pathlib.Path,
-                        default=PROJECT_ROOT / "ymcloud-judge/target/ymcloud-judge-0.0.1-SNAPSHOT.jar")
+                        default=PROJECT_ROOT / "ymcloud-judge/target/ymcloud-judge.jar")
     args = parser.parse_args()
     require(os.environ.get("YMCLOUD_WORKER_LINUX_TEST", "").lower() == "true", "Explicit Linux test opt-in is required")
     require(args.jar.resolve().is_relative_to(PROJECT_ROOT.resolve()), "Worker jar must be in this project")

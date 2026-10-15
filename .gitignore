@@ -72,6 +72,8 @@ Thumbs.db
 application-dev.yml
 application-prod.yml
 .env
+# 完整部署提供公开测试默认值；实际部署包及其中的私有修改仍在忽略的产物目录中。
+!/deploy/.env
 .env.local
 *.local
 
