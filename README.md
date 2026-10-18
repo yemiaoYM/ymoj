@@ -15,7 +15,7 @@
 ![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![MIT License](https://img.shields.io/badge/License-MIT-0F766E)](LICENSE)
 
-[部署指南](https://gitee.com/yemiaoo/ymoj-deploy) · [功能概览](#功能概览) · [技术架构](#技术架构) · [开发文档](https://gitee.com/yemiaoo/ymoj-deploy/blob/master/DEVELOPMENT.md) · [反馈问题](https://gitee.com/yemiaoo/ymcloud/issues)
+[部署指南](https://gitee.com/yemiaoo/ymoj-deploy) · [功能概览](#功能概览) · [技术架构](#技术架构) · [开发文档](https://gitee.com/yemiaoo/ymoj-deploy#源码开发与维护) · [反馈问题](https://gitee.com/yemiaoo/ymcloud/issues)
 
 </div>
 
@@ -106,7 +106,7 @@ sql             当前版本建表与必要初始化数据
 deploy          镜像发布所用的源配置模板
 ```
 
-阅读[源码开发与维护](https://gitee.com/yemiaoo/ymoj-deploy/blob/master/DEVELOPMENT.md)，了解本地运行、环境配置和回归验证。完整网站部署见[部署指南](https://gitee.com/yemiaoo/ymoj-deploy)，独立判题节点见 [go-judge 部署文档](docker/go-judge/README.md)。
+阅读[源码开发与维护](https://gitee.com/yemiaoo/ymoj-deploy#源码开发与维护)，了解本地运行、环境配置和回归验证。完整网站部署见[部署指南](https://gitee.com/yemiaoo/ymoj-deploy)，独立判题节点见 [go-judge 部署文档](docker/go-judge/README.md)。
 
 欢迎通过 [Issue](https://gitee.com/yemiaoo/ymcloud/issues) 反馈问题、提出建议，或通过 [Pull Request](https://gitee.com/yemiaoo/ymcloud/pulls) 参与改进。提交问题时请附上版本、复现步骤与脱敏日志。
 

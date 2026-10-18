@@ -109,7 +109,7 @@ python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_runtime.py --container 
 python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_jdk17.py --container <go-judge容器名>
 ```
 
-`verify_worker.py` 还需其专用 `YMCLOUD_WORKER_E2E=true` 及空的非开发 Redis database，详见[源码开发与维护](https://gitee.com/yemiaoo/ymoj-deploy/blob/master/DEVELOPMENT.md)。`verify_runtime.py` 使用固定可信 Python 程序产生父进程及三个 `setsid` 子进程，主动关闭 HTTP 连接后检查进程消失、`pids.current` 回到基线并复用执行槽；仅出现客户端取消异常不算回收通过。脚本还从活动进程的实际 cgroup 祖先检查内存/进程限额继承，验证服务总 CPU、内存、swap、进程上限及鉴权。
+`verify_worker.py` 还需其专用 `YMCLOUD_WORKER_E2E=true` 及空的非开发 Redis database，详见[源码开发与维护](https://gitee.com/yemiaoo/ymoj-deploy#源码开发与维护)。`verify_runtime.py` 使用固定可信 Python 程序产生父进程及三个 `setsid` 子进程，主动关闭 HTTP 连接后检查进程消失、`pids.current` 回到基线并复用执行槽；仅出现客户端取消异常不算回收通过。脚本还从活动进程的实际 cgroup 祖先检查内存/进程限额继承，验证服务总 CPU、内存、swap、进程上限及鉴权。
 
 在专属实例没有其他验收任务时，可给 `verify_runtime.py` 增加 `--restart`，验证服务重启后旧文件 ID 返回 404、异常退出遗留的临时文件被清理，以及新执行请求恢复；不要与业务回归或公平性采集并行重启服务。
 
