@@ -2,7 +2,7 @@
 
 Worker 只通过 JDK 17 HTTP 客户端调用一个 go-judge 执行服务。RabbitMQ 任务/结果队列、Redis 租约与缓存、固定数据版本、结果幂等、历史提交均沿用现有实现。Docker 只部署两个常驻服务，Worker 不访问 Docker Socket。
 
-本页用于已有 Web、Redis、RabbitMQ 的独立判题节点，保留维护者本机构建与两服务部署流程。完整网站请使用 [单机 Docker 部署](../../deploy/README.md)：进入源码的 `deploy` 目录，修改 `.env` 后执行 `docker compose up -d`，按版本标签拉取七个镜像。默认使用腾讯云；拉取失败时，只需将 `.env` 中的 `IMAGE_REPOSITORY` 改为 Docker Hub 主仓库 `docker.io/yemiao1/ymoj`。下面的构建锁和内容核对仅用于维护者，不需要普通部署用户操作。
+本页用于已有 Web、Redis、RabbitMQ 的独立判题节点，保留维护者本机构建与两服务部署流程。完整网站请使用 [单机 Docker 部署](https://gitee.com/yemiaoo/ymoj-deploy)：克隆独立部署仓库，按指南准备 `.env.local` 后执行 `docker compose --env-file .env.local up -d`，按版本标签拉取七个镜像。默认使用腾讯云；拉取失败时，只需将 `.env.local` 中的 `IMAGE_REPOSITORY` 改为 Docker Hub 主仓库 `docker.io/yemiao1/ymoj`。下面的构建锁和内容核对仅用于维护者，不需要普通部署用户操作。
 
 ## 固定构建
 
@@ -43,7 +43,7 @@ ymcloud 的发布版本统一读取根 `pom.xml` 的 `<revision>`，从 `4.0.0` 
 
 ## 公开镜像发布验收
 
-本节仅供维护者使用。完整网站的七个镜像按[公开发布步骤](../../deploy/README.md#维护者发布公开镜像)推送到两个仓库后，在源码根目录执行：
+本节仅供维护者使用。完整网站的七个镜像按[公开发布步骤](https://gitee.com/yemiaoo/ymoj-deploy#维护者发布公开镜像)推送到两个仓库后，在源码根目录执行：
 
 ```shell
 python -B ymcloud-web/src/test/scripts/deployment/verify_registry.py --local-lock target/phase3-verification/full-stack-deployment/images.lock.json --repository docker.io/yemiao1/ymoj --repository ccr.ccs.tencentyun.com/ymoj/ymcloud --report target/phase3-verification/registry-4.0.0.json --pull
@@ -109,7 +109,7 @@ python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_runtime.py --container 
 python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_jdk17.py --container <go-judge容器名>
 ```
 
-`verify_worker.py` 还需其专用 `YMCLOUD_WORKER_E2E=true` 及空的非开发 Redis database，详见根 README。`verify_runtime.py` 使用固定可信 Python 程序产生父进程及三个 `setsid` 子进程，主动关闭 HTTP 连接后检查进程消失、`pids.current` 回到基线并复用执行槽；仅出现客户端取消异常不算回收通过。脚本还从活动进程的实际 cgroup 祖先检查内存/进程限额继承，验证服务总 CPU、内存、swap、进程上限及鉴权。
+`verify_worker.py` 还需其专用 `YMCLOUD_WORKER_E2E=true` 及空的非开发 Redis database，详见[源码开发与维护](https://gitee.com/yemiaoo/ymoj-deploy/blob/master/DEVELOPMENT.md)。`verify_runtime.py` 使用固定可信 Python 程序产生父进程及三个 `setsid` 子进程，主动关闭 HTTP 连接后检查进程消失、`pids.current` 回到基线并复用执行槽；仅出现客户端取消异常不算回收通过。脚本还从活动进程的实际 cgroup 祖先检查内存/进程限额继承，验证服务总 CPU、内存、swap、进程上限及鉴权。
 
 在专属实例没有其他验收任务时，可给 `verify_runtime.py` 增加 `--restart`，验证服务重启后旧文件 ID 返回 404、异常退出遗留的临时文件被清理，以及新执行请求恢复；不要与业务回归或公平性采集并行重启服务。
 
@@ -140,7 +140,7 @@ python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_fairness.py --compare
 
 1. 暂停新提交，等待任务、重试、结果队列 ready/unacked 均归零。检查 `judge_dispatch` 非终态任务以及 Redis 活跃租约已收敛；不要清空队列跳过未完成结果。
 2. 保留当前部署配置、镜像版本锁、数据库备份、Worker 缓存及结果日志。确认新版本构建锁、版本验证与 Linux 验收报告齐全。
-3. 执行 `sql/migrations/phase3-language-versions.sql`。脚本可重跑，仅按 `oj='myy'` 和四个语言名称更新展示版本，保留 ID、image/env、模板、状态、历史提交和任务快照。新安装直接使用 `sql/ymcloud.sql`。
+3. 新安装在空数据库导入 `sql/ymcloud.sql`。已有数据库需按实际版本单独准备迁移方案，将四种语言的展示版本与统一工具链对齐，保留 ID、image/env、模板、状态、历史提交和任务快照；不直接导入初始化文件。
 4. 停止旧 Worker，按不可变镜像锁替换 Worker 和 go-judge。四语言与普通/比赛/自测、状态、AC 统计冒烟通过后恢复提交。
 5. 恢复旧部署时重新暂停、排空，再恢复旧版部署配置、对应镜像及其语言元数据；保留现有历史记录与结果日志。不在新代码保留双引擎切换开关。
 
