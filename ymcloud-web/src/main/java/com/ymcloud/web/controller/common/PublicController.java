@@ -3,11 +3,9 @@ package com.ymcloud.web.controller.common;
 import cn.hutool.core.bean.BeanUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
-import com.ymcloud.core.web.dao.AnnouncementEntityService;
 import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.core.web.dao.TagEntityService;
 import com.ymcloud.core.web.mapper.UserAcproblemMapper;
-import com.ymcloud.pojo.entity.Announcement;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Tag;
 import com.ymcloud.pojo.enums.ProblemSource;
@@ -58,7 +56,7 @@ public class PublicController {
     private ContestService contestService;
 
     @Autowired
-    private AnnouncementEntityService announcementEntityService;
+    private AnnouncementService announcementService;
 
     @Autowired
     private SubmissionService submissionService;
@@ -140,20 +138,13 @@ public class PublicController {
     }
 
     /**
-     * 获取公告列表
-     * @return 公告列表
+     * 分页获取可见公告，排序由服务端固定。
+     * @param pageNo 页码，默认1；每页固定5条
+     * @return 公告分页数据
      */
     @GetMapping("/announcements")
-    public Result<List<AnnouncementVO>> listAnnouncements() {
-        log.info("获取公告列表");
-        //查询可见的公告
-        List<Announcement> list = announcementEntityService.lambdaQuery()
-                .eq(Announcement::getStatus, true)
-                .orderByDesc(Announcement::getPinned, Announcement::getPriority, Announcement::getUpdatedTime)
-                .list();
-        //拷贝未vo列表
-        List<AnnouncementVO> voList = BeanUtil.copyToList(list, AnnouncementVO.class);
-        return Result.ok(voList);
+    public Result<PageVO<AnnouncementVO>> listAnnouncements(@RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo) {
+        return Result.ok(announcementService.pageQuery(pageNo));
     }
 
     /**

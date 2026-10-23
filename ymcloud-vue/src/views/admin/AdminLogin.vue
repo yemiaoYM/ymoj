@@ -3,7 +3,10 @@
     <n-flex justify="center" align="center" style="height: 100%">
       <el-card>
         <template #header>
-          <h2 style="text-align: center;">YMOJ 管理后台登录</h2>
+          <n-flex vertical align="center" :size="8">
+            <BrandLogo class="login-logo" />
+            <h2 class="login-title">管理后台登录</h2>
+          </n-flex>
         </template>
         <el-form
           ref="formRef"
@@ -82,6 +85,7 @@ import { getCaptcha } from '@/api/api';
 import { ElMessage } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 import LegalAgreement from '@/components/common/LegalAgreement.vue';
+import BrandLogo from '@/components/common/BrandLogo.vue';
 
 const userStore = useUserStore();
 const formRef = ref();
@@ -159,6 +163,14 @@ const refreshCaptcha = () => {
 </script>
 
 <style scoped lang="css">
+.login-logo {
+  width: 200px;
+}
+.login-title {
+  margin: 0;
+  font-size: 20px;
+  color: var(--el-text-color-primary);
+}
 .login-container {
   height: 100vh;
   background-image: url('https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=2069');

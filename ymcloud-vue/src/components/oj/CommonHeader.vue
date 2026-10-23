@@ -2,18 +2,7 @@
   <header class="common-header">
     <n-flex style="width: 100%;height: 100%;" justify="space-between">
       <n-flex class="l-content" style="height: 100%;" align="center">
-        <el-image 
-          lazy 
-          :src="LogoImage" 
-          alt="Logo" 
-          style="height: 50px;width: 50px;margin-left: 20px;border-radius: 30%;"
-          />
-        <template v-if="!isMobile">
-          <n-flex vertical :size="0">
-            <span style="font-size: 20px;font-weight: bold;color: black;margin-left: 5px;">YMOJ</span>
-            <span style="font-size: 12px;margin-left: 5px;">Yemiao Online Judge</span>
-          </n-flex>
-        </template>
+        <BrandLogo :compact="isMobile" />
       </n-flex>
       <!-- 移动端菜单 -->
       <n-flex v-if="isMobile" align="center">
@@ -118,7 +107,7 @@ import { useUserStore } from '@/stores/user';
 import { storeToRefs } from 'pinia';
 import { ElMessage } from 'element-plus';
 import { Menu } from '@element-plus/icons-vue';
-import LogoImage from '@/assets/image/logo.jpg';
+import BrandLogo from '@/components/common/BrandLogo.vue';
 const Avatar=defineAsyncComponent(()=>import('@/components/common/Avatar.vue'));
 
 //data
@@ -186,6 +175,10 @@ const toAdmin=()=>{
   box-shadow: 0 1px 5px 0 rgba(0, 0, 0, 0.1);
   border-bottom: 1px solid #f0f0f0;
   box-sizing: border-box;
+}
+.l-content {
+  flex-shrink: 0;
+  margin-left: 20px;
 }
 .el-menu{
   border-bottom: none;

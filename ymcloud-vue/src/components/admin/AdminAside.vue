@@ -11,7 +11,7 @@
     @select="onSelect"
   >
     <n-flex class="menu-brand" justify="center" align="center">
-      <el-image class="menu-logo" alt="YMOJ" :src="LogoImage" />
+      <BrandLogo class="menu-logo" :class="{ 'is-collapsed': collapse }" :compact="collapse" />
     </n-flex>
     <el-menu-item index="/admin/index">
       <el-icon><Odometer /></el-icon>
@@ -26,7 +26,7 @@ import { defineAsyncComponent } from 'vue';
 import { Odometer } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
 import { usePermissionStore } from '@/stores/permission';
-import LogoImage from '@/assets/image/logo.jpg';
+import BrandLogo from '@/components/common/BrandLogo.vue';
 
 withDefaults(defineProps<{ collapse?: boolean }>(), { collapse: false });
 const emit = defineEmits<{ navigate: [] }>();
@@ -46,10 +46,14 @@ function onSelect() {
   border-right: 0;
 }
 .menu-brand {
-  padding: 15px 0;
+  min-height: 80px;
+  box-sizing: border-box;
+  padding: 12px 8px;
 }
 .menu-logo {
-  width: 50px;
-  height: 50px;
+  width: 160px;
+}
+.menu-logo.is-collapsed {
+  width: 44px;
 }
 </style>

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="ymcloud-vue/src/assets/image/logo.jpg" alt="ymcloud Logo" width="144">
+<img src="ymcloud-vue/src/assets/image/ymoj-logo.png" alt="YMOJ Logo" width="320">
 
 # ymcloud
 

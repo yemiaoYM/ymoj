@@ -3,12 +3,9 @@
     <!-- 左侧品牌区域 -->
     <div class="left-section">
       <div class="brand-content">
-        <div class="brand-header">
-          <el-icon class="brand-icon" :size="32" color="#409EFF">
-            <CircleCheck />
-          </el-icon>
-          <h1 class="brand-title">YMOJ</h1>
-        </div>
+        <h1 class="brand-header">
+          <BrandLogo class="login-logo" />
+        </h1>
         <p class="brand-subtitle">欢迎来到 YMOJ</p>
         <p class="brand-description">这里是一个在线评测系统，帮助你提升编程技能。</p>
 
@@ -134,9 +131,10 @@
 <script lang="ts" setup>
 //import
 import { ref, defineAsyncComponent, onMounted } from 'vue';
-import { CircleCheck, Edit } from '@element-plus/icons-vue';
+import { Edit } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { getPublicSystemSetting } from '@/api/api';
+import BrandLogo from '@/components/common/BrandLogo.vue';
 const LoginForm = defineAsyncComponent(() => import('./child/LoginForm.vue'));
 const RegisterForm = defineAsyncComponent(() => import('./child/RegisterForm.vue'));
 const ForgetPasswordForm = defineAsyncComponent(() => import('./child/ForgetPasswordForm.vue'));
@@ -215,24 +213,17 @@ onMounted(() => {
 }
 
 .brand-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto 16px;
+  padding: 8px 16px;
+  background: var(--el-bg-color);
+  border-radius: 12px;
 }
 
-.brand-icon {
-  margin-right: 12px;
-  background: white;
-  border-radius: 50%;
-  padding: 8px;
-}
-
-.brand-title {
-  font-size: 36px;
-  font-weight: 600;
-  margin: 0;
-  color: white;
+.login-logo {
+  width: 300px;
 }
 
 .brand-subtitle {

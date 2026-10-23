@@ -553,16 +553,6 @@ export type ContestProblemTableVO={
   accepted:boolean;
 }
 /**
- * 公告列表VO
- */
-export type AnnouncementTableVO={
-  title:string;
-  content:string;
-  pinned:boolean;
-  authorUsername:string;
-  updatedTime:string;
-}
-/**
  * 比赛题目VO
  */
 export type ContestProblemVO={

@@ -108,6 +108,14 @@ onBeforeUnmount(() => media.removeEventListener('change', onViewportChange));
   padding: 0;
   background: #eff3f5;
 }
+/* 后台列表沿用用户、题目列表的表头；列对齐仍由 el-table-column 决定。 */
+.admin-main :deep(.el-table__header-wrapper th) {
+  word-break: break-word;
+  background-color: #f8f8f9;
+  color: #515a6e;
+  height: 40px;
+  font-size: 13px;
+}
 /* 抽屉传送到 body，用专属 body-class 限定覆盖范围，滚动交给内部 el-scrollbar。 */
 :global(.admin-menu-drawer-body) {
   min-height: 0;

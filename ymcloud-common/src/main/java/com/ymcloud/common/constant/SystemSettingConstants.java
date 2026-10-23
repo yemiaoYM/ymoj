@@ -1,7 +1,7 @@
 package com.ymcloud.common.constant;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-10
  * @Description: 系统设置键
  */
@@ -20,4 +20,7 @@ public class SystemSettingConstants {
 
     /** 公安备案号，含地区和数字编号 */
     public static final String POLICE_FILING_NUMBER = "police_filing_number";
+
+    /** 首页轮播图文件 ID 的有序 JSON 数组；空数组表示隐藏轮播。 */
+    public static final String HOME_CAROUSEL = "home_carousel";
 }

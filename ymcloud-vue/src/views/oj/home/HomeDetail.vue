@@ -1,325 +1,218 @@
 <template>
-  <n-flex class="container" vertical :size="20">
-    <!-- banner -->
-    <el-card>
-      <el-carousel trigger="click" arrow="hover" height="400px" style="background-color: #eff3f5;">
-        <el-carousel-item
-          v-for="(item, index) in bannerList"
-          :key="index"
-          style="text-align: center"
-        >
-          <n-image
-            :src="item"
-            lazy
-            preview-disabled
-            style="
-              width: 100%;
-              height: 100%;
-              border-radius: 8px;
-              display: block;
-              object-fit: cover;
-            "
-          />
-        </el-carousel-item>
-      </el-carousel>
-    </el-card>
-    <n-flex>
-      <!-- 左半部分 -->
-      <n-flex vertical style="flex: 5" :size="20">
-        <!-- 最近一周AC排名 -->
-        <el-card>
-          <template #header>
-            <n-flex align="center">
-              <el-icon :size="24" color="#ffc107">
-                <Coin />
-              </el-icon>
-              <span style="font-size: 20px; font-weight: 500; margin-left: 8px"
-                >用户ac数量排名</span
-              >
-              <el-tooltip content="排名在每日凌晨1点更新" placement="top">
-                <el-icon size="20" style="margin-left: 10px">
-                  <WarningFilled />
-                </el-icon>
-              </el-tooltip>
-            </n-flex>
-          </template>
-          <el-skeleton v-if="rankLoading" :rows="10" animated />
-          <div v-else>
-            <el-table
-              v-if="userAcRank && userAcRank.length > 0"
-              :data="userAcRank"
-              size="large"
-              :header-row-style="{ fontSize: '15px' }"
-              style="width: 100%"
-            >
-              <el-table-column label="Rank" align="center" width="100">
-                <template #default="{ $index }">
-                  <n-icon
-                    v-if="$index === 0"
-                    :size="24"
-                    color="#ffc107"
-                    :component="Ribbon"
-                  />
-                  <n-icon
-                    v-else-if="$index === 1"
-                    :size="24"
-                    color="#c0c4cc"
-                    :component="Ribbon"
-                  />
-                  <n-icon
-                    v-else-if="$index === 2"
-                    :size="24"
-                    color="#cd7f32"
-                    :component="Ribbon"
-                  />
-                  <span v-else>{{ $index + 1 }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column
-                prop="username"
-                label="用户名"
-                min-width="120"
-                align="center"
-              >
-                <template #default="{ row }">
-                  <n-flex align="center" justify="center">
-                    <Avatar
-                      :src="row.avatar"
-                      :text="row.username"
-                      :size="35"
-                      style="margin-right: 5px"
-                    />
-                    <span
-                      @click="toUserInfo(row.username)"
-                      style="
-                        cursor: pointer;
-                        font-weight: bold;
-                        color: #409eff;
-                        font-size: 15px;
-                      "
-                    >
-                      {{ row.username }}
-                    </span>
-                    <el-tag
-                      v-if="row.nickname"
-                      disable-transitions
-                      effect="dark"
-                      style="margin-left: 10px"
-                      color="#21c1c6"
-                    >
-                      <span style="font-size: 13px">{{ row.nickname }}</span>
-                    </el-tag>
-                  </n-flex>
-                </template>
-              </el-table-column>
-              <el-table-column prop="count" label="AC题目数量" align="center">
-                <template #default="{ row }">
-                  <span style="font-weight: bold">{{ row.count }}</span>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-empty
-              v-else
-              description="暂无排名，快去解题吧！"
-              style="padding: 40px 0"
-            />
-          </div>
-        </el-card>
-        <!-- 公告 -->
-        <el-card>
-          <template #header>
-            <n-flex align="center">
-              <el-icon :size="24" color="#ffc107">
-                <Bell />
-              </el-icon>
-              <span style="font-size: 20px; font-weight: 500; margin-left: 8px"
-                >公告</span
-              >
-            </n-flex>
-          </template>
-          <el-skeleton v-if="announcementLoading" :rows="10" animated />
-          <div v-else>
-            <el-timeline style="width: 100%">
-              <el-timeline-item
-                v-for="announcement in announcements"
-                :key="announcement.title"
-                :timestamp="announcement.updatedTime"
-                placement="top"
-              >
-                <el-card>
-                  <n-flex align="center">
-                    <h2>{{ announcement.title }}</h2>
-                    <el-icon
-                      v-if="announcement.pinned"
-                      size="20"
-                      color="#ffc107"
-                    >
-                      <StarFilled />
-                    </el-icon>
-                  </n-flex>
-                  <div
-                    style="
-                      margin-top: 10px;
-                      border: 1px solid #c6e2ff;
-                      padding: 10px;
-                    "
-                  >
-                    <MarkdownPreview
-                      :content="announcement.content"
-                    ></MarkdownPreview>
-                  </div>
-                  <div style="margin-top: 15px">
-                    by
-                    <el-tag
-                      disable-transitions
-                      color="#409eff"
-                      style="color: white"
-                      >{{ announcement.authorUsername }}</el-tag
-                    >
-                  </div>
-                </el-card>
-              </el-timeline-item>
-            </el-timeline>
-            <el-empty v-if="!announcements.length" description="暂无公告" />
-          </div>
-        </el-card>
-      </n-flex>
-      <!-- 右半部分 -->
-      <n-flex vertical style="flex: 3" :size="20">
-        <!-- 近期比赛 -->
-        <el-card>
-          <template #header>
-            <n-flex align="center">
-              <el-icon :size="24" color="#52c41a">
-                <Calendar />
-              </el-icon>
-              <span style="font-size: 20px; font-weight: 500; margin-left: 8px"
-                >近期比赛</span
-              >
-            </n-flex>
-          </template>
-          <el-skeleton v-if="contestLoading" :rows="10" animated />
-          <div v-else>
-            <n-flex vertical :size="16">
-              <el-card
-                shadow="hover"
-                v-for="contest in competitions"
-                :key="contest.id"
-                size="small"
-                :style="{
-                  borderLeft:
-                    contest.status === '已结束'
-                      ? '4px solid #aab4bf'
-                      : '4px solid #25bb9b',
-                  borderRadius: '8px',
-                }"
-              >
-                <!-- 比赛名称和进行状态 -->
-                <n-flex justify="space-between" align="center">
-                  <span
-                    style="font-size: 16px;font-weight: 600; cursor: pointer"
-                    @click="toContestDetail(contest.id)"
-                    >{{ contest.title }}</span
-                  >
-                  <n-flex align="center">
-                    <el-tooltip
-                      effect="light"
-                      content="需要密码才能加入比赛"
-                      placement="top"
-                    >
-                      <el-icon v-show="contest.visibility" size="20">
-                        <Lock />
-                      </el-icon>
-                    </el-tooltip>
-                    <el-tag
-                      effect="dark"
-                      size="large"
-                      disable-transitions
-                      :type="getContestStatusType(contest.status)"
-                      round
-                    >
-                      {{ contest.status }}
-                    </el-tag>
-                  </n-flex>
-                </n-flex>
-
-                <n-flex style="margin-top: 12px">
-                  <el-tag
-                    disable-transitions
-                    color="#ffc171"
-                    style="color: white"
-                  >
-                    <span style="display: flex; align-items: center">
-                      <el-icon> <Trophy /> </el-icon
-                      >{{ formatContestMode(contest.mode) }}
-                    </span>
-                  </el-tag>
-                  <el-tag
-                    disable-transitions
-                    color="#409eff"
-                    style="color: white"
-                    >{{ formatContestStyle(contest.style) }}</el-tag
-                  >
-                  <el-tag
-                    disable-transitions
-                    color="#25bb9b"
-                    style="color: white"
-                  >
-                    {{ contest.sourceId === 0 ? "原创" : "重建赛" }}
-                  </el-tag>
-                  <el-tag
-                    v-show="contest.rated"
-                    disable-transitions
-                    color="#fe8053"
-                    style="color: white"
-                  >
-                    <span style="display: flex; align-items: center">
-                      <el-icon style="margin-right: 2px"> <Flag /> </el-icon
-                      >Rated</span
-                    >
-                  </el-tag>
-                </n-flex>
-                <el-divider />
-                <n-flex justify="space-between" align="center">
-                  <span style="display: flex; align-items: center">
-                    <el-icon style="margin-right: 5px"> <Clock /> </el-icon
-                    >{{ formatContestDuration(contest.duration) }}</span
-                  >
-                  <span style="display: flex; align-items: center">
-                    <el-icon style="margin-right: 5px"> <UserFilled /> </el-icon
-                    >× {{ contest.participantCount }}</span
-                  >
-                </n-flex>
-              </el-card>
-              <el-empty
-                v-if="!competitions.length"
-                description="暂无比赛"
-                style="padding: 20px 0"
-              />
-            </n-flex>
-          </div>
-        </el-card>
-      </n-flex>
+  <div class="container home-columns">
+    <n-flex class="home-main" vertical :size="20">
+      <el-card v-if="bannerList.length" :body-style="{ padding: '0' }">
+        <el-carousel class="home-banner" trigger="click" arrow="hover" height="100%">
+          <el-carousel-item v-for="item in bannerList" :key="item">
+            <el-image class="banner-image" alt="YMOJ 首页轮播图" fit="cover" :src="item" />
+          </el-carousel-item>
+        </el-carousel>
+      </el-card>
+      <AnnouncementFeed />
     </n-flex>
-  </n-flex>
+    <n-flex class="home-side" vertical :size="20">
+      <!-- 最近一周AC排名 -->
+      <el-card>
+        <template #header>
+          <n-flex align="center" :size="16">
+            <el-icon color="#ffc107" :size="24">
+              <Coin />
+            </el-icon>
+            <h2 class="section-title">用户 AC 数量排名</h2>
+            <el-tooltip content="排名在每日凌晨1点更新" placement="top">
+              <el-icon aria-label="排名在每日凌晨1点更新" tabindex="0" :size="18">
+                <WarningFilled />
+              </el-icon>
+            </el-tooltip>
+          </n-flex>
+        </template>
+        <el-skeleton v-if="rankLoading" :rows="10" animated />
+        <div v-else>
+          <el-table
+            v-if="userAcRank && userAcRank.length > 0"
+            size="large"
+            :data="userAcRank"
+          >
+            <el-table-column label="排名" align="center" width="64">
+              <template #default="{ $index }">
+                <n-icon
+                  v-if="$index === 0"
+                  :size="24"
+                  color="#ffc107"
+                  :component="Ribbon"
+                />
+                <n-icon
+                  v-else-if="$index === 1"
+                  :size="24"
+                  color="#c0c4cc"
+                  :component="Ribbon"
+                />
+                <n-icon
+                  v-else-if="$index === 2"
+                  :size="24"
+                  color="#cd7f32"
+                  :component="Ribbon"
+                />
+                <span v-else>{{ $index + 1 }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="username"
+              label="用户名"
+              min-width="110"
+              align="left"
+            >
+              <template #default="{ row }">
+                <n-flex align="center" :size="8" :wrap="false">
+                  <Avatar
+                    :src="row.avatar"
+                    :text="row.username"
+                    :size="32"
+                  />
+                  <el-link
+                    class="user-link"
+                    type="primary"
+                    underline="never"
+                    :href="router.resolve({ name: 'UserHome', query: { username: row.username } }).href"
+                    :title="row.username"
+                  >
+                    {{ row.username }}
+                  </el-link>
+                  <el-tag
+                    v-if="row.nickname"
+                    class="user-nickname"
+                    disable-transitions
+                    effect="dark"
+                    color="#21c1c6"
+                    size="small"
+                    :title="row.nickname"
+                  >
+                    {{ row.nickname }}
+                  </el-tag>
+                </n-flex>
+              </template>
+            </el-table-column>
+            <el-table-column prop="count" label="AC 数" align="center" width="84">
+              <template #default="{ row }">
+                <el-text tag="b">{{ row.count }}</el-text>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty
+            v-else
+            description="暂无排名，快去解题吧！"
+            :image-size="80"
+          />
+        </div>
+      </el-card>
+      <!-- 近期比赛 -->
+      <el-card>
+        <template #header>
+          <n-flex align="center" :size="16">
+            <el-icon color="#52c41a" :size="24">
+              <Calendar />
+            </el-icon>
+            <h2 class="section-title">近期比赛</h2>
+          </n-flex>
+        </template>
+        <el-skeleton v-if="contestLoading" :rows="10" animated />
+        <div v-else>
+          <n-flex vertical :size="16">
+            <el-card
+              v-for="contest in competitions"
+              :key="contest.id"
+              class="contest-card"
+              shadow="hover"
+              :style="{
+                borderLeft:
+                  contest.status === '已结束'
+                    ? '4px solid #aab4bf'
+                    : '4px solid #25bb9b',
+              }"
+            >
+              <!-- 比赛名称和进行状态 -->
+              <n-flex justify="space-between" align="center" :size="8">
+                <el-link
+                  class="contest-title"
+                  underline="never"
+                  :href="router.resolve({ name: 'ContestDetail', params: { contestID: contest.id } }).href"
+                >
+                  {{ contest.title }}
+                </el-link>
+                <n-flex align="center" :size="8">
+                  <el-tooltip
+                    effect="light"
+                    content="需要密码才能加入比赛"
+                    placement="top"
+                  >
+                    <el-icon v-if="contest.visibility" aria-label="需要密码才能加入比赛" tabindex="0" :size="18">
+                      <Lock />
+                    </el-icon>
+                  </el-tooltip>
+                  <el-tag
+                    effect="dark"
+                    disable-transitions
+                    :type="getContestStatusType(contest.status)"
+                    round
+                  >
+                    {{ contest.status }}
+                  </el-tag>
+                </n-flex>
+              </n-flex>
+
+              <n-flex class="contest-tags" :size="8">
+                <el-tag disable-transitions effect="dark" color="#ffc171">
+                  {{ formatContestMode(contest.mode) }}
+                </el-tag>
+                <el-tag disable-transitions effect="dark" color="#409eff">
+                  {{ formatContestStyle(contest.style) }}
+                </el-tag>
+                <el-tag disable-transitions effect="dark" color="#25bb9b">
+                  {{ contest.sourceId === 0 ? "原创" : "重建赛" }}
+                </el-tag>
+                <el-tag v-if="contest.rated" disable-transitions effect="dark" color="#fe8053">
+                  Rated
+                </el-tag>
+              </n-flex>
+              <el-divider />
+              <n-flex justify="space-between" align="center">
+                <n-flex align="center" :size="6">
+                  <el-icon><Clock /></el-icon>
+                  <el-text size="small">{{ formatContestDuration(contest.duration) }}</el-text>
+                </n-flex>
+                <n-flex align="center" :size="6">
+                  <el-icon><UserFilled /></el-icon>
+                  <el-text size="small">{{ contest.participantCount }} 人</el-text>
+                </n-flex>
+              </n-flex>
+            </el-card>
+            <el-empty
+              v-if="!competitions.length"
+              description="暂无比赛"
+              :image-size="80"
+            />
+          </n-flex>
+        </div>
+      </el-card>
+    </n-flex>
+  </div>
   <SiteFiling />
 </template>
 
 <script setup lang="ts">
 //import
-import { ref, onMounted, defineAsyncComponent } from "vue";
+import { ref, onMounted, onBeforeUnmount, defineAsyncComponent } from "vue";
 import { useRouter } from "vue-router";
 import { Ribbon } from "@vicons/ionicons5";
 import SiteFiling from "@/components/oj/SiteFiling.vue";
+import AnnouncementFeed from "@/components/oj/AnnouncementFeed.vue";
 import {
   getContestTableList,
   getUserAcRank,
-  getAnnouncementTableList,
 } from "@/api/api";
 import type {
   UserAcRankVO,
   ContestTableVO,
-  AnnouncementTableVO,
 } from "@/type/types";
 import {
   formatContestMode,
@@ -327,59 +220,49 @@ import {
   formatContestDuration,
   getContestStatusType,
 } from "@/utils/utils";
-//banner图
-import banner from "@/assets/image/banner.jpg";
-import banner1 from "@/assets/image/banner1.jpg";
-import banner3 from "@/assets/image/banner3.jpg";
-import banner4 from "@/assets/image/banner4.jpg";
-import banner5 from "@/assets/image/banner5.jpg";
-import banner6 from "@/assets/image/banner6.jpg";
+import { getPublicCarousel } from "@/api/carousel";
+import { defaultBanners } from "@/utils/defaultBanners";
 
 
 const Avatar = defineAsyncComponent(
   () => import("@/components/common/Avatar.vue")
 );
-const MarkdownPreview = defineAsyncComponent(
-  () => import("@/components/common/MarkdownPreview.vue")
-);
 
 //data
 const router = useRouter();
 
-const bannerList = ref([banner, banner1, banner3, banner4, banner5, banner6]);
+const bannerList = ref<string[]>([]);
+let disposed = false;
 
 const competitions = ref<ContestTableVO[]>([] as ContestTableVO[]);
-const announcements = ref<AnnouncementTableVO[]>([] as AnnouncementTableVO[]);
 const userAcRank = ref<UserAcRankVO[]>([] as UserAcRankVO[]);
 //loading
 const rankLoading = ref<boolean>(false);
 const contestLoading = ref<boolean>(false);
-const announcementLoading = ref<boolean>(false);
 
 //methods
 onMounted(() => {
+  handleLoadCarousel();
   //获取用户ac数量排名
   handleGetUserAcRank();
   //获取最近的3场比赛
   handleGetRencentContest();
-  //获取公告
-  handleGetAnnouncements();
 });
 
-//获取公告
-const handleGetAnnouncements = () => {
-  announcementLoading.value = true;
-  getAnnouncementTableList()
-    .then((res) => {
-      announcements.value = res.data.data;
-    })
-    .catch((err) => {
-      console.log(err);
-    })
-    .finally(() => {
-      announcementLoading.value = false;
-    });
-};
+async function handleLoadCarousel() {
+  try {
+    const response = await getPublicCarousel();
+    if (!disposed) {
+      const config = response.data.data;
+      bannerList.value = config.configured ? config.images.map(image => image.url) : defaultBanners;
+    }
+  } catch {
+    // 请求层提示失败；不回退图片，以免覆盖管理员明确隐藏轮播的决定。
+  }
+}
+
+onBeforeUnmount(() => { disposed = true; });
+
 //获取最近的3场比赛
 const handleGetRencentContest = () => {
   contestLoading.value = true;
@@ -408,28 +291,98 @@ const handleGetUserAcRank = () => {
       rankLoading.value = false;
     });
 };
-//跳转到比赛详情
-const toContestDetail = (contestID: number) => {
-  router.push({ name: "ContestDetail", params: { contestID: contestID } });
-};
-//跳转到用户主页
-const toUserInfo = (username: string) => {
-  router.push({ name: "UserHome", query: { username: username } });
-};
 </script>
 
 <style scoped>
 .container {
   width: 100%;
-  min-height: 100%;
-  padding: 20px 40px;
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 24px 40px;
+}
+
+.home-banner {
+  aspect-ratio: 16 / 9;
+}
+.banner-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #eff3f5;
+}
+.section-title {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+.home-columns {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.home-main {
+  flex: 5;
+  min-width: 0;
+}
+.home-side {
+  flex: 3;
+  min-width: 0;
+}
+
+.user-link {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}
+.user-link :deep(.el-link__inner) {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.user-nickname {
+  max-width: 40%;
+  flex-shrink: 0;
+}
+.user-nickname :deep(.el-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.contest-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 600;
+}
+.contest-card {
+  border-radius: 8px;
+}
+.contest-tags {
+  margin-top: 12px;
+}
+.contest-card :deep(.el-divider) {
+  margin: 16px 0;
 }
 
 /* 小屏幕布局 */
 @media (max-width: 1000px) {
-  .container {
+  .home-columns {
     flex-direction: column;
-    /* 垂直排列 */
+  }
+  .home-main,
+  .home-side {
+    width: 100%;
+  }
+  .container {
+    padding: 16px;
+  }
+}
+@media (max-width: 600px) {
+  .container {
+    padding: 12px;
+  }
+  .home-side :deep(.el-card__header),
+  .home-side :deep(.el-card__body) {
     padding: 16px;
   }
 }

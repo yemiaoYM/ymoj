@@ -1,5 +1,6 @@
 import request from "./request";
 import type { AxiosResponse } from 'axios';
+import type { AnnouncementPageQuery, AnnouncementPageResult } from '@/type/announcement';
 import type { TagDTO, TagClassificationDTO, TagClassification, TagsWithClassification, TagResult } from '@/type/tag';
 import type {
   LoginDTO,
@@ -413,14 +414,15 @@ export function getContestRankList(params: any) {
   })
 }
 /**
- * 获取公告列表
- * @returns 公告列表
+ * 获取公开公告分页；错误由公告区域展示，避免重复弹窗。
  */
-export function getAnnouncementTableList() {
+export function getAnnouncementTableList(params: AnnouncementPageQuery): Promise<AxiosResponse<AnnouncementPageResult>> {
   return request({
-    url: "/public/announcements",
-    method: "GET",
-  })
+    url: '/public/announcements',
+    method: 'GET',
+    params,
+    skipErrorMessage: true,
+  });
 }
 /**
  * 获取语言列表
