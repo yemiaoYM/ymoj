@@ -186,40 +186,6 @@
       </n-flex>
       <!-- 右半部分 -->
       <n-flex vertical style="flex: 3" :size="20">
-        <!-- 支持的远程评测平台 -->
-        <el-card>
-          <template #header>
-            <n-flex align="center">
-              <el-icon :size="24" color="#2080f0">
-                <Monitor />
-              </el-icon>
-              <span style="font-size: 20px; font-weight: 500; margin-left: 8px"
-                >远程评测</span
-              >
-              <el-tooltip content="将在下几个版本支持,尽请期待" placement="top">
-                <el-icon size="20" style="margin-left: 10px">
-                  <WarningFilled />
-                </el-icon>
-              </el-tooltip>
-            </n-flex>
-          </template>
-          <n-flex :size="25">
-            <n-flex
-              v-for="platform in platforms"
-              :key="platform.name"
-              align="center"
-              justify="center"
-            >
-              <n-image
-                lazy
-                :src="platform.logo"
-                style="width: 32px; height: 32px; border-radius: 5px"
-                preview-disabled
-              />
-              <span>{{ platform.name }}</span>
-            </n-flex>
-          </n-flex>
-        </el-card>
         <!-- 近期比赛 -->
         <el-card>
           <template #header>
@@ -336,27 +302,7 @@
       </n-flex>
     </n-flex>
   </n-flex>
-  <!-- 底部 -->
-  <footer>
-    <div class="mundb-footer">
-      <a
-        href="https://beian.mps.gov.cn/#/query/webSearch?code=13072602000080"
-        rel="noreferrer"
-        target="_blank"
-        style="margin-right: 10px"
-      >
-        <img
-          src="https://beian.mps.gov.cn/img/logo01.dd7ff50e.png"
-          alt="公安备案"
-          style="vertical-align: middle; width: 20px"
-        />
-        冀公安备13072602000080号
-      </a>
-      <a href="https://beian.miit.gov.cn" rel="noreferrer" target="_blank"
-        >冀ICP备2024086612号</a
-      >
-    </div>
-  </footer>
+  <SiteFiling />
 </template>
 
 <script setup lang="ts">
@@ -364,6 +310,7 @@
 import { ref, onMounted, defineAsyncComponent } from "vue";
 import { useRouter } from "vue-router";
 import { Ribbon } from "@vicons/ionicons5";
+import SiteFiling from "@/components/oj/SiteFiling.vue";
 import {
   getContestTableList,
   getUserAcRank,
@@ -380,8 +327,6 @@ import {
   formatContestDuration,
   getContestStatusType,
 } from "@/utils/utils";
-import luoguLogo from "@/assets/image/luogu-logo.png";
-import atcoderLogo from "@/assets/image/atcoder-logo.png";
 //banner图
 import banner from "@/assets/image/banner.jpg";
 import banner1 from "@/assets/image/banner1.jpg";
@@ -403,10 +348,6 @@ const router = useRouter();
 
 const bannerList = ref([banner, banner1, banner3, banner4, banner5, banner6]);
 
-const platforms = ref([
-  { name: "洛谷", logo: luoguLogo },
-  { name: "AtCoder", logo: atcoderLogo },
-]);
 const competitions = ref<ContestTableVO[]>([] as ContestTableVO[]);
 const announcements = ref<AnnouncementTableVO[]>([] as AnnouncementTableVO[]);
 const userAcRank = ref<UserAcRankVO[]>([] as UserAcRankVO[]);
@@ -482,40 +423,6 @@ const toUserInfo = (username: string) => {
   width: 100%;
   min-height: 100%;
   padding: 20px 40px;
-}
-
-footer {
-  margin-top: 2rem;
-  color: #555 !important;
-  background-color: #fff;
-  text-align: center;
-}
-
-footer a {
-  color: #555;
-  text-decoration: none;
-}
-
-footer a:hover {
-  color: #409eff;
-}
-
-footer h1 {
-  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC,
-    Hiragino Sans GB, Microsoft YaHei, Helvetica Neue, Helvetica, Arial,
-    sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol;
-  font-weight: 300;
-  color: #3d3d3d;
-  line-height: 1.1;
-  font-size: 1.5rem;
-}
-
-.mundb-footer {
-  padding: 1.5rem 2.5rem;
-  width: 100%;
-  font-weight: 400;
-  font-size: 1rem;
-  line-height: 1;
 }
 
 /* 小屏幕布局 */

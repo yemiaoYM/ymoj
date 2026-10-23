@@ -61,7 +61,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
-/** 提交权限与可靠任务箱归 Web，任务快照中不携带业务实体或对象存储凭据。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-12
+ * @Description: 校验本站提交权限并持久化可靠任务快照，不携带业务实体或存储凭据。
+ */
 @Slf4j
 @Service
 public class JudgeServiceImpl implements JudgeService {
@@ -175,9 +179,18 @@ public class JudgeServiceImpl implements JudgeService {
         return createSubmission(request, user, problem, contest, contestProblem);
     }
 
+    /**
+     * 使用本站语言配置创建正式提交，固定题目测试版本及本次执行身份。
+     * @param request 提交请求
+     * @param user 当前用户
+     * @param problem 已验证访问权限的题目，来源仅表示出处
+     * @param contest 所属比赛，普通提交为 null
+     * @param contestProblem 比赛题目映射，普通提交为 null
+     * @return 提交 ID
+     */
     private Long createSubmission(JudgeDTO request, User user, Problem problem,
                                   Contest contest, ContestProblem contestProblem) {
-        Language language = requireLanguage(request.getLanguage(), problem.getSource().getCode());
+        Language language = requireLanguage(request.getLanguage());
         validateResources(problem.getTimeLimit(), problem.getMemoryLimit());
         Long versionId = testData.getCurrentVersion(problem.getId());
         if (versionId == null || versionId <= 0) {
@@ -225,12 +238,16 @@ public class JudgeServiceImpl implements JudgeService {
         return judge.getId();
     }
 
-    /** 自测有独立的持久任务和用户关联，Web 重启或 Redis 丢失后仍可查询。 */
+    /**
+     * 创建与用户关联的持久自测任务，Web 重启或 Redis 丢失后仍可查询。
+     * @param request 源码、语言、输入及期望输出
+     * @return 自测任务的提交 ID
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long testJudge(TestJudgeDTO request) {
         User user = SecurityUtils.getUser();
-        Language language = requireLanguage(request.getLanguage(), ProblemSource.LOCAL.getCode());
+        Language language = requireLanguage(request.getLanguage());
         JudgeTask task = newTask(UUID.randomUUID().toString(), language, request.getCode());
         task.setStrategy(JudgeDispatchState.SELF_TEST);
         task.setInput(request.getInput() == null ? "" : request.getInput());
@@ -246,10 +263,16 @@ public class JudgeServiceImpl implements JudgeService {
         return task.getSubmissionId();
     }
 
-    private Language requireLanguage(String name, String source) {
+    /**
+     * 查询本站启用的语言配置，正式提交和自测共用同一执行平台。
+     * @param name 请求使用的语言名称
+     * @return 已启用的本站语言配置，执行参数由创建任务时继续校验
+     * @throws JudgeException 本站未启用该语言
+     */
+    private Language requireLanguage(String name) {
         Language language = languages.lambdaQuery()
                 .eq(Language::getName, name)
-                .eq(Language::getOj, source)
+                .eq(Language::getOj, ProblemSource.LOCAL.getCode())
                 .eq(Language::getStatus, LanguageConstants.ABLE)
                 .one();
         if (language == null) {

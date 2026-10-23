@@ -31,7 +31,7 @@ public class CustomAccessDeniedHandler implements AccessDeniedHandler, Serializa
     public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException) throws IOException, ServletException {
         log.warn("请求访问：{}，权限不足，无法访问该资源", request.getRequestURI());
         String data = JSON.toJSONString(Result.fail().code(HttpStatus.FORBIDDEN).msg("权限不足，无法访问该资源"));
-        response.setStatus(200);
+        response.setStatus(HttpStatus.SUCCESS);
         response.setContentType("application/json");
         response.setCharacterEncoding("utf-8");
         response.getWriter().print(data);

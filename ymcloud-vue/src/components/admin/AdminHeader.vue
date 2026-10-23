@@ -1,84 +1,108 @@
 <template>
   <div class="header-container">
-    <n-flex justify="space-between" align="center" style="height: 100%;">
-      <n-flex :size="15" align="center" style="flex: 1;min-width: 0;">
-        <el-button 
-          :icon="appStore.isCollapse ? 'Expand' : 'Fold'"
-          type="text" 
-          @click="handleCollapse"
-          style="font-size: 25px;"
-          />
-        <el-breadcrumb class="breadcrumb">
-          <el-breadcrumb-item v-for="item in route.matched.filter((item) => item.meta.title)" :key="item.path" :to="item.path">
-            {{ item.meta.title }}
-          </el-breadcrumb-item>
-        </el-breadcrumb>
-      </n-flex>
-      <!-- 用户信息 -->
-      <n-flex :size="15" align="center" style="flex-shrink: 0;">
-        <Avatar :size="40" :src="user.avatar" :text="user.username"/>
-        <el-dropdown trigger="click" placement="bottom">
-          <n-flex align="center" style="cursor: pointer;">
-            <span style="font-size: 17px;font-weight: bold;margin: 0 4px;">{{ user.username }}</span>
-            <el-icon class="el-icon--right">
-              <arrow-down />
-            </el-icon>
-          </n-flex>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="LoginOut">退出登录</el-dropdown-item>
-              <!-- 返回客户端 -->
-              <el-dropdown-item @click="toClientHome">返回客户端</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </n-flex>
-    </n-flex>
+    <div class="header-navigation">
+      <el-button
+        class="menu-toggle"
+        text
+        :icon="mobile || appStore.isCollapse ? Expand : Fold"
+        :aria-label="mobile ? (menuOpen ? '关闭导航菜单' : '打开导航菜单') : (appStore.isCollapse ? '展开导航菜单' : '折叠导航菜单')"
+        :aria-expanded="mobile ? menuOpen : !appStore.isCollapse"
+        @click="emit('toggle-menu')"
+      />
+      <el-breadcrumb class="breadcrumb">
+        <el-breadcrumb-item v-for="item in breadcrumbs" :key="item.path">
+          <!-- matched 中的父级是布局/目录，不是可访问页面。 -->
+          <span>{{ item.meta.title }}</span>
+        </el-breadcrumb-item>
+      </el-breadcrumb>
+    </div>
+    <el-dropdown trigger="click" placement="bottom-end">
+      <el-button class="user-menu" text aria-label="账户菜单">
+        <Avatar :size="32" :src="user.avatar" :text="user.username" />
+        <span class="username">{{ user.username }}</span>
+        <el-icon><ArrowDown /></el-icon>
+      </el-button>
+      <template #dropdown>
+        <el-dropdown-menu>
+          <el-dropdown-item @click="onClientHome">返回客户端</el-dropdown-item>
+          <el-dropdown-item @click="onLogout">退出登录</el-dropdown-item>
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
   </div>
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue';
-import { ArrowDown } from '@element-plus/icons-vue';
+import { computed, defineAsyncComponent } from 'vue';
+import { ArrowDown, Expand, Fold } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
 import { useUserStore } from '@/stores/user';
 import { useAppStore } from '@/stores/app';
-import { storeToRefs } from 'pinia';
-const Avatar=defineAsyncComponent(()=>import('@/components/common/Avatar.vue'));
 
-//data
-const appStore=useAppStore();
-const router=useRouter();
+defineProps<{ mobile: boolean; menuOpen: boolean }>();
+const emit = defineEmits<{ 'toggle-menu': [] }>();
+const Avatar = defineAsyncComponent(() => import('@/components/common/Avatar.vue'));
+const appStore = useAppStore();
+const userStore = useUserStore();
+const { user } = storeToRefs(userStore);
 const route = useRoute();
-const userStore=useUserStore();
-const { user }=storeToRefs(userStore);
+const router = useRouter();
+const breadcrumbs = computed(() => route.matched.filter(item => item.meta.title));
 
-//methods
-//菜单折叠
-const handleCollapse=()=>{
-  appStore.isCollapse = !appStore.isCollapse;
-}
-//退出登录
-const LoginOut=()=>{
+function onLogout() {
   userStore.doLogout();
 }
-//返回客户端
-const toClientHome=()=>{
+
+function onClientHome() {
   router.push('/');
 }
 </script>
 
 <style scoped>
-.header-container{
-  width: 100%;
+.header-container,
+.header-navigation {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.header-container {
   height: 100%;
-  overflow: hidden;
+  justify-content: space-between;
+}
+.header-navigation {
+  flex: 1;
+}
+.menu-toggle {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 8px;
+  font-size: 22px;
 }
 .breadcrumb {
-  flex: 1;
   min-width: 0;
-  white-space: nowrap;
+  line-height: 1.6;
+  overflow: hidden;
+}
+.user-menu {
+  flex-shrink: 0;
+  height: 44px;
+  padding: 4px 8px;
+}
+.username {
+  max-width: 140px;
+  margin: 0 8px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+@media (max-width: 767px) {
+  .username {
+    display: none;
+  }
+  .header-container,
+  .header-navigation {
+    gap: 8px;
+  }
 }
 </style>

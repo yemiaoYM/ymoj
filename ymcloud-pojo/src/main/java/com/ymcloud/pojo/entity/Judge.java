@@ -12,6 +12,11 @@ import lombok.ToString;
 
 import java.time.LocalDateTime;
 
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2025-07-30
+ * @Description: 本站判题提交记录，诊断输出仅包含显式允许的字段。
+ */
 @Data
 @ToString(onlyExplicitlyIncluded = true)
 @Builder
@@ -76,13 +81,6 @@ public class Judge {
 
     @Version
     private Integer version;
-
-    private Long vjudgeSubmitId;
-
-    private String vjudgeUsername;
-
-    /** 历史远程评测凭据不参与诊断输出。 */
-    private String vjudgePassword;
 
     private LocalDateTime createdTime;
 

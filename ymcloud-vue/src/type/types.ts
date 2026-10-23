@@ -9,9 +9,21 @@ import type { ProblemSource } from "@/constants/problem";
 export type SystemSettingVO = {
   /** 是否允许新用户注册 */
   registerEnabled: boolean;
+  /** 首页备案栏开关；关闭时保留备案号 */
+  filingEnabled: boolean;
+  /** ICP 备案号；未配置时为空串 */
+  icpFilingNumber: string;
+  /** 公安备案号；含一段数字编号，未配置时为空串 */
+  policeFilingNumber: string;
 };
 
 export type SystemSettingDTO = SystemSettingVO;
+
+export type SystemSettingResult<T> = {
+  code: number;
+  msg: string;
+  data: T;
+};
 
 /**
  * 用户实体
@@ -336,8 +348,6 @@ export type AdminProblemVO = {
   title: string;
   /** 题目描述内容（题干） */
   content?: string;
-  /** 是否为vj判题 */
-  isRemote?: boolean;
   /** 时间限制（ms） */
   timeLimit?: number;
   /** 内存限制（KB） */
@@ -422,8 +432,6 @@ export type ProblemDTO = {
   title: string;
   /** 题目描述内容（题干） */
   content: string;
-  /** 是否为vj判题 */
-  isRemote: boolean;
   /** 时间限制（ms） */
   timeLimit: number;
   /** 内存限制（MB） */

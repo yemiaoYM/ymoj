@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -39,7 +40,9 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * JDK 17 HTTP 客户端。关闭重定向，限制完整传输及响应大小，不传播远端响应正文。
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-14
+ * @Description: JDK 17 HTTP 客户端。关闭重定向，限制完整传输及响应大小，不传播远端响应正文。
  * 取消 HTTP/1.1 请求会关闭连接，上游将请求 Context 传递给 Worker 以回收整个进程组。
  */
 @Slf4j
@@ -88,7 +91,7 @@ public class GoJudgeClient implements AutoCloseable {
             throw new GoJudgeException("go-judge 执行请求超过传输上限");
         }
         JsonNode result = parse(request("POST", "/run", HttpRequest.BodyPublishers.ofByteArray(body),
-                "application/json", deadline, true, 200));
+                "application/json", deadline, true, HttpURLConnection.HTTP_OK));
         try {
             return validateResults(command, result);
         } catch (GoJudgeException rejectedResponse) {
@@ -202,7 +205,7 @@ public class GoJudgeClient implements AutoCloseable {
         JsonNode result = parse(request("POST", "/file", HttpRequest.BodyPublishers.concat(
                 HttpRequest.BodyPublishers.ofByteArray(prefix), HttpRequest.BodyPublishers.ofByteArray(content),
                 HttpRequest.BodyPublishers.ofByteArray(suffix)), "multipart/form-data; boundary=" + boundary,
-                deadline, true, 200));
+                deadline, true, HttpURLConnection.HTTP_OK));
         if (!result.isTextual() || !validFileId(result.textValue())) {
             throw new GoJudgeException("go-judge 上传响应文件 ID 无效");
         }
@@ -214,7 +217,7 @@ public class GoJudgeClient implements AutoCloseable {
             throw new GoJudgeException("go-judge 文件 ID 无效");
         }
         request("DELETE", "/file/" + fileId, HttpRequest.BodyPublishers.noBody(), null,
-                requestDeadline(deadlineEpochMillis), true, 200);
+                requestDeadline(deadlineEpochMillis), true, HttpURLConnection.HTTP_OK);
     }
 
     public JsonNode version(long deadlineEpochMillis) throws GoJudgeException {
@@ -230,9 +233,9 @@ public class GoJudgeClient implements AutoCloseable {
      */
     public void verifyAuthentication(long deadlineEpochMillis) throws GoJudgeException {
         long deadline = requestDeadline(deadlineEpochMillis);
-        request("GET", "/file", HttpRequest.BodyPublishers.noBody(), null, deadline, false, 401);
+        request("GET", "/file", HttpRequest.BodyPublishers.noBody(), null, deadline, false, HttpURLConnection.HTTP_UNAUTHORIZED);
         JsonNode files = parse(request("GET", "/file", HttpRequest.BodyPublishers.noBody(), null,
-                deadline, true, 200));
+                deadline, true, HttpURLConnection.HTTP_OK));
         if (!files.isObject()) {
             throw new GoJudgeException("go-judge 鉴权检查返回结构无效");
         }
@@ -250,7 +253,7 @@ public class GoJudgeClient implements AutoCloseable {
 
     private JsonNode getJson(String path, long deadlineEpochMillis) throws GoJudgeException {
         return parse(request("GET", path, HttpRequest.BodyPublishers.noBody(), null,
-                requestDeadline(deadlineEpochMillis), true, 200));
+                requestDeadline(deadlineEpochMillis), true, HttpURLConnection.HTTP_OK));
     }
 
     private byte[] request(String method, String path, HttpRequest.BodyPublisher body, String contentType,
@@ -281,7 +284,7 @@ public class GoJudgeClient implements AutoCloseable {
         } catch (RuntimeException e) {
             throw new GoJudgeException("go-judge HTTP 请求未能发送");
         }
-        if (response.statusCode() == 404) {
+        if (response.statusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
             throw new GoJudgeFileMissingException();
         }
         if (response.statusCode() != expectedStatus) {

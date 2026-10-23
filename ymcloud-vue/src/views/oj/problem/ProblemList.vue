@@ -4,15 +4,11 @@
       <el-card>
         <template #header>
           <n-flex justify="space-between">
-            <span style="font-size: 20px;font-weight: bold;">所属题库</span>
+            <span style="font-size: 20px;font-weight: bold;">题目筛选</span>
             <el-button style="margin-right: 15px;" round type="primary" :icon="Refresh" @click="reset">重置</el-button>
           </n-flex>
         </template>
 
-        <span style="margin-right: 20px;">题库</span>
-        <el-segmented v-model="query.source" :options="bankOptions" size="large" @change="pushRouter" />
-        <br />
-        <br />
         <span style="margin-right: 20px;">难度</span>
         <el-segmented v-model="query.difficulty" :options="difficultyList" size="large" @change="pushRouter" />
         <el-divider />
@@ -122,7 +118,6 @@ import { NFlex } from 'naive-ui';
 import { MagicStick, Check, Close, Refresh } from '@element-plus/icons-vue'
 import type { Tag, ProblemTableVO } from '@/type/types';
 import { getTagsList, getProblemTableList, getRandomProblem } from '@/api/api';
-import { ProblemSource } from '@/constants/problem';
 
 //data
 const route = useRoute();
@@ -135,13 +130,6 @@ const difficultyList = [
   { label: '普及', value: 2, type: 'warning' },
   { label: '提高', value: 3, type: 'primary' },
   { label: '省选', value: 4, type: 'success' },
-];
-const bankOptions = [
-  { value: ' ', label: '全部', color: '#ffc732' },
-  { value: ProblemSource.LOCAL, label: '喵语云', color: '#626aef' },
-  { value: ProblemSource.LUOGU, label: '洛谷', color: '#ffc732', disabled: true },
-  { value: ProblemSource.ATCODER, label: 'AtCoder', color: '#ffc732', disabled: true },
-  { value: ProblemSource.LEETCODE, label: 'LeetCode', color: '#ffc732', disabled: true }
 ];
 const colors = [
   { color: '#f56c6c', percentage: 20 },
@@ -158,7 +146,6 @@ type ProblemListQuery = {
   pageSize: number;
   keyword: string;
   difficulty: number;
-  source: ProblemSource | ' ';
 };
 
 const query = ref<ProblemListQuery>({
@@ -166,7 +153,6 @@ const query = ref<ProblemListQuery>({
   pageSize: 15,
   keyword: '',
   difficulty: -1,
-  source: ProblemSource.LOCAL
 });
 
 const totalPage = ref<number>(0);
@@ -181,10 +167,6 @@ const init = () => {
   query.value.pageSize = Number(queryParams.pageSize) || 15;
   query.value.keyword = queryParams.keyword as string || '';
   query.value.difficulty = Number(queryParams.difficulty) || -1;
-  const source = queryParams.source as ProblemSource | ' ';
-  query.value.source = source === ' ' || Object.values(ProblemSource).includes(source)
-    ? source
-    : ProblemSource.LOCAL;
 }
 //初始化
 init();
@@ -257,7 +239,6 @@ const reset = () => {
   query.value.pageSize = 15;
   query.value.keyword = '';
   query.value.difficulty = -1;
-  query.value.source = ProblemSource.LOCAL;
   router.push({ name: 'ProblemList' });
 }
 //监听路由变化

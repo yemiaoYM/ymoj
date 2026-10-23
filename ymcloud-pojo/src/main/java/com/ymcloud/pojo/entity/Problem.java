@@ -7,7 +7,11 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/** 题目表。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2025-07-30
+ * @Description: 题目表；来源记录原题出处，题目统一由本站判题。
+ */
 @Data
 public class Problem {
 
@@ -23,9 +27,6 @@ public class Problem {
 
     /** 题目描述内容（题干） */
     private String content;
-
-    /** 是否为vj判题 */
-    private Boolean isRemote;
 
     /** 时间限制（ms） */
     private Long timeLimit;

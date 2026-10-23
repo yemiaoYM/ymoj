@@ -731,6 +731,19 @@ class ComposeConfigurationTest(unittest.TestCase):
     def test_missing_variables_resolve_to_usable_defaults(self):
         self.assert_resolved_credentials(self.resolve(), DEFAULT_CREDENTIALS)
 
+    def test_web_native_libraries_use_private_executable_tmpfs(self):
+        web = self.resolve()["services"]["web"]
+        self.assertEqual("-Djna.tmpdir=/jna-tmp", web["environment"]["JAVA_TOOL_OPTIONS"])
+        mounts = {mount.split(":", 1)[0]: set(mount.split(":", 1)[1].split(","))
+                  for mount in web["tmpfs"]}
+        self.assertIn("noexec", mounts["/tmp"])
+        self.assertNotIn("exec", mounts["/tmp"])
+        self.assertTrue({"rw", "exec", "nosuid", "nodev", "mode=0700", "uid=10001", "gid=10001"}
+                        <= mounts["/jna-tmp"])
+        self.assertNotIn("noexec", mounts["/jna-tmp"])
+        self.assertTrue(web["read_only"])
+        self.assertEqual("10001:10001", web["user"])
+
     def test_empty_dotenv_values_resolve_to_the_same_defaults(self):
         values = {key: "" for key in DEFAULT_CREDENTIALS}
         self.assert_resolved_credentials(self.resolve(values), DEFAULT_CREDENTIALS)

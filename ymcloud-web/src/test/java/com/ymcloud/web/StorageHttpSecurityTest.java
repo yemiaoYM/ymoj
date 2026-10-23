@@ -68,7 +68,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 使用真实安全链及方法鉴权，验证存储代理、迁移和测试数据接口权限边界。
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-11
+ * @Description: 使用真实安全链及方法鉴权，验证存储代理、迁移和测试数据接口权限边界。
  */
 class StorageHttpSecurityTest {
 
@@ -195,20 +197,50 @@ class StorageHttpSecurityTest {
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")));
     }
 
+    /**
+     * 历史记录没有存储配置时拒绝下载，不按 URL 或绝对路径读取旧目录。
+     * @throws Exception 请求或断言失败
+     */
     @Test
-    void historicalPublicUrlUsesConfinedLocalCopyInsteadOfAnotherNodesAbsolutePath() throws Exception {
-        byte[] bytes = new byte[]{3, 4, 5};
-        File file = publicFile("avatar.jpg", "image/jpeg", bytes.length);
+    void historicalPublicUrlWithoutStorageProfileIsRejected() throws Exception {
+        File file = publicFile("avatar.jpg", "image/jpeg", 3);
+        file.setStorageProfile(null);
         file.setStorageType(0);
         file.setStoragePath("/home/ymcloud/files/public/image/avatar.jpg");
         when(files.resolvePublicUrl("/files/public/image/avatar.jpg")).thenReturn(file);
-        when(files.openLegacyPublic("image/avatar.jpg")).thenReturn(new ByteArrayInputStream(bytes));
 
         mvc.perform(get("/files/public/image/avatar.jpg"))
-                .andExpect(status().isOk())
-                .andExpect(content().bytes(bytes))
-                .andExpect(header().string("X-Content-Type-Options", "nosniff"));
-        verify(files, never()).open(file);
+                .andExpect(jsonPath("$.code").value(404));
+        verify(files, never()).open(any());
+        verify(files, never()).openLegacyPublic(any());
+    }
+
+    /**
+     * 未登记 URL 不能借助公开入口探测或读取本地目录。
+     * @throws Exception 请求或断言失败
+     */
+    @Test
+    void unregisteredPublicUrlIsRejectedWithoutOpeningStorage() throws Exception {
+        mvc.perform(get("/files/public/image/missing.png"))
+                .andExpect(jsonPath("$.code").value(404));
+        verify(files, never()).open(any());
+        verify(files, never()).openLegacyPublic(any());
+    }
+
+    /**
+     * 空白配置名不能绕过旧目录禁用规则。
+     * @throws Exception 请求或断言失败
+     */
+    @Test
+    void blankStorageProfileIsRejectedWithoutOpeningStorage() throws Exception {
+        File file = publicFile("avatar.png", "image/png", 3);
+        file.setStorageProfile(" ");
+        when(files.resolvePublicUrl("/files/public/image/avatar.png")).thenReturn(file);
+
+        mvc.perform(get("/files/public/image/avatar.png"))
+                .andExpect(jsonPath("$.code").value(404));
+        verify(files, never()).open(any());
+        verify(files, never()).openLegacyPublic(any());
     }
 
     @Test
@@ -369,10 +401,18 @@ class StorageHttpSecurityTest {
         verify(problems, never()).uploadTestCaseFile(any(), any());
     }
 
+    /**
+     * 构造已绑定存储配置的公开文件元数据。
+     * @param name 文件名
+     * @param contentType MIME 类型
+     * @param size 文件字节数
+     * @return 可由公开代理读取的文件记录
+     */
     private File publicFile(String name, String contentType, long size) {
         File file = new File();
         file.setId(5L);
         file.setIsPublic(1);
+        file.setStorageProfile("seaweed");
         file.setFileName(name);
         file.setFileType(contentType);
         file.setFileSize(size);

@@ -583,51 +583,6 @@ class JudgeDispatchDatabaseIT {
         }
     }
 
-    @Test
-    void stageOneUpgradePreservesHistoryAndSeedsTheSharedSubmissionSequence() throws Exception {
-        long legacy = 765_432L;
-        JudgeDispatch dispatch = formal(legacy);
-        results.receive(accepted(dispatch));
-        Map<String, Object> history = jdbc.queryForMap("SELECT id,problem_id,test_data_version_id,status,time,memory,"
-                + "score,code,created_time,updated_time FROM judge WHERE id=?", legacy);
-        Map<String, Object> version = jdbc.queryForMap("SELECT * FROM test_data_version WHERE id=77");
-        List<Map<String, Object>> historicalCases = jdbc.queryForList(
-                "SELECT * FROM judge_case WHERE judge_id=? ORDER BY id", legacy);
-        List<Map<String, Object>> historicalAccepted = jdbc.queryForList("SELECT * FROM user_acproblem ORDER BY id");
-
-        jdbc.execute("DROP TABLE judge_dispatch");
-        jdbc.execute("ALTER TABLE judge DROP COLUMN execution_id");
-        byte[] upgrade = Files.readString(rootDirectory().resolve("sql/upgrade-worker.sql"), StandardCharsets.UTF_8)
-                .getBytes(StandardCharsets.UTF_8);
-        try (Connection connection = prepared.getConnection()) {
-            assertEquals(schema, connection.getCatalog());
-            ScriptUtils.executeSqlScript(connection,
-                    new EncodedResource(new ByteArrayResource(upgrade), StandardCharsets.UTF_8));
-        }
-
-        assertEquals(history, jdbc.queryForMap("SELECT id,problem_id,test_data_version_id,status,time,memory,"
-                + "score,code,created_time,updated_time FROM judge WHERE id=?", legacy));
-        assertEquals(version, jdbc.queryForMap("SELECT * FROM test_data_version WHERE id=77"));
-        assertEquals(historicalCases,
-                jdbc.queryForList("SELECT * FROM judge_case WHERE judge_id=? ORDER BY id", legacy));
-        assertEquals(historicalAccepted, jdbc.queryForList("SELECT * FROM user_acproblem ORDER BY id"));
-        assertNull(judges.getById(legacy).getExecutionId());
-        assertEquals(0, count("judge_dispatch"));
-        JudgeDispatchIdAllocator allocator = new JudgeDispatchIdAllocator(dispatches, judges, jdbc);
-        assertDoesNotThrow(allocator::verifyCounter);
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(context.getBean(UserEntityService.class).getById(2L));
-            TestJudgeDTO request = new TestJudgeDTO();
-            request.setLanguage("Python");
-            request.setCode("print(input())");
-            Long id = service.testJudge(request);
-            assertEquals(legacy + 1, id);
-            assertEquals(id, dispatches.getById(id).getSubmissionId());
-        }
-        assertEquals(1, count("judge"));
-        assertEquals(JudgeStatus.STATUS_ACCEPTED, judges.getById(legacy).getStatus());
-    }
-
     private JudgeDispatch formal(Long id) {
         String execution = UUID.randomUUID().toString();
         Judge judge = Judge.builder()

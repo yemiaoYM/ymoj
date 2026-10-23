@@ -2,6 +2,7 @@ package com.ymcloud.core.storage;
 
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
@@ -43,7 +44,9 @@ import java.util.TreeSet;
 import java.util.stream.Stream;
 
 /**
- * 在题目行锁内发布版本。对象和清单全部准备完成后才切换当前版本，历史引用始终保留。
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-11
+ * @Description: 在题目行锁内发布版本。对象和清单全部准备完成后才切换当前版本，历史引用始终保留。
  */
 @Service
 public class TestDataServiceImpl implements TestDataService {
@@ -130,7 +133,7 @@ public class TestDataServiceImpl implements TestDataService {
                     File file = storedFileService.get(input ? entry.getInputFileId() : entry.getOutputFileId());
                     if (file == null || !FileBizType.TEST_DATA.equals(file.getBizType())
                             || !Objects.equals(problemId, file.getBizId())
-                            || !Integer.valueOf(0).equals(file.getIsPublic())
+                            || !Integer.valueOf(FileConstants.ACCESS_PRIVATE).equals(file.getIsPublic())
                             || !Objects.equals(size, file.getFileSize())
                             || !Objects.equals(hash, file.getSha256())) {
                         throw new ProblemException("测试数据文件元信息校验失败");

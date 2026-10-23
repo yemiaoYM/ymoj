@@ -1,5 +1,6 @@
 package com.ymcloud.web.controller.internal;
 
+import com.ymcloud.common.constant.HttpStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
@@ -27,27 +28,27 @@ public class JudgeWorkerHealthController {
     public ResponseEntity<Void> health() {
         try (Connection database = dataSource.getConnection()) {
             if (!database.isValid(2)) {
-                return ResponseEntity.status(503).build();
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
             }
         } catch (Exception e) {
             log.debug("Web 就绪检查失败 dependency=mysql cause={}", e.getClass().getSimpleName());
-            return ResponseEntity.status(503).build();
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         try (var connection = redis.getRequiredConnectionFactory().getConnection()) {
             if (!"PONG".equals(connection.ping())) {
-                return ResponseEntity.status(503).build();
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
             }
         } catch (Exception e) {
             log.debug("Web 就绪检查失败 dependency=redis cause={}", e.getClass().getSimpleName());
-            return ResponseEntity.status(503).build();
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         try (var connection = rabbit.createConnection()) {
             if (!connection.isOpen()) {
-                return ResponseEntity.status(503).build();
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
             }
         } catch (Exception e) {
             log.debug("Web 就绪检查失败 dependency=rabbitmq cause={}", e.getClass().getSimpleName());
-            return ResponseEntity.status(503).build();
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         return ResponseEntity.ok().build();
     }

@@ -8,8 +8,6 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.pojo.vo.admin
- * @ClassName: ProblemVO
  * @Author: Yemiao
  * @CreateTime: 2025-10-01  22:30
  * @Description: 题目VO
@@ -35,10 +33,6 @@ public class ProblemVO implements Serializable {
      * 题目描述内容（题干）
      */
     private String content;
-    /**
-     * 是否为vj判题
-     */
-    private Boolean isRemote;
     /**
      * 时间限制（ms）
      */

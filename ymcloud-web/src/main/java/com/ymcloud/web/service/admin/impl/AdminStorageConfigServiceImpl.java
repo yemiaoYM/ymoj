@@ -1,5 +1,6 @@
 package com.ymcloud.web.service.admin.impl;
 
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.StorageConfigCatalog;
@@ -26,7 +27,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/** 命名配置管理。写入与探测仅向 ID 为 1 的可用超级管理员开放。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-11
+ * @Description: 命名配置管理。写入与探测仅向 ID 为 1 的可用超级管理员开放。
+ */
 @Service
 public class AdminStorageConfigServiceImpl implements AdminStorageConfigService {
 
@@ -85,7 +90,7 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         if (!references.isEmpty()) {
             // 配置名须与历史记录完全一致，不能借数据库不区分大小写的比较恢复别名。
             if (references.stream().anyMatch(file -> file == null || !dto.getKey().equals(file.getStorageProfile()))) {
-                throw new FileException("已有文件的存储配置名不一致，请使用原配置名恢复", 400);
+                throw new FileException("已有文件的存储配置名不一致，请使用原配置名恢复", HttpStatus.BAD_REQUEST);
             }
             tester.verifyReferencedFiles(requestProfile(dto, null), references);
         }
@@ -244,7 +249,7 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         }
         StorageProperties.Profile profile = properties.getProfiles().get(key);
         if (profile == null) {
-            throw new FileException("存储配置不存在", 404);
+            throw new FileException("存储配置不存在", HttpStatus.NOT_FOUND);
         }
         return profile;
     }

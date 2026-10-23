@@ -36,8 +36,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * @PackageName: com.ymcloud.web.service.impl
- * @ClassName: ProblemServiceImpl
  * @Author: Yemiao
  * @CreateTime: 2025-07-22  19:41
  * @Description: ProblemServiceImpl
@@ -113,12 +111,10 @@ public class ProblemServiceImpl implements ProblemService {
         //查询题目的题面样例,将json转化为对象
         List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
         problemVO.setProblemCaseList(problemCaseVOList);
-        //查询题目的语言配置
-        //题目的语言选项可用语言的oj来源决定
-        //直接使用sql语言来优化性能
+        //来源只记录出处，题目统一使用本站启用的语言配置。
         List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(
                 LanguageConstants.ABLE,
-                problem.getSource().getCode());
+                ProblemSource.LOCAL.getCode());
         problemVO.setLanguageList(languageVOList);
         //查询用户该题目的通过状态
         boolean isAccepted = judgeEntityService.lambdaQuery()

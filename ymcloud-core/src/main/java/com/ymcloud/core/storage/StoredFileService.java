@@ -1,6 +1,7 @@
 package com.ymcloud.core.storage;
 
 import com.ymcloud.common.constant.FileConstants;
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.pojo.entity.File;
@@ -21,7 +22,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 文件元数据与对象生命周期管理。业务权限由调用方检查。
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-11
+ * @Description: 文件元数据与对象生命周期管理。业务权限由调用方检查。
  */
 @Service
 @Slf4j
@@ -51,7 +54,7 @@ public class StoredFileService {
     public File save(InputStream input, long size, File file) {
         file.setFileName(safeName(file.getFileName()));
         file.setFileType(safeContentType(file.getFileType()));
-        if (file.getBizType() == FileBizType.TEST_DATA && Integer.valueOf(1).equals(file.getIsPublic())) {
+        if (file.getBizType() == FileBizType.TEST_DATA && Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())) {
             throw new FileException("测试数据必须为私有文件");
         }
         if (size < 0 || size > storage.maxFileSize()) {
@@ -62,7 +65,7 @@ public class StoredFileService {
         boolean registered = false;
         try {
             client = prepareObject(file, staged, storage.active());
-            if (Integer.valueOf(1).equals(file.getIsPublic())) {
+            if (Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())) {
                 file.setUrl("/files/public/" + file.getStorageProfile() + "/" + file.getObjectKey());
             } else {
                 file.setUrl(null);
@@ -93,7 +96,7 @@ public class StoredFileService {
                 .eq(File::getId, id)
                 .one();
         if (file == null) {
-            throw new FileException("文件不存在", 404);
+            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
         }
         return file;
     }
@@ -134,7 +137,7 @@ public class StoredFileService {
                 .last("FOR UPDATE")
                 .one();
         if (file == null) {
-            throw new FileException("文件不存在", 404);
+            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
         }
         if (file.getBizType() == FileBizType.TEST_DATA) {
             throw new FileException("测试数据由版本管理，不允许直接删除");
@@ -175,7 +178,7 @@ public class StoredFileService {
                 .last("FOR UPDATE")
                 .one();
         if (file == null) {
-            throw new FileException("文件不存在", 404);
+            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
         }
         if (file.getStorageProfile() != null) {
             return file;
@@ -248,8 +251,8 @@ public class StoredFileService {
 
     private ObjectStorageService prepareObject(File file, Path staged, String profileName) {
         StorageProperties.Profile profile = storage.profile(profileName);
-        boolean publicAccess = Integer.valueOf(1).equals(file.getIsPublic());
-        String bucket = "local".equals(profile.getType()) ? (publicAccess ? "public" : "private")
+        boolean publicAccess = Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic());
+        String bucket = "local".equals(profile.getType()) ? (publicAccess ? FileConstants.DIR_PUBLIC : FileConstants.DIR_PRIVATE)
                 : (publicAccess ? profile.getPublicBucket() : profile.getPrivateBucket());
         String extension = extension(file.getFileName());
         String key = UUID.randomUUID().toString().replace("-", "") + extension;

@@ -1,5 +1,6 @@
 package com.ymcloud.web.config;
 
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -27,7 +28,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Worker 数据入口只接受专用服务身份，不复用管理员或用户的登录权限。
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-12
+ * @Description: Worker 数据入口只接受专用服务身份，不复用管理员或用户的登录权限。
  */
 @Configuration
 @EnableConfigurationProperties(JudgeWorkerIdentityProperties.class)
@@ -44,8 +47,8 @@ public class JudgeWorkerSecurityConfig {
         http.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         http.authorizeHttpRequests(request -> request.anyRequest().hasAuthority("ROLE_JUDGE_WORKER"));
         http.exceptionHandling(exception -> exception
-                .authenticationEntryPoint((request, response, failure) -> response.setStatus(401))
-                .accessDeniedHandler((request, response, failure) -> response.setStatus(403)));
+                .authenticationEntryPoint((request, response, failure) -> response.setStatus(HttpStatus.UNAUTHORIZED))
+                .accessDeniedHandler((request, response, failure) -> response.setStatus(HttpStatus.FORBIDDEN)));
         http.addFilterBefore(new WorkerTokenFilter(properties), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
@@ -75,11 +78,11 @@ public class JudgeWorkerSecurityConfig {
             if (!isConfiguredIdentityValid(expected) || supplied == null || supplied.length() > 512
                     || !MessageDigest.isEqual(hash(expected), hash(supplied))) {
                 // 直接结束服务响应，避免容器分派到普通用户的 /error 后把 HTTP 状态改为 200。
-                response.setStatus(401);
+                response.setStatus(HttpStatus.UNAUTHORIZED);
                 return;
             }
             if (!"GET".equals(request.getMethod())) {
-                response.setStatus(405);
+                response.setStatus(HttpStatus.BAD_METHOD);
                 return;
             }
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(

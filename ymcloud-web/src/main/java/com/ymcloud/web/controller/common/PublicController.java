@@ -106,7 +106,7 @@ public class PublicController {
      * 获取标签列表
      * @return 标签列表
      */
-    @Cacheable(cacheNames = CacheConstants.CACHE_NAME,key = "'tag_list'")
+    @Cacheable(cacheNames = CacheConstants.CACHE_NAME, key = "'" + CacheConstants.TAG_LIST_KEY + "'")
     @GetMapping("/tags")
     public Result<List<Tag>> listTags() {
         log.info("获取标签列表");
@@ -187,7 +187,7 @@ public class PublicController {
      * 用户ac数量排名（每日凌晨1点更新）
      * @return 用户ac数量排名列表
      */
-    @Cacheable(cacheNames = CacheConstants.CACHE_NAME,key = "'user_ac_rank'")
+    @Cacheable(cacheNames = CacheConstants.CACHE_NAME,key = "'" + CacheConstants.USER_AC_RANK_KEY + "'")
     @GetMapping("/user-ac-rank")
     public Result<List<UserAcRankVO>> userAcRank() {
         log.info("获取用户ac数量排名（每日凌晨1点更新）");

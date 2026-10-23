@@ -11,7 +11,9 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 系统配置管理
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-10
+ * @Description: 管理网站注册和首页备案配置
  */
 @Slf4j
 @RestController
@@ -40,7 +42,7 @@ public class AdminSystemSettingController {
     @PreAuthorize("@ss.hasPermi('system:setting:edit')")
     @PutMapping
     public Result<Void> updateSystemSetting(@Validated @RequestBody SystemSettingDTO systemSettingDTO) {
-        log.info("修改系统配置:{}", systemSettingDTO);
+        log.info("修改系统配置");
         systemSettingService.updateSystemSetting(systemSettingDTO);
         return Result.ok();
     }

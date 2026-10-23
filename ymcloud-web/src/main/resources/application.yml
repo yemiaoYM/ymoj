@@ -42,7 +42,6 @@ spring:
     application:
         name: ymcloud
     profiles:
-        # 开发/生产分别维护连接信息，不能只靠 profile 名称隔离共享数据。
         active: dev
     servlet:
         multipart:
@@ -127,8 +126,6 @@ user:
 # 日志配置
 logging:
     charset:
-        # 控制台与日志文件统一 UTF-8，避免 Windows 默认编码造成中文乱码。
-        console: UTF-8
         file: UTF-8
     file:
         # 可用 LOGGING_FILE_PATH 覆盖；Docker 镜像默认写入持久化的 /data/logs。

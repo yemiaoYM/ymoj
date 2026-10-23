@@ -16,7 +16,7 @@
           label-width="auto"
           style="width: 100%"
         >
-          <el-form-item label="来源" prop="source">
+          <el-form-item label="原题来源" prop="source">
             <el-select v-model="problem.source" style="width: 200px">
               <el-option :value="ProblemSource.LOCAL" label="本地" />
               <el-option :value="ProblemSource.LUOGU" label="洛谷" />
@@ -24,6 +24,9 @@
               <el-option :value="ProblemSource.CODEFORCES" label="Codeforces" />
               <el-option :value="ProblemSource.LEETCODE" label="LeetCode" />
             </el-select>
+          </el-form-item>
+          <el-form-item label="评测方式">
+            <el-text type="info">统一使用本站判题，需在测试用例管理中上传评测数据。</el-text>
           </el-form-item>
           <el-form-item label="题目展示id" prop="problemId">
             <el-input

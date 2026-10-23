@@ -1,5 +1,7 @@
 package com.ymcloud.core.storage;
 
+import com.ymcloud.common.constant.FileConstants;
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.pojo.entity.File;
 import org.springframework.stereotype.Component;
@@ -15,7 +17,11 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 
-/** 随机对象连接测试与历史对象只读校验，不返回远端异常内容。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-11
+ * @Description: 随机对象连接测试与历史对象只读校验，不返回远端异常内容。
+ */
 @Component
 public class StorageConnectionTester {
 
@@ -71,7 +77,7 @@ public class StorageConnectionTester {
             }
         }
         if (!passed || !closed) {
-            throw new FileException("已有文件完整性校验失败，未恢复存储配置；请检查存储桶、对象及历史大小和哈希", 400);
+            throw new FileException("已有文件完整性校验失败，未恢复存储配置；请检查存储桶、对象及历史大小和哈希", HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -90,7 +96,7 @@ public class StorageConnectionTester {
             staged = Files.createTempFile("ymcloud-storage-probe-", ".bin");
             Files.write(staged, bytes);
             driver = registry.createClient(profile);
-            List<String> buckets = "local".equals(profile.getType()) ? List.of("public", "private")
+            List<String> buckets = "local".equals(profile.getType()) ? List.of(FileConstants.DIR_PUBLIC, FileConstants.DIR_PRIVATE)
                     : List.of(profile.getPublicBucket(), profile.getPrivateBucket());
             for (String bucket : buckets) {
                 // 即使 put 的响应丢失也补偿，不能只清理确认上传成功的对象。
@@ -131,19 +137,20 @@ public class StorageConnectionTester {
             }
         }
         if (!passed || !cleaned) {
-            throw new FileException("存储连接测试失败，请检查连接、凭据及双桶读写删除权限", 400);
+            throw new FileException("存储连接测试失败，请检查连接、凭据及双桶读写删除权限", HttpStatus.BAD_REQUEST);
         }
     }
 
     private void validateReference(StorageProperties.Profile profile, File file) {
-        if (file == null || file.getIsPublic() == null || (file.getIsPublic() != 0 && file.getIsPublic() != 1)
+        if (file == null || file.getIsPublic() == null || (file.getIsPublic() != FileConstants.ACCESS_PRIVATE
+                && file.getIsPublic() != FileConstants.ACCESS_PUBLIC)
                 || file.getFileSize() == null || file.getFileSize() < 0 || file.getSha256() == null
                 || !file.getSha256().matches("[a-fA-F0-9]{64}") || file.getObjectKey() == null
                 || file.getObjectKey().isBlank()
                 || file.getObjectKey().chars().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException();
         }
-        String expectedBucket = file.getIsPublic() == 1 ? profile.getPublicBucket() : profile.getPrivateBucket();
+        String expectedBucket = file.getIsPublic() == FileConstants.ACCESS_PUBLIC ? profile.getPublicBucket() : profile.getPrivateBucket();
         if (!expectedBucket.equals(file.getBucket())) {
             throw new IllegalArgumentException();
         }

@@ -1,5 +1,6 @@
 package com.ymcloud.core.storage;
 
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.StorageConfigEntityService;
@@ -15,7 +16,11 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/** 数据库是动态配置和默认选择的唯一来源；上传事务锁定状态，避免定位字段竞态。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-11
+ * @Description: 数据库是动态配置和默认选择的唯一来源；上传事务锁定状态，避免定位字段竞态。
+ */
 @Service
 public class StorageConfigCatalog {
 
@@ -200,7 +205,7 @@ public class StorageConfigCatalog {
 
     private StorageConfig exactKey(StorageConfig config, String key) {
         if (config != null && !key.equals(config.getId())) {
-            throw new FileException("存储配置名区分大小写，请使用原配置名", 400);
+            throw new FileException("存储配置名区分大小写，请使用原配置名", HttpStatus.BAD_REQUEST);
         }
         return config;
     }

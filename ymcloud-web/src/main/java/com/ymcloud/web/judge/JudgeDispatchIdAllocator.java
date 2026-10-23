@@ -12,11 +12,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-/** 正式提交和自测使用数据库统一序号，保持现有前端 number 的精确范围。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-12
+ * @Description: 正式提交和自测使用数据库统一序号，保持现有前端 number 的精确范围。
+ */
 @Component
 public class JudgeDispatchIdAllocator {
 
@@ -29,6 +34,12 @@ public class JudgeDispatchIdAllocator {
     private final JudgeEntityService judges;
     private final JdbcTemplate jdbc;
 
+    /**
+     * 初始化数据库序号分配器；元数据读取与会话设置必须使用同一个连接。
+     * @param dispatches 任务箱数据服务
+     * @param judges 正式提交数据服务
+     * @param jdbc MySQL 元数据访问入口
+     */
     public JudgeDispatchIdAllocator(JudgeDispatchEntityService dispatches,
                                     JudgeEntityService judges,
                                     JdbcTemplate jdbc) {
@@ -37,6 +48,10 @@ public class JudgeDispatchIdAllocator {
         this.jdbc = jdbc;
     }
 
+    /**
+     * 启动时核对自增定义和前端可精确表示的序号范围，不在运行时修改表结构。
+     * @throws IllegalStateException 自增序号未超过历史提交或超出安全整数范围
+     */
     @PostConstruct
     public void verifyCounter() {
         Judge latest = judges.lambdaQuery()
@@ -51,7 +66,12 @@ public class JudgeDispatchIdAllocator {
         }
     }
 
-    /** MySQL 默认缓存统计 24 小时；在同一连接读取实时序号并恢复该连接的原设置。 */
+    /**
+     * 绕过 MySQL 元数据统计缓存读取下一自增值，并恢复当前连接的原设置。
+     * 固定系统表查询不接受外部 SQL 片段；lambdaQuery 无法替代会话级元数据操作。
+     * 此值只用于启动校验，实际 ID 由 reserve 中的数据库 INSERT 分配，禁止 MAX(id) + 1。
+     * @return 下一自增值；定义或统计不可用时返回 null
+     */
     private Long freshCounter() {
         return jdbc.execute((ConnectionCallback<Long>) connection -> {
             try (Statement statement = connection.createStatement()) {
@@ -83,13 +103,22 @@ public class JudgeDispatchIdAllocator {
                     }
                     return next == null ? initialCounter(statement) : next;
                 } finally {
-                    statement.execute("SET SESSION information_schema_stats_expiry=" + original);
+                    try (PreparedStatement restore = connection.prepareStatement(
+                            "SET SESSION information_schema_stats_expiry=?")) {
+                        restore.setLong(1, original);
+                        restore.execute();
+                    }
                 }
             }
         });
     }
 
-    /** AUTO_INCREMENT 统计不能代替列定义校验，移除自增后表统计仍可能保留旧序号。 */
+    /**
+     * 校验列定义，避免移除自增后的残留统计被误认为有效序号。
+     * @param statement 当前元数据连接的语句
+     * @return id 列是否声明自增
+     * @throws SQLException 元数据读取失败
+     */
     private boolean hasAutoIncrementColumn(Statement statement) throws SQLException {
         try (ResultSet column = statement.executeQuery("SELECT EXTRA FROM information_schema.columns "
                 + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='judge_dispatch' AND COLUMN_NAME='id'")) {
@@ -98,7 +127,12 @@ public class JudgeDispatchIdAllocator {
         }
     }
 
-    /** 列定义已校验自增；首次插入前 MySQL 的空表计数可为 NULL，仅真实空表视为下一号 1。 */
+    /**
+     * 自增列首次插入前统计可为 null，仅真实空表按初始序号 1 校验。
+     * @param statement 当前元数据连接的语句
+     * @return 空表初始序号或重新读取的计数；无法确认时为 null
+     * @throws SQLException 表或统计读取失败
+     */
     private Long initialCounter(Statement statement) throws SQLException {
         try (ResultSet row = statement.executeQuery("SELECT id FROM judge_dispatch LIMIT 1")) {
             if (!row.next()) {
@@ -115,7 +149,13 @@ public class JudgeDispatchIdAllocator {
         }
     }
 
-    /** 仅在提交事务中保留一个未完成快照的行，回滚后不会留下可发布任务。 */
+    /**
+     * 在调用方提交事务内插入任务行，由数据库自增分配正式提交或自测 ID。
+     * 回滚不会留下可发布任务，允许自增序号出现空洞。
+     * @param dispatch 待持久化的任务快照，插入后回填 ID
+     * @return 前端安全整数范围内的提交 ID
+     * @throws JudgeException 插入失败或数据库返回的 ID 越界
+     */
     @Transactional(propagation = Propagation.MANDATORY, rollbackFor = Exception.class)
     public Long reserve(JudgeDispatch dispatch) {
         if (!dispatches.save(dispatch)) {

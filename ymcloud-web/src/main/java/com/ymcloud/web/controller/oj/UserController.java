@@ -16,8 +16,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * @PackageName: com.ymcloud.web.controller.user
- * @ClassName: UserController
  * @Author: Yemiao
  * @CreateTime: 2025-07-22  12:49
  * @Description: 用户信息控制器

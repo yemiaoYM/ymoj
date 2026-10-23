@@ -23,8 +23,33 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/** 协议只使用数字状态与明确 DTO，非法 UTF-8 和任意类型头不能穿透消息边界。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-12
+ * @Description: 协议只使用数字状态与明确 DTO，非法 UTF-8 和任意类型头不能穿透消息边界。
+ */
 class JudgeMessageBoundaryTest {
+
+    /** 拒绝消息尾部的第二份 JSON，避免静默忽略额外的协议数据。 */
+    @Test
+    void trailingJsonIsRejectedForTasksAndResults() {
+        JudgeMessageCodec codec = new JudgeMessageCodec(new ObjectMapper());
+        assertThrows(IllegalArgumentException.class, () -> codec.task("{} {}"));
+        assertThrows(IllegalArgumentException.class, () -> codec.result("{} []"));
+    }
+
+    /** 重复身份字段不得以后值覆盖前值，也不能交给结果服务。 */
+    @Test
+    void duplicateIdentityFieldsAreRejectedBeforeConsumerInvocation() {
+        JudgeMessageCodec codec = new JudgeMessageCodec(new ObjectMapper());
+        String payload = "{\"submissionId\":1,\"submissionId\":2}";
+        assertThrows(IllegalArgumentException.class, () -> codec.task(payload));
+        JudgeResultService results = mock(JudgeResultService.class);
+        JudgeResultListener listener = new JudgeResultListener(codec, results);
+        Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), new MessageProperties());
+        assertThrows(AmqpRejectAndDontRequeueException.class, () -> listener.receive(message));
+        verifyNoInteractions(results);
+    }
 
     @Test
     void taskLimitCountsUtf8BytesAndJsonEscapesBeforePublishing() throws Exception {
@@ -103,13 +128,13 @@ class JudgeMessageBoundaryTest {
         verifyNoInteractions(results);
     }
 
+    /** 实体诊断只输出明确允许的字段，源码、任务正文和结果正文均不可见。 */
     @Test
-    void entityLoggingNeverIncludesCodePrivateTaskOutputOrLegacyCredentials() {
+    void entityLoggingNeverIncludesCodePrivateTaskOutput() {
         Judge judge = new Judge();
         judge.setId(100L);
         judge.setCode("private-source-marker");
         judge.setErrorMessage("private-error-marker");
-        judge.setVjudgePassword("private-password-marker");
         JudgeDispatch dispatch = new JudgeDispatch();
         dispatch.setId(1L);
         dispatch.setSubmissionId(100L);

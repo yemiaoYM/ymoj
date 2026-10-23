@@ -40,8 +40,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.web.service.admin.impl
- * @ClassName: AdminProblemServiceImpl
  * @Author: Yemiao
  * @CreateTime: 2025-09-21  21:45
  * @Description: 管理端题目服务实现类
@@ -110,6 +108,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     /**
      * 添加题目
      * @param problemDTO 题目信息
+     * @return 题目展示 ID
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -141,8 +140,6 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         }
         //将mb转化为kb
         problem.setMemoryLimit(problemDTO.getMemoryLimit()*1024);
-        //暂不支持远程题目
-        problem.setIsRemote(false);
         //如果没有设置可见性，默认为私有
         if (problem.getVisibility() == null) {
             problem.setVisibility(2);
@@ -210,8 +207,6 @@ public class AdminProblemServiceImpl implements AdminProblemService {
             String examples = JSON.toJSONString(problemCaseList);
             problem.setExamples(examples);
         }
-        //暂不支持远程题目
-        problem.setIsRemote(false);
         boolean update = problemEntityService.updateById(problem);
         if (!update) {
             throw new ProblemException("修改题目失败，请稍后再试");

@@ -1,12 +1,4 @@
--- ymcloud 当前版本初始化数据库（MySQL 8.0+，UTF-8）
--- 仅用于首次安装的空数据库；由调用方选择数据库，禁止在已有业务库中执行。
--- 不删除或覆盖现有表，重复导入会在 CREATE TABLE 处报错；不要使用 mysql --force。
--- 管理员：admin / Ymcloud@123。首次登录后立即修改密码及占位邮箱。
--- 默认本地存储；不包含历史业务数据、真实邮箱、存储连接或访问密钥。
-
 SET NAMES utf8mb4;
-
--- 一、表结构
 
 CREATE TABLE `user` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '用户ID',
@@ -140,7 +132,6 @@ CREATE TABLE `problem` (
   `problem_id` varchar(255) NOT NULL COMMENT '问题的自定义ID，可作为唯一标识，例如YMOJ-1000（本题库），P1005（洛谷）等等',
   `title` varchar(255) NOT NULL COMMENT '题目标题',
   `content` text COMMENT '题目描述内容（题干）',
-  `is_remote` tinyint(1) DEFAULT '0' COMMENT '是否为vj判题',
   `input` text COMMENT '输入描述',
   `output` text COMMENT '输出描述',
   `examples` text COMMENT '题面样例',
@@ -276,9 +267,6 @@ CREATE TABLE `judge` (
   `ip` varchar(255) DEFAULT NULL COMMENT '提交用户IP',
   `version` int DEFAULT '1' COMMENT '乐观锁版本号',
   `execution_id` varchar(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '当前评测执行标识；历史记录为空',
-  `vjudge_submit_id` bigint unsigned DEFAULT NULL COMMENT 'vjudge判题在其它oj的提交id',
-  `vjudge_username` varchar(255) DEFAULT NULL COMMENT 'vjudge判题在其它oj的提交用户名',
-  `vjudge_password` varchar(255) DEFAULT NULL COMMENT 'vjudge判题在其它oj的提交账号密码',
   `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `test_data_version_id` bigint DEFAULT NULL COMMENT '测试数据版本ID；NULL表示未绑定或历史版本未知',
@@ -400,9 +388,6 @@ CREATE TABLE `storage_config_state` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='默认存储配置与并发控制';
 
--- 二、安装初始化数据
--- 内置账号、角色与菜单不引用任何现有部署的数据。
--- 初始密码已使用 BCrypt（cost=10）；不是现有管理员的密码哈希。
 START TRANSACTION;
 
 INSERT INTO `user` (`id`, `username`, `password`, `nickname`, `sex`, `email`, `status`) VALUES
@@ -415,8 +400,6 @@ INSERT INTO `role` (`id`, `code`, `name`, `description`, `status`, `built_in`) V
 
 INSERT INTO `user_role` (`user_id`, `role_id`) VALUES
     (1, 2);
-
--- 菜单子项不配置图标，保持现有后台风格；权限使用明确编码，不使用通配符。
 
 INSERT INTO `auth` (`id`, `code`, `name`, `parent_id`, `path`, `route_name`, `component`, `icon`, `type`, `status`, `built_in`) VALUES
     (1, NULL, '系统监控', 0, '/admin/monitor', 'AdminMonitor', 'Layout', 'Monitor', 'M', 1, 1),
@@ -486,8 +469,6 @@ INSERT INTO `auth` (`id`, `code`, `name`, `parent_id`, `path`, `route_name`, `co
     (545, 'file:storage:activate', '启用默认存储（仅超级管理员）', 540, NULL, NULL, NULL, NULL, 'F', 1, 1),
     (546, 'file:migration:query', '查看文件迁移盘点', 532, NULL, NULL, NULL, NULL, 'F', 1, 1),
     (547, 'file:migration:execute', '执行历史文件迁移', 532, NULL, NULL, NULL, NULL, 'F', 1, 1);
-
--- ID=1 的用户由代码授予超级管理员权限；ADMIN 角色不等同于超级管理员。
 
 INSERT INTO `role_auth` (`role_id`, `auth_id`) VALUES
     (2, 1),
@@ -569,8 +550,6 @@ INSERT INTO `role_auth` (`role_id`, `auth_id`) VALUES
     (3, 518),
     (3, 532);
 
--- 四个固定语言入口由 go-judge 统一执行；image/env 仅保留兼容元数据。
-
 INSERT INTO `language` (`id`, `name`, `image`, `env`, `version`, `content_type`, `file_name`, `file_extension`, `compile_cmd`, `run_cmd`, `template_code`, `code_template`, `type`, `status`, `oj`) VALUES
     (1, 'C++', 'go-judge:v1.13.3', 'debian12-toolchains', 'G++ 12.2.0 (C++17)', 'text/x-c++src', 'main.cpp', '.cpp', 'g++ -O2 -w -fmax-errors=3 -std=c++17 main.cpp -lm -o main', './main', '#include <iostream>
 using namespace std;
@@ -610,7 +589,6 @@ if __name__ == "__main__":
 INSERT INTO `system_setting` (`setting_key`, `setting_value`) VALUES
     ('register_enabled', 'true');
 
--- 本地存储是内置配置，不向 storage_config 写入虚假连接或凭据。
 INSERT INTO `storage_config_state` (`id`, `active_key`, `revision`, `updated_time`)
 VALUES (1, 'local', 0, CURRENT_TIMESTAMP);
 

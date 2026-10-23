@@ -45,15 +45,6 @@
             创建
           </el-button>
           <el-button
-            v-permission="['problem:problem:add']"
-            plain
-            type="success"
-            :icon="Plus"
-            @click="handleAddRemote"
-          >
-            添加远程OJ题目
-          </el-button>
-          <el-button
             v-permission="['problem:problem:remove']"
             plain
             type="danger"
@@ -261,10 +252,6 @@ const getVisibilityText = (visibility: number) => {
 //新增题目
 const handleAdd = () => {
   router.push('/admin/problem/add');
-};
-//添加远程OJ题目
-const handleAddRemote = () => {
-  ElMessage.info('远程OJ题目添加功能待开发');
 };
 //编辑题目
 const handleUpdate = (row: AdminProblemVO) => {

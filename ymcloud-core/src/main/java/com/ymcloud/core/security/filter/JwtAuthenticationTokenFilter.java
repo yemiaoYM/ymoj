@@ -72,7 +72,7 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
             log.error("认证依赖服务异常，请求URI：{}", request.getRequestURI(), e);
             String data = JSON.toJSONString(Result.fail().code(HttpStatus.SERVICE_UNAVAILABLE)
                     .msg("登录服务暂时不可用，请稍后重试"));
-            response.setStatus(200);
+            response.setStatus(HttpStatus.SUCCESS);
             response.setContentType("application/json");
             response.setCharacterEncoding("utf-8");
             response.getWriter().print(data);

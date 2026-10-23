@@ -37,7 +37,7 @@ public class LogoutSuccessHandlerImpl implements LogoutSuccessHandler, Serializa
     @Override
     public void onLogoutSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
         LoginUser loginUser = tokenService.getLoginUser(request);
-        response.setStatus(200);
+        response.setStatus(HttpStatus.SUCCESS);
         response.setContentType("application/json");
         response.setCharacterEncoding("utf-8");
         if (loginUser != null) {

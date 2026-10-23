@@ -1,6 +1,7 @@
 package com.ymcloud.web.controller.admin.common;
 
 import com.ymcloud.common.constant.FileConstants;
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.core.storage.StoredFileService;
@@ -33,7 +34,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
- * 通用文件管理，测试数据权限与删除生命周期由业务服务单独检查。
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-11
+ * @Description: 通用文件管理，测试数据权限与删除生命周期由业务服务单独检查。
  */
 @RestController
 @RequestMapping("/admin/file")
@@ -98,7 +101,7 @@ public class AdminFileController {
             if (relative.isEmpty() || relative.contains("%") || relative.contains("\\")
                     || relative.chars().anyMatch(character -> character < 32 || character == 127)
                     || Arrays.stream(relative.split("/")).anyMatch(segment -> segment.equals(".") || segment.equals(".."))) {
-                throw new FileException("非法历史公开文件路径", 404);
+                throw new FileException("非法历史公开文件路径", HttpStatus.NOT_FOUND);
             }
             // 原节点绝对路径不用于回退；存储层再校验相对路径位于本地 public 目录。
             return storedFiles.openLegacyPublic(relative);

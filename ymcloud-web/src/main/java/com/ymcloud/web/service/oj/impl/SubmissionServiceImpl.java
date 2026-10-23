@@ -28,8 +28,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.web.service.impl
- * @ClassName: SubmissionServiceImpl
  * @Author: Yemiao
  * @CreateTime: 2025-07-25  16:02
  * @Description: SubmissionServiceImpl
@@ -90,7 +88,7 @@ public class SubmissionServiceImpl implements SubmissionService {
     }
 
     /**
-     *
+     * 按提交归属、分享状态和比赛权限返回可见的提交详情。
      * @param submissionId 提交id
      * @return 提交详情信息
      */
@@ -101,11 +99,6 @@ public class SubmissionServiceImpl implements SubmissionService {
         if(submission==null){
             throw new SubmissionNotExistException();
         }
-
-        //清空vj信息
-        submission.setVjudgeUsername(null);
-        submission.setVjudgeSubmitId(null);
-        submission.setVjudgePassword(null);
 
         //获取当前用户
         Long userId = SecurityUtils.getUserId();

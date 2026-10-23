@@ -1,6 +1,7 @@
 package com.ymcloud.core.interceptor;
 
 import com.alibaba.fastjson2.JSON;
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.core.annotation.RepeatSubmit;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,7 +30,7 @@ public abstract class RepeatSubmitInterceptor implements HandlerInterceptor {
             if (annotation != null) {
                 if (this.isRepeatSubmit(request, annotation)) {
                     String data = JSON.toJSONString(Result.fail().msg(annotation.message()));
-                    response.setStatus(200);
+                    response.setStatus(HttpStatus.SUCCESS);
                     response.setContentType("application/json");
                     response.setCharacterEncoding("utf-8");
                     response.getWriter().print(data);

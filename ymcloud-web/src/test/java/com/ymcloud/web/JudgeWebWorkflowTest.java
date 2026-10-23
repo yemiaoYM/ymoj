@@ -71,7 +71,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** 提交版本快照、比赛模式、自测持久化、状态所属用户与缓存故障回退。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-12
+ * @Description: 验证本站提交、版本快照、比赛模式、自测持久化及状态恢复。
+ */
 class JudgeWebWorkflowTest {
 
     JudgeEntityService judges;
@@ -154,6 +158,50 @@ class JudgeWebWorkflowTest {
             assertTrue(task.getDeadlineEpochMs() > task.getSubmittedAtEpochMs());
         }
         verify(testData, times(1)).getCurrentVersion(10L);
+    }
+
+    /**
+     * 外站来源仅作出处，普通提交和比赛提交都必须选择本站启用的语言。
+     * @param contestSubmission 是否从比赛入口提交
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void externalProblemSourceStillUsesLocalJudge(boolean contestSubmission) {
+        Problem problem = problem();
+        problem.setSource(ProblemSource.CODEFORCES);
+        doReturn(query(problem)).when(problems).lambdaQuery();
+        LambdaQueryChainWrapper<Language> languageQuery = query(language());
+        doReturn(languageQuery).when(languages).lambdaQuery();
+        if (contestSubmission) {
+            Contest contest = new Contest();
+            contest.setId(20L);
+            contest.setVisibility(ContestConstants.VISIBILITY_PUBLIC);
+            contest.setStartTime(LocalDateTime.now().minusMinutes(1));
+            contest.setEndTime(LocalDateTime.now().plusMinutes(1));
+            contest.setMode(JudgeConstants.ACM);
+            ContestProblem mapping = new ContestProblem();
+            mapping.setId(30L);
+            mapping.setProblemId(problem.getId());
+            mapping.setDisplayId("A");
+            doReturn(query(contest)).when(contests).lambdaQuery();
+            doReturn(query(mapping)).when(contestProblems).lambdaQuery();
+        }
+        when(testData.getCurrentVersion(problem.getId())).thenReturn(77L);
+        doReturn(query(version())).when(versions).lambdaQuery();
+        when(judges.save(any())).thenReturn(true);
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+             MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
+            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+            service.submitJudge(request(contestSubmission));
+        }
+        verify(languageQuery).eq(any(), eq(ProblemSource.LOCAL.getCode()));
+        verify(languageQuery, never()).eq(any(), eq(problem.getSource().getCode()));
+        ArgumentCaptor<JudgeDispatch> created = ArgumentCaptor.forClass(JudgeDispatch.class);
+        verify(dispatches).save(created.capture());
+        JudgeTask task = codec.task(created.getValue().getTaskPayload());
+        assertEquals(JudgeDispatchState.FORMAL, task.getStrategy());
+        assertEquals(problem.getId(), task.getProblemId());
+        assertEquals(77L, task.getTestDataVersionId());
     }
 
     @Test

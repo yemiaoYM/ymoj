@@ -1,5 +1,6 @@
 package com.ymcloud.core.storage;
 
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 
 import java.net.InetAddress;
@@ -9,7 +10,11 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Set;
 
-/** 存储端点允许 HTTPS，HTTP 仅用于明确的回环开发地址。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-11
+ * @Description: 存储端点允许 HTTPS，HTTP 仅用于明确的回环开发地址。
+ */
 public final class StorageConfigValidation {
 
     private static final Set<String> LOOPBACK = Set.of("localhost", "127.0.0.1", "::1", "[::1]");
@@ -22,7 +27,7 @@ public final class StorageConfigValidation {
 
     public static void validateKey(String key) {
         if (key == null || !key.matches("[a-zA-Z0-9_-]{1,64}")) {
-            throw new FileException("非法存储配置名", 400);
+            throw new FileException("非法存储配置名", HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -67,7 +72,7 @@ public final class StorageConfigValidation {
                 throw new IllegalArgumentException();
             }
         } catch (RuntimeException | UnknownHostException e) {
-            throw new FileException("对象存储配置不完整或不合法，请检查地址、凭据、区域与独立存储桶", 400);
+            throw new FileException("对象存储配置不完整或不合法，请检查地址、凭据、区域与独立存储桶", HttpStatus.BAD_REQUEST);
         }
     }
 

@@ -1,437 +1,418 @@
 <template>
   <div class="tag-management">
-    <!-- 页面标题和操作区 -->
-    <el-card>
-      <template #header>
-        <n-flex justify="space-between" align="center">
-          <span style="font-size: 18px; font-weight: 600; color: #409eff;">标签管理</span>
-          <n-flex :size="12" align="center">
-            <el-button
-              v-permission="['problem:tag:add']"
-              type="primary"
-              @click="openTagDialog('add', null)"
-              :icon="Plus"
-            >
-              添加标签
-            </el-button>
-            <el-button
-              v-permission="['problem:tag:add']"
-              type="warning"
-              @click="openTagClassificationDialog('add', null)"
-              :icon="FolderAdd"
-            >
-              添加分类
-            </el-button>
-          </n-flex>
+    <el-card shadow="never">
+      <n-flex justify="space-between" align="center" :size="16">
+        <div>
+          <h2 class="page-title">标签管理</h2>
+          <el-text type="info">共 {{ tagCount }} 个标签 · {{ classifications.length }} 个分类，点击标签可编辑</el-text>
+        </div>
+        <n-flex class="tag-actions" align="center" :size="8">
+          <el-button :icon="Refresh" :loading="loading" :disabled="busy" @click="onRefresh">刷新</el-button>
+          <el-button v-permission="['problem:tag:add']" :icon="FolderAdd" :disabled="busy" @click="onOpenClassification()">添加分类</el-button>
+          <el-button v-permission="['problem:tag:add']" type="primary" :icon="Plus" :disabled="busy" @click="onOpenTag()">添加标签</el-button>
         </n-flex>
-      </template>
-      
-      <el-alert
-        title="标签管理提示"
-        description="默认所有标签都是【未分类】，请先【添加标签分类】，再修改【标签分类】进行归类。"
-        type="info"
-        :closable="false"
-        show-icon
+      </n-flex>
+      <el-input
+        class="tag-search"
+        placeholder="搜索标签或分类"
+        clearable
+        aria-label="搜索标签或分类"
+        v-model="search"
+        :prefix-icon="Search"
       />
     </el-card>
 
-    <!-- 标签列表区域 -->
-    <div v-loading="getTagListLoading" style="margin-top: 16px;">
-      <n-flex vertical :size="16">
-        <el-card
-          v-for="(tagsAndClassification, index) in tagsAndClassificationList"
-          :key="index"
-          shadow="hover"
-        >
-          <!-- 分类标题区 -->
-          <template #header>
-            <n-flex justify="space-between" align="center">
-              <n-flex align="center" :size="12">
-                <el-icon size="16" color="#409eff">
-                  <Folder v-if="tagsAndClassification.classification" />
-                  <Document v-else />
-                </el-icon>
-                <span style="font-size: 16px; font-weight: 500;">
-                  {{ tagsAndClassification.classification?.name || '未分类' }}
-                </span>
-                <el-tag v-if="tagsAndClassification.classification" size="small" type="info">
-                  排序: {{ tagsAndClassification.classification.priority }}
-                </el-tag>
-              </n-flex>
-              
-              <n-flex :size="8" v-if="tagsAndClassification.classification">
-                <el-button
-                  v-permission="['problem:tag:edit']"
-                  type="primary"
-                  size="small"
-                  :icon="Edit"
-                  circle
-                  @click="openTagClassificationDialog('update', tagsAndClassification.classification)"
-                />
-                <el-button
-                  v-permission="['problem:tag:remove']"
-                  type="danger"
-                  size="small"
-                  :icon="Delete"
-                  circle
-                  @click="deleteTagClassification(tagsAndClassification.classification)"
-                />
-              </n-flex>
+    <el-alert v-if="loadFailed" title="标签列表加载失败，已显示的数据可能不是最新内容，请刷新重试。" type="error" show-icon :closable="false" />
+    <el-alert v-if="actionError" type="error" show-icon :title="actionError" :closable="false" />
+    <div class="tag-groups" v-loading="loading">
+      <el-empty v-if="loaded && !loadFailed && !filteredGroups.length" :description="search ? '没有匹配的标签或分类' : '暂无标签，点击「添加标签」开始整理题库'" />
+      <el-card
+        v-for="group in filteredGroups"
+        :key="group.classification?.id ?? 'unclassified'"
+        shadow="never"
+      >
+        <template #header>
+          <n-flex justify="space-between" align="center" :size="12">
+            <n-flex align="center" :size="8">
+              <el-icon><Folder /></el-icon>
+              <strong>{{ group.classification?.name || '未分类' }}</strong>
+              <el-tag type="info" size="small" round>{{ group.tagList.length }} 个标签</el-tag>
+              <el-text v-if="group.classification" type="info" size="small">排序 {{ group.classification.priority }}</el-text>
             </n-flex>
-          </template>
-
-          <!-- 标签内容区 -->
-          <n-flex :size="8" style="min-height: 40px;" align="flex-start">
-            <el-button
-              v-permission="['problem:tag:add']"
-              size="small"
-              type="primary"
-              plain
-              :icon="Plus"
-              @click="openTagDialog('add', null, tagsAndClassification.classification)"
-            >
-              添加标签
-            </el-button>
-            
-            <el-tag
-              v-for="(tag, tagIndex) in tagsAndClassification.tagList"
-              :key="tagIndex"
-              :color="tag.color"
-              effect="dark"
-              :closable="userStore.hasEveryPermission(['problem:tag:remove'])"
-              size="default"
-              style="cursor: pointer; margin: 2px;"
-              @close="deleteTag(tag)"
-              @click="userStore.hasEveryPermission(['problem:tag:edit']) && openTagDialog('update', tag)"
-            >
-              {{ tag.name }}
-            </el-tag>
+            <n-flex v-if="group.classification" class="tag-actions" align="center" :size="4">
+              <el-button v-permission="['problem:tag:edit']" text size="small" :icon="Edit" :disabled="busy" @click="onOpenClassification(group.classification)">编辑分类</el-button>
+              <el-button v-permission="['problem:tag:remove']" text type="danger" size="small" :icon="Delete" :disabled="busy" @click="onDeleteClassification(group.classification)">删除分类</el-button>
+            </n-flex>
           </n-flex>
-        </el-card>
-      </n-flex>
+        </template>
+        <n-flex align="center" :size="8">
+          <el-tag
+            v-for="item in group.tagList"
+            :key="item.id"
+            class="editable-tag"
+            effect="dark"
+            size="default"
+            :color="item.color"
+            :closable="canRemove && !busy"
+            :role="canEdit ? 'button' : undefined"
+            :tabindex="canEdit && !busy ? 0 : undefined"
+            :aria-label="canEdit ? '编辑标签：' + item.name : undefined"
+            @click="onOpenTag(item)"
+            @keydown.enter.prevent="onOpenTag(item)"
+            @keydown.space.prevent="onOpenTag(item)"
+            @close.stop="onDeleteTag(item)"
+          >{{ item.name }}</el-tag>
+          <el-button
+            v-permission="['problem:tag:add']"
+            size="small"
+            type="primary"
+            plain
+            :icon="Plus"
+            :disabled="busy"
+            @click="onOpenTag(null, group.classification)"
+          >添加标签</el-button>
+          <el-text v-if="!group.tagList.length" type="info" size="small">此分类暂无标签</el-text>
+        </n-flex>
+      </el-card>
     </div>
 
-    <!-- 标签对话框 -->
     <el-dialog
-      v-model="addTagDialogVisible"
-      :title="upsertTagTitle"
-      width="400px"
+      width="min(440px, calc(100vw - 32px))"
+      v-model="tagDialogOpen"
+      :title="tag.id === null ? '添加标签' : '编辑标签'"
       :close-on-click-modal="false"
+      :close-on-press-escape="!savingTag"
+      :show-close="!savingTag"
     >
-      <el-form :model="tag" label-width="100px" label-position="left">
-        <el-form-item label="标签名称" required>
-          <el-input v-model="tag.name" placeholder="请输入标签名称" />
+      <el-form ref="tagFormRef" label-width="88px" :model="tag" :rules="tagRules" :disabled="savingTag">
+        <el-form-item label="标签名称" prop="name">
+          <el-input placeholder="1～20 个字符" maxlength="20" show-word-limit v-model="tag.name" />
         </el-form-item>
-        
-        <el-form-item label="标签颜色" required>
+        <el-form-item label="标签颜色" prop="color">
           <n-flex align="center" :size="12">
             <el-color-picker v-model="tag.color" />
-            <el-tag :color="tag.color" effect="dark">{{ tag.name || '预览' }}</el-tag>
+            <el-tag effect="dark" :color="tag.color">{{ tag.name || '标签预览' }}</el-tag>
           </n-flex>
         </el-form-item>
-
-        <el-form-item label="标签分类">
-          <el-select v-model="tag.parentId" placeholder="选择分类" style="width: 100%;">
-            <el-option label="未分类" :value="null" />
-            <el-option
-              v-for="(classification, index) in chooseTagClassificationList"
-              :key="index"
-              :label="classification.name"
-              :value="classification.id"
-            />
+        <el-form-item label="所属分类">
+          <el-select placeholder="未分类" clearable v-model="tag.parentId" :value-on-clear="null">
+            <el-option v-for="item in classifications" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
       </el-form>
-
+      <el-alert v-if="tagSaveFailed" title="保存未完成，请检查输入或稍后重试。" type="error" :closable="false" />
       <template #footer>
-        <n-flex justify="end" :size="12">
-          <el-button @click="addTagDialogVisible = false">取消</el-button>
-          <el-button
-            v-permission="tag.id ? ['problem:tag:edit'] : ['problem:tag:add']"
-            type="primary"
-            @click="upsertTag"
-            :loading="upsertTagLoading"
-          >
-            {{ upsertTagBtn }}
-          </el-button>
-        </n-flex>
+        <el-button :disabled="savingTag" @click="onCloseTag">取消</el-button>
+        <el-button type="primary" :loading="savingTag" @click="onSaveTag">保存</el-button>
       </template>
     </el-dialog>
 
-    <!-- 标签分类对话框 -->
     <el-dialog
-      v-model="addTagClassificationDialogVisible"
-      :title="upsertTagClassificationTitle"
-      width="400px"
+      width="min(440px, calc(100vw - 32px))"
+      v-model="classificationDialogOpen"
+      :title="classification.id === null ? '添加分类' : '编辑分类'"
       :close-on-click-modal="false"
+      :close-on-press-escape="!savingClassification"
+      :show-close="!savingClassification"
     >
-      <el-form :model="tagClassification" label-width="100px" label-position="left">
-        <el-form-item label="分类名称" required>
-          <el-input v-model="tagClassification.name" placeholder="请输入分类名称" />
+      <el-form ref="classificationFormRef" label-width="88px" :model="classification" :rules="classificationRules" :disabled="savingClassification">
+        <el-form-item label="分类名称" prop="name">
+          <el-input placeholder="1～30 个字符" maxlength="30" show-word-limit v-model="classification.name" />
         </el-form-item>
-
-        <el-form-item label="排序权重" required>
-          <el-input-number
-            v-model="tagClassification.priority"
-            :min="1"
-            :max="999"
-            controls-position="right"
-            style="width: 100%;"
-            placeholder="数值越小排序越靠前"
-          />
-          <div style="font-size: 12px; color: #909399; margin-top: 4px;">
-            数值越小排序越靠前，范围：1-999
-          </div>
+        <el-form-item label="排序权重" prop="priority">
+          <el-input-number controls-position="right" v-model="classification.priority" :min="1" :max="999" :precision="0" />
         </el-form-item>
+        <el-text type="info" size="small">数值越小越靠前。删除分类后，标签会移至「未分类」。</el-text>
       </el-form>
-
+      <el-alert v-if="classificationSaveFailed" title="保存未完成，请检查输入或稍后重试。" type="error" :closable="false" />
       <template #footer>
-        <n-flex justify="end" :size="12">
-          <el-button @click="addTagClassificationDialogVisible = false">取消</el-button>
-          <el-button
-            v-permission="tagClassification.id ? ['problem:tag:edit'] : ['problem:tag:add']"
-            type="primary"
-            @click="upsertTagClassification"
-            :loading="upsertTagClassificationLoading"
-          >
-            {{ tagClassification.id ? '更新' : '添加' }}
-          </el-button>
-        </n-flex>
+        <el-button :disabled="savingClassification" @click="onCloseClassification">取消</el-button>
+        <el-button type="primary" :loading="savingClassification" @click="onSaveClassification">保存</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
-<script lang="ts" setup>
-//import
+<script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
+import { Plus, Edit, Delete, Folder, FolderAdd, Refresh, Search } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
-import { ref, reactive, onMounted } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Edit, Delete, Folder, Document, FolderAdd } from '@element-plus/icons-vue';
-import { 
-  getAdminTagsAndClassifications, 
-  addAdminTag, 
-  updateAdminTag, 
-  deleteAdminTag,
-  getAdminTagClassifications,
-  addAdminTagClassification,
-  updateAdminTagClassification,
-  deleteAdminTagClassification
+import type { Tag } from '@/type/types';
+import type { TagDTO, TagClassification, TagClassificationDTO, TagsWithClassification } from '@/type/tag';
+import {
+  getAdminTagsAndClassifications,
+  addAdminTag, updateAdminTag, deleteAdminTag,
+  addAdminTagClassification, updateAdminTagClassification, deleteAdminTagClassification
 } from '@/api/api';
 
-//data
 const userStore = useUserStore();
-const getTagListLoading = ref<boolean>(false);
-const upsertTagLoading = ref<boolean>(false);
-const upsertTagClassificationLoading = ref<boolean>(false);
-//对话框显示状态
-const addTagDialogVisible = ref<boolean>(false);
-const addTagClassificationDialogVisible = ref<boolean>(false);
-//对话框标题
-const upsertTagTitle = ref<string>('');
-const upsertTagClassificationTitle = ref<string>('');
-const upsertTagBtn = ref<string>('');
-//标签和分类列表
-const tagsAndClassificationList = ref<any[]>([]);
-//可选择的标签分类列表
-const chooseTagClassificationList = ref<any[]>([]);
-
-
-const tag = reactive({
-  id: null as number | null,
-  name: '',
-  color: '#409eff',
-  parentId: null as number | null,
+const canEdit = computed(() => userStore.hasEveryPermission(['problem:tag:edit']));
+const canRemove = computed(() => userStore.hasEveryPermission(['problem:tag:remove']));
+const groups = ref<TagsWithClassification[]>([]);
+const classifications = computed(() => groups.value.flatMap(group => group.classification ? [group.classification] : []));
+const search = ref('');
+const loading = ref(false);
+const loaded = ref(false);
+const loadFailed = ref(false);
+const actionError = ref('');
+const savingTag = ref(false);
+const savingClassification = ref(false);
+const deleting = ref(false);
+const busy = computed(() => savingTag.value || savingClassification.value || deleting.value);
+const tagDialogOpen = ref(false);
+const classificationDialogOpen = ref(false);
+const tagSaveFailed = ref(false);
+const classificationSaveFailed = ref(false);
+const tagFormRef = ref<FormInstance>();
+const classificationFormRef = ref<FormInstance>();
+const tag = reactive<TagDTO & { id: number | null }>({ id: null, name: '', color: '#409eff', parentId: null });
+const classification = reactive<TagClassificationDTO & { id: number | null }>({ id: null, name: '', priority: 1 });
+const tagRules: FormRules<TagDTO> = {
+  name: [{ required: true, whitespace: true, message: '请输入标签名称', trigger: 'blur' }, { max: 20, message: '名称最多20个字符', trigger: 'blur' }],
+  color: [{ required: true, pattern: /^#[0-9a-fA-F]{6}$/, message: '请选择有效的标签颜色', trigger: 'change' }]
+};
+const classificationRules: FormRules<TagClassificationDTO> = {
+  name: [{ required: true, whitespace: true, message: '请输入分类名称', trigger: 'blur' }, { max: 30, message: '名称最多30个字符', trigger: 'blur' }],
+  priority: [{ required: true, type: 'integer', min: 1, max: 999, message: '请输入1～999的整数', trigger: 'change' }]
+};
+const tagCount = computed(() => groups.value.reduce((count, group) => count + group.tagList.length, 0));
+const filteredGroups = computed(() => {
+  const keyword = search.value.trim().toLocaleLowerCase();
+  if (!keyword) {
+    return groups.value;
+  }
+  return groups.value.map(group => ({
+    ...group,
+    tagList: (group.classification?.name || '未分类').toLocaleLowerCase().includes(keyword)
+      ? group.tagList
+      : group.tagList.filter(item => item.name.toLocaleLowerCase().includes(keyword))
+  })).filter(group => group.tagList.length || (group.classification?.name || '未分类').toLocaleLowerCase().includes(keyword));
 });
-const tagClassification = reactive({
-  id: null as number | null,
-  name: '',
-  priority: 1,
-});
+let generation = 0;
+let disposed = false;
 
-
-//methods
-//初始化数据
-const init = () => {
-  getTagListLoading.value = true;
-  //获取标签和分类列表
-  getAdminTagsAndClassifications().then(res => {
-    tagsAndClassificationList.value = res.data.data || [];
-  }).catch(e => {
-    console.log(e);
-  });
-  getAdminTagClassifications().then(res => {
-    chooseTagClassificationList.value = res.data.data || [];
-  }).catch(e => {
-    console.log(e);
-  });
-  getTagListLoading.value = false;
-};
-//打开标签对话框
-const openTagDialog = (type: string, tagData: any, classification?: any) => {
-  if (type === 'add') {
-    upsertTagTitle.value = '添加标签';
-    upsertTagBtn.value = '添加';
-    //重置表单
-    tag.id = null;
-    tag.name = '';
-    tag.color = '#409eff';
-    tag.parentId = classification ? classification.id : null;
-  } else {
-    upsertTagTitle.value = '编辑标签';
-    upsertTagBtn.value = '更新';
-    //填充表单
-    tag.id = tagData.id;
-    tag.name = tagData.name;
-    tag.color = tagData.color;
-    tag.parentId = tagData.parentId;
-  }
-  addTagDialogVisible.value = true;
-};
-//打开标签分类对话框
-const openTagClassificationDialog = (type: string, classificationData: any) => {
-  if (type === 'add') {
-    upsertTagClassificationTitle.value = '添加标签分类';
-    //重置表单
-    tagClassification.id = null;
-    tagClassification.name = '';
-    tagClassification.priority = 1;
-  } else {
-    upsertTagClassificationTitle.value = '编辑标签分类';
-    //填充表单
-    tagClassification.id = classificationData.id;
-    tagClassification.name = classificationData.name;
-    tagClassification.priority = classificationData.priority;
-  }
-  addTagClassificationDialogVisible.value = true;
-};
-//新增/更新标签
-const upsertTag = async () => {
-  if (!tag.name.trim()) {
-    ElMessage.warning('请输入标签名称');
-    return;
-  }
-  if (!tag.color.trim()) {
-    ElMessage.warning('请选择标签颜色');
-    return;
-  }
-  upsertTagLoading.value = true;
+async function handleLoadTags() {
+  const current = ++generation;
+  loading.value = true;
+  loadFailed.value = false;
   try {
-    const tagData = {
-      name: tag.name.trim(),
-      color: tag.color,
-      parentId: tag.parentId
-    };
-    
-    let res;
-    if (tag.id) {
-      //更新标签
-      res = await updateAdminTag(tag.id, tagData);
-    } else {
-      //添加标签
-      res = await addAdminTag(tagData);
+    const tagsResponse = await getAdminTagsAndClassifications();
+    if (!disposed && current === generation) {
+      groups.value = tagsResponse.data.data;
+      loaded.value = true;
     }
-    ElMessage.success(res.data.msg);
-    addTagDialogVisible.value = false;
-    init(); //重新加载数据
-  } catch (e) {
-    console.log(e);
+  } catch {
+    if (!disposed && current === generation) {
+      loadFailed.value = true;
+    }
   } finally {
-    upsertTagLoading.value = false;
+    if (!disposed && current === generation) {
+      loading.value = false;
+    }
   }
-};
-//新增/更新标签分类
-const upsertTagClassification = async () => {
-  if (!tagClassification.name.trim()) {
-    ElMessage.warning('请输入标签分类名称');
-    return;
-  }
-  if (tagClassification.priority < 1 || tagClassification.priority > 999) {
-    ElMessage.warning('排序权重必须在1-999之间');
-    return;
-  }
-  upsertTagClassificationLoading.value = true;
-  try {
-    const classificationData = {
-      name: tagClassification.name.trim(),
-      priority: tagClassification.priority
-    };
-    let res;
-    if (tagClassification.id) {
-      //更新标签分类
-      res = await updateAdminTagClassification(tagClassification.id, classificationData);
-    } else {
-      //添加标签分类
-      res = await addAdminTagClassification(classificationData);
-    }
-    ElMessage.success(res.data.msg);
-    addTagClassificationDialogVisible.value = false;
-    init(); // 重新加载数据
-  } catch (e) {
-    console.log(e);
-  } finally {
-    upsertTagClassificationLoading.value = false;
-  }
-};
-//删除标签
-const deleteTag = (tagData: any) => {
-  ElMessageBox.confirm(
-    `确认删除标签 "${tagData.name}" 吗？删除后与该标签关联的题目将取消关联。`,
-    '删除确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(async () => {
-    try {
-      const res = await deleteAdminTag(tagData.id);
-      ElMessage.success(res.data.msg);
-      init(); //重新加载数据
-    } catch (e) {
-      console.log(e);
-    } finally {
-      upsertTagClassificationLoading.value = false;
-    }
-  }).catch(() => {});
-};
-//删除标签分类
-const deleteTagClassification = (classificationData: any) => {
-  ElMessageBox.confirm(
-    `确认删除标签分类 "${classificationData.name}" 吗？删除后该分类下的所有标签将移至未分类。`,
-    '删除确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(async () => {
-    try {
-      const res = await deleteAdminTagClassification(classificationData.id);
-      ElMessage.success(res.data.msg);
-      init(); //重新加载数据
-    } catch (e) {
-      console.log(e);
-    } finally {
-      upsertTagClassificationLoading.value = false;
-    }
-  }).catch(() => {});
-};
+}
 
-//生命周期
-onMounted(() => {
-  init();
+function onRefresh() {
+  actionError.value = '';
+  return handleLoadTags();
+}
+
+async function onOpenTag(value: Tag | null = null, parent: TagClassification | null = null) {
+  if (busy.value || !userStore.hasEveryPermission([value ? 'problem:tag:edit' : 'problem:tag:add'])) {
+    return;
+  }
+  Object.assign(tag, value
+    ? { id: value.id, name: value.name, color: value.color, parentId: value.parentId }
+    : { id: null, name: '', color: '#409eff', parentId: parent?.id ?? null });
+  tagSaveFailed.value = false;
+  tagDialogOpen.value = true;
+  await nextTick();
+  tagFormRef.value?.clearValidate();
+}
+
+async function onOpenClassification(value: TagClassification | null = null) {
+  if (busy.value || !userStore.hasEveryPermission([value ? 'problem:tag:edit' : 'problem:tag:add'])) {
+    return;
+  }
+  Object.assign(classification, value ?? { id: null, name: '', priority: 1 });
+  classificationSaveFailed.value = false;
+  classificationDialogOpen.value = true;
+  await nextTick();
+  classificationFormRef.value?.clearValidate();
+}
+
+function onCloseTag() {
+  tagDialogOpen.value = false;
+}
+
+function onCloseClassification() {
+  classificationDialogOpen.value = false;
+}
+
+async function onSaveTag() {
+  if (busy.value || !tagFormRef.value || !userStore.hasEveryPermission([tag.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
+    return;
+  }
+  savingTag.value = true;
+  tagSaveFailed.value = false;
+  try {
+    let valid = false;
+    await tagFormRef.value.validate(passed => {
+      valid = passed;
+    });
+    if (!valid) {
+      return;
+    }
+    const data: TagDTO = { name: tag.name.trim(), color: tag.color, parentId: tag.parentId ?? null };
+    const response = tag.id === null ? await addAdminTag(data) : await updateAdminTag(tag.id, data);
+    if (!disposed) {
+      ElMessage.success(response.data.msg);
+      tagDialogOpen.value = false;
+      await handleLoadTags();
+    }
+  } catch {
+    if (!disposed) {
+      tagSaveFailed.value = true;
+    }
+  } finally {
+    if (!disposed) {
+      savingTag.value = false;
+    }
+  }
+}
+
+async function onSaveClassification() {
+  if (busy.value || !classificationFormRef.value || !userStore.hasEveryPermission([classification.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
+    return;
+  }
+  savingClassification.value = true;
+  classificationSaveFailed.value = false;
+  try {
+    let valid = false;
+    await classificationFormRef.value.validate(passed => {
+      valid = passed;
+    });
+    if (!valid) {
+      return;
+    }
+    const data: TagClassificationDTO = { name: classification.name.trim(), priority: classification.priority };
+    const response = classification.id === null
+      ? await addAdminTagClassification(data)
+      : await updateAdminTagClassification(classification.id, data);
+    if (!disposed) {
+      ElMessage.success(response.data.msg);
+      classificationDialogOpen.value = false;
+      await handleLoadTags();
+    }
+  } catch {
+    if (!disposed) {
+      classificationSaveFailed.value = true;
+    }
+  } finally {
+    if (!disposed) {
+      savingClassification.value = false;
+    }
+  }
+}
+
+async function handleDelete(kind: 'tag' | 'classification', value: Tag | TagClassification) {
+  if (busy.value || !canRemove.value) {
+    return;
+  }
+  deleting.value = true;
+  actionError.value = '';
+  try {
+    try {
+      await ElMessageBox.confirm(
+        kind === 'tag'
+          ? '确认删除标签「' + value.name + '」？关联题目将取消此标签。'
+          : '确认删除分类「' + value.name + '」？标签将保留并移至未分类。',
+        '删除确认',
+        { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+      );
+    } catch (reason) {
+      if (reason === 'cancel' || reason === 'close') {
+        return;
+      }
+      throw reason;
+    }
+    if (disposed) {
+      return;
+    }
+    const response = kind === 'tag' ? await deleteAdminTag(value.id) : await deleteAdminTagClassification(value.id);
+    if (!disposed) {
+      ElMessage.success(response.data.msg);
+      await handleLoadTags();
+    }
+  } catch {
+    if (!disposed) {
+      actionError.value = '删除未完成，请刷新列表后重试。';
+    }
+  } finally {
+    if (!disposed) {
+      deleting.value = false;
+    }
+  }
+}
+
+function onDeleteTag(value: Tag) {
+  return handleDelete('tag', value);
+}
+
+function onDeleteClassification(value: TagClassification) {
+  return handleDelete('classification', value);
+}
+
+onMounted(handleLoadTags);
+onBeforeUnmount(() => {
+  disposed = true;
+  generation++;
 });
 </script>
 
 <style scoped>
+.tag-management,
+.tag-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 .tag-management {
   padding: 16px;
 }
-
-@media (max-width: 768px) {
+.tag-groups {
+  min-height: 120px;
+}
+.page-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--el-text-color-primary);
+}
+.tag-search {
+  max-width: 360px;
+  margin-top: 16px;
+}
+.tag-actions :deep(.el-button + .el-button) {
+  /* n-flex 已提供间距，避免按钮默认外边距造成换行后左侧错位。 */
+  margin-left: 0;
+}
+.editable-tag {
+  margin: 0;
+}
+.editable-tag[role='button'] {
+  cursor: pointer;
+}
+.editable-tag:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}
+@media (max-width: 767px) {
   .tag-management {
     padding: 12px;
+  }
+  .tag-search {
+    max-width: none;
   }
 }
 </style>

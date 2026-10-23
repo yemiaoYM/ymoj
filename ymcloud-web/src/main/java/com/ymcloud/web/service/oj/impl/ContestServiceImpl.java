@@ -17,6 +17,7 @@ import com.ymcloud.pojo.bo.ContestSubmissionRecord;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
 import com.ymcloud.pojo.entity.*;
 import com.ymcloud.pojo.enums.JudgeStatus;
+import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.oj.ContestPageQuery;
 import com.ymcloud.pojo.query.oj.ContestProblemSubmissionPageQuery;
 import com.ymcloud.pojo.query.oj.ContestRankPageQuery;
@@ -32,8 +33,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * @PackageName: com.ymcloud.web.service.impl
- * @ClassName: ContestServiceImpl
  * @Author: Yemiao
  * @CreateTime: 2025-07-22  19:47
  * @Description: ContestServiceImpl
@@ -219,10 +218,10 @@ public class ContestServiceImpl implements ContestService {
         //查询题目的题面样例,将json转化为对象
         List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
         problemVO.setProblemCaseList(problemCaseVOList);
-        //查询题目的语言配置
+        //比赛题目同样使用本站语言配置，原题来源不决定执行平台。
         List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(
                 LanguageConstants.ABLE,
-                problem.getSource().getCode());
+                ProblemSource.LOCAL.getCode());
         problemVO.setLanguageList(languageVOList);
         //查询用户该题目的通过状态
         boolean isAccepted = judgeEntityService.lambdaQuery()

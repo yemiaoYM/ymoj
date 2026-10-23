@@ -1,10 +1,19 @@
 import request from "./request";
-import type { LoginDTO, RegisterDTO, UserDTO, SystemSettingDTO } from "@/type/types";
+import type { AxiosResponse } from 'axios';
+import type { TagDTO, TagClassificationDTO, TagClassification, TagsWithClassification, TagResult } from '@/type/tag';
+import type {
+  LoginDTO,
+  RegisterDTO,
+  UserDTO,
+  SystemSettingDTO,
+  SystemSettingVO,
+  SystemSettingResult,
+} from "@/type/types";
 
 /**
  * 获取公开的系统配置
  */
-export function getPublicSystemSetting() {
+export function getPublicSystemSetting(): Promise<AxiosResponse<SystemSettingResult<SystemSettingVO>>> {
   return request({
     url: "/public/system-setting",
     method: "GET",
@@ -14,7 +23,7 @@ export function getPublicSystemSetting() {
 /**
  * 获取后台系统配置
  */
-export function getAdminSystemSetting() {
+export function getAdminSystemSetting(): Promise<AxiosResponse<SystemSettingResult<SystemSettingVO>>> {
   return request({
     url: "/admin/system-setting",
     method: "GET",
@@ -25,7 +34,7 @@ export function getAdminSystemSetting() {
  * 保存后台系统配置
  * @param data 系统配置
  */
-export function updateSystemSetting(data: SystemSettingDTO) {
+export function updateSystemSetting(data: SystemSettingDTO): Promise<AxiosResponse<SystemSettingResult<null>>> {
   return request({
     url: "/admin/system-setting",
     method: "PUT",
@@ -164,13 +173,8 @@ export function logout() {
 }
 /**
  * 获取提交列表
- * @param isMine 个人还是所有
- * @param status 状态
- * @param problemKey 题目/题号
- * @param username 用户名
- * @param pageNo 页码
- * @param pageSize 每页条数
  * @returns 提交列表
+ * @param params
  */
 export function getSubmissionTableList(params: any) {
   return request({
@@ -642,6 +646,7 @@ export function addProblem(problem: any) {
 
 /**
  * 更新题目
+ * @param problemId
  * @param problem 题目数据
  */
 export function updateProblem(problemId: number, problem: any) {
@@ -720,7 +725,7 @@ export function deleteTestCaseFiles(problemId: number, fileNames: string[]) {
  * 获取标签和分类列表（管理员）
  * @returns 标签和分类列表
  */
-export function getAdminTagsAndClassifications() {
+export function getAdminTagsAndClassifications(): Promise<AxiosResponse<TagResult<TagsWithClassification[]>>> {
   return request({
     url: "/admin/tag/list",
     method: "GET"
@@ -732,7 +737,7 @@ export function getAdminTagsAndClassifications() {
  * @param tag 标签信息
  * @returns 操作结果
  */
-export function addAdminTag(tag: any) {
+export function addAdminTag(tag: TagDTO): Promise<AxiosResponse<TagResult<null>>> {
   return request({
     url: "/admin/tag",
     method: "POST",
@@ -746,7 +751,7 @@ export function addAdminTag(tag: any) {
  * @param tag 标签信息
  * @returns 操作结果
  */
-export function updateAdminTag(id: number, tag: any) {
+export function updateAdminTag(id: number, tag: TagDTO): Promise<AxiosResponse<TagResult<null>>> {
   return request({
     url: `/admin/tag/${id}`,
     method: "PUT",
@@ -759,7 +764,7 @@ export function updateAdminTag(id: number, tag: any) {
  * @param id 标签ID
  * @returns 操作结果
  */
-export function deleteAdminTag(id: number) {
+export function deleteAdminTag(id: number): Promise<AxiosResponse<TagResult<null>>> {
   return request({
     url: `/admin/tag/${id}`,
     method: "DELETE"
@@ -770,7 +775,7 @@ export function deleteAdminTag(id: number) {
  * 获取标签分类列表（管理员）
  * @returns 标签分类列表
  */
-export function getAdminTagClassifications() {
+export function getAdminTagClassifications(): Promise<AxiosResponse<TagResult<TagClassification[]>>> {
   return request({
     url: "/admin/tag/classification/list",
     method: "GET"
@@ -782,7 +787,7 @@ export function getAdminTagClassifications() {
  * @param classification 标签分类信息
  * @returns 操作结果
  */
-export function addAdminTagClassification(classification: any) {
+export function addAdminTagClassification(classification: TagClassificationDTO): Promise<AxiosResponse<TagResult<null>>> {
   return request({
     url: "/admin/tag/classification",
     method: "POST",
@@ -796,7 +801,7 @@ export function addAdminTagClassification(classification: any) {
  * @param classification 标签分类信息
  * @returns 操作结果
  */
-export function updateAdminTagClassification(id: number, classification: any) {
+export function updateAdminTagClassification(id: number, classification: TagClassificationDTO): Promise<AxiosResponse<TagResult<null>>> {
   return request({
     url: `/admin/tag/classification/${id}`,
     method: "PUT",
@@ -809,7 +814,7 @@ export function updateAdminTagClassification(id: number, classification: any) {
  * @param id 标签分类ID
  * @returns 操作结果
  */
-export function deleteAdminTagClassification(id: number) {
+export function deleteAdminTagClassification(id: number): Promise<AxiosResponse<TagResult<null>>> {
   return request({
     url: `/admin/tag/classification/${id}`,
     method: "DELETE"

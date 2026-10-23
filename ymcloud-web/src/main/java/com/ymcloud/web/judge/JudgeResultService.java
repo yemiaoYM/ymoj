@@ -32,7 +32,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-/** 任务、提交、测试点和 AC 记录在同一事务完成；行锁与执行标识阻止重复及过期结果。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-12
+ * @Description: 任务、提交、测试点和 AC 记录在同一事务完成；行锁与执行标识阻止重复及过期结果。
+ */
 @Slf4j
 @Service
 public class JudgeResultService {
@@ -376,12 +380,18 @@ public class JudgeResultService {
         validateCases(result.getTestCaseResults());
     }
 
+    /**
+     * 校验结果协议、执行标识及受支持的策略，不能用数值区间代替策略定义。
+     * @param result 待处理结果，不允许 null
+     * @throws IllegalArgumentException 协议或标识不合法
+     */
     private void validateIdentity(JudgeResult result) {
         if (result == null || result.getSchemaVersion() != JudgeProtocol.SCHEMA_VERSION
                 || result.getSubmissionId() == null || result.getSubmissionId() <= 0
                 || result.getExecutionId() == null
                 || !result.getExecutionId().matches("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
-                || result.getStrategy() == null || result.getStrategy() < 0 || result.getStrategy() > 1
+                || (!Objects.equals(result.getStrategy(), JudgeDispatchState.FORMAL)
+                && !Objects.equals(result.getStrategy(), JudgeDispatchState.SELF_TEST))
                 || result.getStatus() == null || result.getSequence() < 1 || result.getSequence() > 3) {
             throw new IllegalArgumentException("评测结果标识或协议版本无效");
         }

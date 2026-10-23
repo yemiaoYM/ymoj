@@ -8,8 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * @PackageName: com.ymcloud.web.controller.user
- * @ClassName: SubmissionController
  * @Author: Yemiao
  * @CreateTime: 2025-08-04  12:55
  * @Description: 提交相关控制器

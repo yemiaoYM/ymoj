@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -24,7 +25,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-/** 模拟 InnoDB 冷表统计，验证启动检查真实打开任务表后才读取自增序号。 */
+/**
+ * @Author: YeMiaoo
+ * @CreateTime: 2026-10-16
+ * @Description: 模拟 InnoDB 冷表统计，验证启动检查真实打开任务表后才读取自增序号。
+ */
 class JudgeDispatchIdAllocatorTest {
 
     private static final String COUNTER_SQL = "SELECT AUTO_INCREMENT FROM information_schema.tables "
@@ -34,6 +39,7 @@ class JudgeDispatchIdAllocatorTest {
 
     private Connection connection;
     private Statement statement;
+    private PreparedStatement restore;
     private Judge latest;
     private JudgeDispatchIdAllocator allocator;
     private List<String> statements;
@@ -46,14 +52,21 @@ class JudgeDispatchIdAllocatorTest {
     private Long openedCounter = 8L;
     private String failingSql;
 
+    /**
+     * 模拟同一连接的冷表统计与参数化会话恢复，隔离真实数据库。
+     * @throws SQLException JDBC 桩设置失败
+     */
     @BeforeEach
     @SuppressWarnings("unchecked")
     void prepare() throws SQLException {
         DataSource dataSource = mock(DataSource.class);
         connection = mock(Connection.class);
         statement = mock(Statement.class);
+        restore = mock(PreparedStatement.class);
         when(dataSource.getConnection()).thenReturn(connection);
         when(connection.createStatement()).thenReturn(statement);
+        when(connection.prepareStatement("SET SESSION information_schema_stats_expiry=?"))
+                .thenReturn(restore);
         statements = new ArrayList<>();
         when(statement.executeQuery(anyString())).thenAnswer(invocation -> query(invocation.getArgument(0)));
         when(statement.execute(anyString())).thenAnswer(invocation -> {
@@ -214,9 +227,14 @@ class JudgeDispatchIdAllocatorTest {
         return result;
     }
 
+    /**
+     * 确认成功或异常路径均绑定原值恢复会话，并释放全部 JDBC 资源。
+     * @throws SQLException 验证 JDBC 调用失败
+     */
     private void verifyRestoredAndClosed() throws SQLException {
-        assertEquals("SET SESSION information_schema_stats_expiry=" + ORIGINAL_STATS_EXPIRY,
-                statements.get(statements.size() - 1));
+        verify(restore).setLong(1, ORIGINAL_STATS_EXPIRY);
+        verify(restore).execute();
+        verify(restore).close();
         assertTrue(statements.contains("SET SESSION information_schema_stats_expiry=0"));
         assertTrue(statements.indexOf("SET SESSION information_schema_stats_expiry=0")
                 < statements.indexOf(COUNTER_SQL) || !statements.contains(COUNTER_SQL));

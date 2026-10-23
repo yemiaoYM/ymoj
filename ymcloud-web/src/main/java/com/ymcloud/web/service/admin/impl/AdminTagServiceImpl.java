@@ -1,6 +1,7 @@
 package com.ymcloud.web.service.admin.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
 import com.ymcloud.core.web.dao.TagClassificationEntityService;
@@ -13,10 +14,16 @@ import com.ymcloud.pojo.entity.TagClassification;
 import com.ymcloud.pojo.vo.admin.TagWithClassificationVO;
 import com.ymcloud.web.service.admin.AdminTagService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -37,6 +44,9 @@ public class AdminTagServiceImpl implements AdminTagService {
 
     @Autowired
     private ProblemTagEntityService problemTagEntityService;
+
+    @Autowired
+    private CacheManager cacheManager;
 
     /**
      * 获取标签和分类列表
@@ -101,6 +111,7 @@ public class AdminTagServiceImpl implements AdminTagService {
         if (!saved) {
             throw new ServiceException("标签添加失败");
         }
+        evictTagsAfterCommit();
     }
 
     /**
@@ -141,6 +152,7 @@ public class AdminTagServiceImpl implements AdminTagService {
         if (!updated) {
             throw new ServiceException("标签更新失败");
         }
+        evictTagsAfterCommit();
     }
 
     /**
@@ -164,6 +176,7 @@ public class AdminTagServiceImpl implements AdminTagService {
         if (!removed) {
             throw new ServiceException("标签删除失败");
         }
+        evictTagsAfterCommit();
     }
 
     /**
@@ -197,6 +210,7 @@ public class AdminTagServiceImpl implements AdminTagService {
         if (!saved) {
             throw new ServiceException("标签分类添加失败");
         }
+        evictTagsAfterCommit();
     }
 
     /**
@@ -221,13 +235,15 @@ public class AdminTagServiceImpl implements AdminTagService {
             throw new ServiceException("标签分类名称已存在");
         }
         //更新标签分类信息
-        TagClassification updateClassification = BeanUtil.copyProperties(tagClassificationDTO, TagClassification.class);
-        updateClassification.setId(id);
-        //保存更新
-        boolean updated = tagClassificationEntityService.updateById(updateClassification);
+        boolean updated = tagClassificationEntityService.lambdaUpdate()
+                .eq(TagClassification::getId, id)
+                .set(TagClassification::getName, tagClassificationDTO.getName())
+                .set(TagClassification::getPriority, tagClassificationDTO.getPriority())
+                .update();
         if (!updated) {
             throw new ServiceException("标签分类更新失败");
         }
+        evictTagsAfterCommit();
     }
 
     /**
@@ -242,19 +258,38 @@ public class AdminTagServiceImpl implements AdminTagService {
         if (classification == null) {
             throw new ServiceException("标签分类不存在");
         }
-        //标签删除后将标签的父标签ID设置为null
-        boolean update = tagEntityService.lambdaUpdate()
-                        .eq(Tag::getParentId, id)
-                        .set(Tag::getParentId, null)
-                        .update();
-        if (!update) {
-            throw new ServiceException("标签父标签ID设置失败");
-        }
+        // 空分类没有需要迁移的标签，影响零行也是正常结果；数据库异常仍会回滚。
+        tagEntityService.lambdaUpdate()
+                .eq(Tag::getParentId, id)
+                .set(Tag::getParentId, null)
+                .update();
         //删除标签分类
         boolean removed = tagClassificationEntityService.removeById(id);
         if (!removed) {
             throw new ServiceException("标签分类删除失败");
         }
+        evictTagsAfterCommit();
     }
 
+    /** 提交后失效，避免其他请求在事务未提交时重新缓存旧标签。 */
+    private void evictTagsAfterCommit() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    evictTags();
+                }
+            });
+        } else {
+            evictTags();
+        }
+    }
+
+    private void evictTags() {
+        Cache cache = cacheManager.getCache(CacheConstants.CACHE_NAME);
+        if (cache == null) {
+            throw new IllegalStateException("公开标签缓存未配置");
+        }
+        cache.evict(CacheConstants.TAG_LIST_KEY);
+    }
 }
