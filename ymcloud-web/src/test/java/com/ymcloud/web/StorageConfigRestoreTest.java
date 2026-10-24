@@ -20,6 +20,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -50,7 +51,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** 恢复丢失连接必须先逐一验证旧对象，校验失败不保存且不会修改任何对象。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 恢复丢失连接先逐一验证旧对象，校验失败不保存且不修改对象
+ */
 class StorageConfigRestoreTest {
 
     private StorageProperties properties;
@@ -60,7 +65,9 @@ class StorageConfigRestoreTest {
     private ObjectStorageService driver;
     private StorageConnectionTester tester;
     private AdminStorageConfigServiceImpl service;
+    private AnnotationConfigApplicationContext context;
 
+    /** 初始化隔离依赖，由 Spring 注入存储配置服务。 */
     @BeforeEach
     void setup() {
         properties = new StorageProperties();
@@ -70,7 +77,14 @@ class StorageConfigRestoreTest {
         registry = mock(StorageRegistry.class);
         driver = mock(ObjectStorageService.class);
         tester = new StorageConnectionTester(registry);
-        service = new AdminStorageConfigServiceImpl(properties, catalog, cipher, tester);
+        context = new AnnotationConfigApplicationContext();
+        context.registerBean(StorageProperties.class, () -> properties);
+        context.registerBean(StorageConfigCatalog.class, () -> catalog);
+        context.registerBean(StorageCredentialCipher.class, () -> cipher);
+        context.registerBean(StorageConnectionTester.class, () -> tester);
+        context.register(AdminStorageConfigServiceImpl.class);
+        context.refresh();
+        service = context.getBean(AdminStorageConfigServiceImpl.class);
         StorageConfigState state = new StorageConfigState();
         state.setId(1);
         state.setRevision(0L);
@@ -85,9 +99,11 @@ class StorageConfigRestoreTest {
                 new UsernamePasswordAuthenticationToken(login, "", login.getAuthorities()));
     }
 
+    /** 清理认证状态并关闭隔离的 Spring 上下文。 */
     @AfterEach
     void clearAuthentication() {
         SecurityContextHolder.clearContext();
+        context.close();
     }
 
     @Test

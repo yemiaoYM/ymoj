@@ -1,22 +1,28 @@
 package com.ymcloud.web.controller.common;
 
-import cn.hutool.core.bean.BeanUtil;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
-import com.ymcloud.core.web.dao.LanguageEntityService;
-import com.ymcloud.core.web.dao.TagEntityService;
-import com.ymcloud.core.web.mapper.UserAcproblemMapper;
-import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Tag;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.oj.ContestPageQuery;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
 import com.ymcloud.pojo.query.oj.SubmissionPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.pojo.vo.common.SystemSettingVO;
+import com.ymcloud.pojo.vo.oj.AnnouncementVO;
+import com.ymcloud.pojo.vo.oj.ContestTableVO;
+import com.ymcloud.pojo.vo.oj.LanguageTableVO;
+import com.ymcloud.pojo.vo.oj.ProblemTableVO;
+import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
+import com.ymcloud.pojo.vo.oj.UserAcRankVO;
+import com.ymcloud.pojo.vo.oj.UserCalendarHeatmapVO;
+import com.ymcloud.pojo.vo.oj.UserInfoVO;
+import com.ymcloud.web.service.common.PublicResourceService;
 import com.ymcloud.web.service.common.SystemSettingService;
-import com.ymcloud.pojo.vo.oj.*;
-import com.ymcloud.web.service.oj.*;
+import com.ymcloud.web.service.oj.AnnouncementService;
+import com.ymcloud.web.service.oj.ContestService;
+import com.ymcloud.web.service.oj.ProblemService;
+import com.ymcloud.web.service.oj.SubmissionService;
+import com.ymcloud.web.service.oj.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
@@ -41,13 +47,10 @@ import java.util.List;
 public class PublicController {
 
     @Autowired
-    private UserAcproblemMapper userAcproblemMapper;
+    private PublicResourceService publicResourceService;
 
     @Autowired
     private UserService userService;
-
-    @Autowired
-    private TagEntityService tagEntityService;
 
     @Autowired
     private ProblemService problemService;
@@ -62,9 +65,6 @@ public class PublicController {
     private SubmissionService submissionService;
 
     @Autowired
-    private LanguageEntityService languageEntityService;
-
-    @Autowired
     private SystemSettingService systemSettingService;
 
     /**
@@ -73,6 +73,7 @@ public class PublicController {
      */
     @GetMapping("/system-setting")
     public Result<SystemSettingVO> getSystemSetting() {
+        log.debug("读取公开系统配置");
         return Result.ok(systemSettingService.getSystemSetting());
     }
 
@@ -108,9 +109,7 @@ public class PublicController {
     @GetMapping("/tags")
     public Result<List<Tag>> listTags() {
         log.info("获取标签列表");
-        //基于注解方式拉取redis缓存
-        List<Tag> list = tagEntityService.list();
-        return Result.ok(list);
+        return Result.ok(publicResourceService.listTags());
     }
 
     /**
@@ -144,6 +143,7 @@ public class PublicController {
      */
     @GetMapping("/announcements")
     public Result<PageVO<AnnouncementVO>> listAnnouncements(@RequestParam(name = "pageNo", defaultValue = "1") Integer pageNo) {
+        log.debug("读取公告列表，页码：{}", pageNo);
         return Result.ok(announcementService.pageQuery(pageNo));
     }
 
@@ -167,11 +167,7 @@ public class PublicController {
     @GetMapping("/languages")
     public Result<List<LanguageTableVO>> listLanguages(){
         log.info("获取本地编程语言列表");
-        List<Language> list = languageEntityService.lambdaQuery()
-                .eq(Language::getOj, ProblemSource.LOCAL.getCode())
-                .list();
-        List<LanguageTableVO> languages = BeanUtil.copyToList(list, LanguageTableVO.class);
-        return Result.ok(languages);
+        return Result.ok(publicResourceService.listLanguages());
     }
 
     /**
@@ -182,10 +178,7 @@ public class PublicController {
     @GetMapping("/user-ac-rank")
     public Result<List<UserAcRankVO>> userAcRank() {
         log.info("获取用户ac数量排名（每日凌晨1点更新）");
-        //如果没有缓存则从数据库中拉取，备用操作
-        //但这个概率几乎很小，除非redis被穿透或者redis中根本不存在该数据
-        List<UserAcRankVO> userAcRank = userAcproblemMapper.selectUserAcRank();
-        return Result.ok(userAcRank);
+        return Result.ok(publicResourceService.listUserAcRank());
     }
 
 }

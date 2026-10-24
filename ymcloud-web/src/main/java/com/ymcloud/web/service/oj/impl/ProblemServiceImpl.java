@@ -15,17 +15,21 @@ import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
+import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
-import com.ymcloud.core.web.dao.ProblemTagEntityService;
-import com.ymcloud.core.web.dao.TagEntityService;
-import com.ymcloud.core.web.mapper.LanguageMapper;
-import com.ymcloud.pojo.entity.*;
+import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
 import com.ymcloud.pojo.query.oj.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
-import com.ymcloud.pojo.vo.oj.*;
+import com.ymcloud.pojo.vo.oj.LanguageVO;
+import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
+import com.ymcloud.pojo.vo.oj.ProblemCountVO;
+import com.ymcloud.pojo.vo.oj.ProblemTableVO;
+import com.ymcloud.pojo.vo.oj.ProblemVO;
+import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
 import com.ymcloud.web.service.oj.ProblemService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -50,7 +54,7 @@ public class ProblemServiceImpl implements ProblemService {
     private JudgeEntityService judgeEntityService;
 
     @Autowired
-    private LanguageMapper languageMapper;
+    private LanguageEntityService languageEntityService;
 
     /**
      * 获取题目列表表单 分页查询
@@ -112,7 +116,7 @@ public class ProblemServiceImpl implements ProblemService {
         List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
         problemVO.setProblemCaseList(problemCaseVOList);
         //来源只记录出处，题目统一使用本站启用的语言配置。
-        List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(
+        List<LanguageVO> languageVOList = languageEntityService.getByStatusAndOj(
                 LanguageConstants.ABLE,
                 ProblemSource.LOCAL.getCode());
         problemVO.setLanguageList(languageVOList);

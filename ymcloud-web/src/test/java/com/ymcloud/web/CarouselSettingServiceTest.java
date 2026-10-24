@@ -20,22 +20,24 @@ import com.ymcloud.pojo.entity.SystemSetting;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.web.service.common.CarouselSettingService;
+import com.ymcloud.web.service.common.impl.CarouselSettingServiceImpl;
 import jakarta.validation.Validation;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import javax.imageio.ImageIO;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -83,7 +85,12 @@ class CarouselSettingServiceTest {
         when(settings.lambdaQuery()).thenAnswer(call -> new LambdaQueryChainWrapper<>(settingMapper, SystemSetting.class));
         when(settings.lambdaUpdate()).thenAnswer(call -> new LambdaUpdateChainWrapper<>(settingMapper));
         when(files.lambdaQuery()).thenAnswer(call -> new LambdaQueryChainWrapper<>(fileMapper, File.class));
-        service = new CarouselSettingService(settings, files, storage, new ObjectMapper(), transactions);
+        service = new CarouselSettingServiceImpl();
+        ReflectionTestUtils.setField(service, "settings", settings);
+        ReflectionTestUtils.setField(service, "files", files);
+        ReflectionTestUtils.setField(service, "storedFiles", storage);
+        ReflectionTestUtils.setField(service, "json", new ObjectMapper());
+        ReflectionTestUtils.setField(service, "transactionManager", transactions);
     }
 
     /** 未配置与明确清空必须保持不同含义。 */

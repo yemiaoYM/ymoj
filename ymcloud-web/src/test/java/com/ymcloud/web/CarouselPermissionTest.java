@@ -5,6 +5,10 @@ import com.ymcloud.pojo.dto.admin.CarouselSettingDTO;
 import com.ymcloud.web.controller.admin.common.AdminCarouselController;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.AccessDeniedException;
@@ -28,7 +32,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @CreateTime: 2026-10-24
  * @Description: 验证轮播入口的真实方法权限及 HTTP 参数校验
  */
+@ExtendWith(MockitoExtension.class)
 class CarouselPermissionTest {
+
+    @Mock
+    private CarouselSettingService service;
+
+    @InjectMocks
+    private AdminCarouselController controller;
 
     @Configuration
     @EnableMethodSecurity
@@ -41,7 +52,7 @@ class CarouselPermissionTest {
         CarouselSettingService service = mock(CarouselSettingService.class);
         try (var context = new AnnotationConfigApplicationContext()) {
             context.register(MethodSecurityConfig.class, AdminCarouselController.class, PermissionService.class);
-            context.registerBean(CarouselSettingService.class, () -> service);
+            context.getBeanFactory().registerSingleton("carouselSettingService", service);
             context.refresh();
             var controller = context.getBean(AdminCarouselController.class);
             assertThrows(AccessDeniedException.class, controller::get);
@@ -67,8 +78,7 @@ class CarouselPermissionTest {
      */
     @Test
     void validatesHttpRequestBeforeService() throws Exception {
-        CarouselSettingService service = mock(CarouselSettingService.class);
-        var mvc = MockMvcBuilders.standaloneSetup(new AdminCarouselController(service)).build();
+        var mvc = MockMvcBuilders.standaloneSetup(controller).build();
         for (String body : new String[]{"{}", "{\"fileIds\":[null]}", "{\"fileIds\":[\"0\"]}"}) {
             mvc.perform(put("/admin/system-setting/carousel").contentType("application/json").content(body))
                     .andExpect(status().isBadRequest());

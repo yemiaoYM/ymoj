@@ -13,11 +13,14 @@ import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.pojo.vo.oj.AnnouncementVO;
 import com.ymcloud.web.controller.common.PublicController;
 import com.ymcloud.web.service.oj.AnnouncementService;
+import com.ymcloud.web.service.oj.impl.AnnouncementServiceImpl;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -48,6 +51,7 @@ class AnnouncementServiceTest {
     private AnnouncementEntityService entityService;
     private AnnouncementMapper mapper;
     private AnnouncementService service;
+    private AnnotationConfigApplicationContext context;
 
     /** 初始化真实查询包装器，数据库访问在Mapper边界模拟。 */
     @BeforeEach
@@ -57,8 +61,18 @@ class AnnouncementServiceTest {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(configuration, ""), Announcement.class);
         entityService = mock(AnnouncementEntityService.class);
         mapper = mock(AnnouncementMapper.class);
-        service = new AnnouncementService(entityService);
+        context = new AnnotationConfigApplicationContext();
+        context.registerBean(AnnouncementEntityService.class, () -> entityService);
+        context.register(AnnouncementServiceImpl.class);
+        context.refresh();
+        service = context.getBean(AnnouncementService.class);
         when(entityService.lambdaQuery()).thenAnswer(ignored -> new LambdaQueryChainWrapper<>(mapper, Announcement.class));
+    }
+
+    /** 关闭本次测试的 Spring 装配上下文。 */
+    @AfterEach
+    void tearDown() {
+        context.close();
     }
 
     /** 固定五条分页、可见性过滤和确定性排序；重复查询仍访问数据库。 */

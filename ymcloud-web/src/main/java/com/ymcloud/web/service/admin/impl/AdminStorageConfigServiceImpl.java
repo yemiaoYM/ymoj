@@ -14,6 +14,7 @@ import com.ymcloud.pojo.entity.StorageConfig;
 import com.ymcloud.pojo.entity.StorageConfigState;
 import com.ymcloud.pojo.vo.common.StorageConfigVO;
 import com.ymcloud.web.service.admin.AdminStorageConfigService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,26 +29,24 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-11
  * @Description: 命名配置管理。写入与探测仅向 ID 为 1 的可用超级管理员开放。
  */
 @Service
 public class AdminStorageConfigServiceImpl implements AdminStorageConfigService {
 
-    private final StorageProperties properties;
-    private final StorageConfigCatalog catalog;
-    private final StorageCredentialCipher cipher;
-    private final StorageConnectionTester tester;
+    @Autowired
+    private StorageProperties properties;
 
-    public AdminStorageConfigServiceImpl(StorageProperties properties,
-                                         StorageConfigCatalog catalog, StorageCredentialCipher cipher,
-                                         StorageConnectionTester tester) {
-        this.properties = properties;
-        this.catalog = catalog;
-        this.cipher = cipher;
-        this.tester = tester;
-    }
+    @Autowired
+    private StorageConfigCatalog catalog;
+
+    @Autowired
+    private StorageCredentialCipher cipher;
+
+    @Autowired
+    private StorageConnectionTester tester;
 
     @Override
     public List<StorageConfigVO> list() {

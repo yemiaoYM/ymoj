@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-10
  * @Description: 读取网站配置并在事务内保存开关与备案信息
  */
@@ -26,7 +26,11 @@ public class SystemSettingServiceImpl implements SystemSettingService {
     @Autowired
     private SystemSettingEntityService systemSettingEntityService;
 
-    /** {@inheritDoc} */
+    /**
+     * 读取注册开关与备案配置；缺少备案配置时默认关闭展示。
+     * @return 网站配置，缺少的备案号为空字符串
+     * @throws ServiceException 注册配置缺失或值不合法
+     */
     @Override
     public SystemSettingVO getSystemSetting() {
         SystemSettingVO systemSettingVO = new SystemSettingVO();
@@ -44,7 +48,11 @@ public class SystemSettingServiceImpl implements SystemSettingService {
         return systemSettingVO;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * 实时读取注册开关，不使用缓存。
+     * @return true 表示允许新用户注册
+     * @throws ServiceException 注册配置缺失或值不是 true、false
+     */
     @Override
     public boolean isRegisterEnabled() {
         //实时读取数据库，保证保存后所有服务实例立即使用最新配置

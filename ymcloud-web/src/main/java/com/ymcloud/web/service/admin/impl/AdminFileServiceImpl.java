@@ -17,6 +17,7 @@ import com.ymcloud.pojo.vo.admin.AdminFileVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminFileService;
 import com.ymcloud.web.service.admin.FileAccessPolicy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,20 +28,21 @@ import java.io.InputStream;
 import java.util.Arrays;
 
 /**
- * 文件管理过滤权限后分页；通用入口不修改业务关联或不可变测试数据。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 文件管理过滤权限后分页，通用入口不修改业务关联或不可变测试数据
  */
 @Service
 public class AdminFileServiceImpl implements AdminFileService {
 
-    private final FileEntityService files;
-    private final StoredFileService storedFiles;
-    private final FileAccessPolicy access;
+    @Autowired
+    private FileEntityService files;
 
-    public AdminFileServiceImpl(FileEntityService files, StoredFileService storedFiles, FileAccessPolicy access) {
-        this.files = files;
-        this.storedFiles = storedFiles;
-        this.access = access;
-    }
+    @Autowired
+    private StoredFileService storedFiles;
+
+    @Autowired
+    private FileAccessPolicy access;
 
     @Override
     public PageVO<AdminFileVO> queryList(AdminFilePageQuery query) {

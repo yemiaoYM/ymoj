@@ -1,21 +1,30 @@
 package com.ymcloud.web.service.oj.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.collection.CollectionUtil;
-import cn.hutool.core.date.LocalDateTimeUtil;
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.LanguageConstants;
-import com.ymcloud.common.exception.contest.*;
+import com.ymcloud.common.exception.contest.ContestException;
+import com.ymcloud.common.exception.contest.ContestNotAccessException;
+import com.ymcloud.common.exception.contest.ContestNotExistException;
+import com.ymcloud.common.exception.contest.ContestNotStartException;
+import com.ymcloud.common.exception.contest.ContestProblemNotExistException;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.core.web.dao.*;
-import com.ymcloud.core.web.mapper.LanguageMapper;
-import com.ymcloud.pojo.bo.ContestSubmissionRecord;
+import com.ymcloud.core.web.dao.ContestEntityService;
+import com.ymcloud.core.web.dao.ContestProblemEntityService;
+import com.ymcloud.core.web.dao.ContestUserEntityService;
+import com.ymcloud.core.web.dao.JudgeEntityService;
+import com.ymcloud.core.web.dao.LanguageEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.dto.RegisterContestDTO;
-import com.ymcloud.pojo.entity.*;
+import com.ymcloud.pojo.entity.Contest;
+import com.ymcloud.pojo.entity.ContestProblem;
+import com.ymcloud.pojo.entity.ContestUser;
+import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.oj.ContestPageQuery;
@@ -23,7 +32,17 @@ import com.ymcloud.pojo.query.oj.ContestProblemSubmissionPageQuery;
 import com.ymcloud.pojo.query.oj.ContestRankPageQuery;
 import com.ymcloud.pojo.query.oj.ContestSubmissionPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
-import com.ymcloud.pojo.vo.oj.*;
+import com.ymcloud.pojo.vo.oj.ContestCountVO;
+import com.ymcloud.pojo.vo.oj.ContestProblemTableVO;
+import com.ymcloud.pojo.vo.oj.ContestProblemVO;
+import com.ymcloud.pojo.vo.oj.ContestRankTableVO;
+import com.ymcloud.pojo.vo.oj.ContestRankVO;
+import com.ymcloud.pojo.vo.oj.ContestTableVO;
+import com.ymcloud.pojo.vo.oj.ContestVO;
+import com.ymcloud.pojo.vo.oj.LanguageVO;
+import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
+import com.ymcloud.pojo.vo.oj.ProblemVO;
+import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
 import com.ymcloud.web.service.oj.ContestService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -56,7 +75,7 @@ public class ContestServiceImpl implements ContestService {
     private JudgeEntityService judgeEntityService;
 
     @Autowired
-    private LanguageMapper languageMapper;
+    private LanguageEntityService languageEntityService;
 
     /**
      * 获取比赛列表表单 分页查询
@@ -219,7 +238,7 @@ public class ContestServiceImpl implements ContestService {
         List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
         problemVO.setProblemCaseList(problemCaseVOList);
         //比赛题目同样使用本站语言配置，原题来源不决定执行平台。
-        List<LanguageVO> languageVOList = languageMapper.getByStatusAndOj(
+        List<LanguageVO> languageVOList = languageEntityService.getByStatusAndOj(
                 LanguageConstants.ABLE,
                 ProblemSource.LOCAL.getCode());
         problemVO.setLanguageList(languageVOList);

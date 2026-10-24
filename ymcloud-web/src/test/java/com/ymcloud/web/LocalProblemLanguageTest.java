@@ -9,7 +9,7 @@ import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
-import com.ymcloud.core.web.mapper.LanguageMapper;
+import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.Judge;
@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 /**
- * @Author: OpenAI Codex
+ * @Author: Yemiao
  * @CreateTime: 2026-10-23
  * @Description: 验证原题出处不影响普通题目及比赛题目的本站语言选项。
  */
@@ -45,7 +45,7 @@ class LocalProblemLanguageTest {
     @EnumSource(ProblemSource.class)
     void problemDetailsUseLocalLanguages(ProblemSource source) {
         ProblemEntityService problems = mock(ProblemEntityService.class);
-        LanguageMapper languages = mock(LanguageMapper.class);
+        LanguageEntityService languages = mock(LanguageEntityService.class);
         Problem problem = problem(source);
         doReturn(query(problem)).when(problems).lambdaQuery();
         List<LanguageVO> enabled = List.of(new LanguageVO());
@@ -53,7 +53,7 @@ class LocalProblemLanguageTest {
                 .thenReturn(enabled);
         ProblemServiceImpl service = new ProblemServiceImpl();
         ReflectionTestUtils.setField(service, "problemEntityService", problems);
-        ReflectionTestUtils.setField(service, "languageMapper", languages);
+        ReflectionTestUtils.setField(service, "languageEntityService", languages);
         ReflectionTestUtils.setField(service, "judgeEntityService", judges());
         try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
             security.when(SecurityUtils::getUserId).thenReturn(2L);
@@ -76,7 +76,7 @@ class LocalProblemLanguageTest {
         ProblemEntityService problems = mock(ProblemEntityService.class);
         ContestEntityService contests = mock(ContestEntityService.class);
         ContestProblemEntityService mappings = mock(ContestProblemEntityService.class);
-        LanguageMapper languages = mock(LanguageMapper.class);
+        LanguageEntityService languages = mock(LanguageEntityService.class);
         Problem problem = problem(source);
         when(problems.getById(problem.getId())).thenReturn(problem);
         Contest contest = new Contest();
@@ -96,7 +96,7 @@ class LocalProblemLanguageTest {
         ReflectionTestUtils.setField(service, "problemEntityService", problems);
         ReflectionTestUtils.setField(service, "contestEntityService", contests);
         ReflectionTestUtils.setField(service, "contestProblemEntityService", mappings);
-        ReflectionTestUtils.setField(service, "languageMapper", languages);
+        ReflectionTestUtils.setField(service, "languageEntityService", languages);
         ReflectionTestUtils.setField(service, "judgeEntityService", judges());
         try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
             security.when(SecurityUtils::getUserId).thenReturn(2L);

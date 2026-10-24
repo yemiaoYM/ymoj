@@ -1,9 +1,9 @@
 package com.ymcloud.web.controller.internal;
 
-import com.ymcloud.core.storage.TestDataService;
-import com.ymcloud.core.web.dao.TestDataVersionEntityService;
-import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import com.ymcloud.pojo.entity.TestDataVersion;
+import com.ymcloud.web.service.internal.JudgeWorkerDataService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -13,46 +13,37 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
-
-import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 /**
- * 仅供 Worker 读取已发布版本。下载文件必须同时属于指定题目与版本清单。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 供 Worker 读取已发布版本，文件必须属于指定题目与版本清单
  */
+@Slf4j
 @RestController
 @RequestMapping("/internal/judge-worker/problems/{problemId}/versions/{versionId}")
 @PreAuthorize("hasAuthority('ROLE_JUDGE_WORKER')")
 public class JudgeWorkerDataController {
 
-    private final TestDataService testDataService;
-    private final TestDataVersionEntityService versionEntityService;
+    @Autowired
+    private JudgeWorkerDataService judgeWorkerDataService;
 
-    public JudgeWorkerDataController(TestDataService testDataService,
-                                     TestDataVersionEntityService versionEntityService) {
-        this.testDataService = testDataService;
-        this.versionEntityService = versionEntityService;
-    }
-
+    /**
+     * 返回已校验版本的原始清单，避免重新序列化改变哈希。
+     * @param problemId 题目编号，必须为正数
+     * @param versionId 属于该题目的已发布版本编号
+     * @return 原始 UTF-8 清单字节及内容哈希
+     */
     @GetMapping("/manifest")
     public ResponseEntity<byte[]> manifest(@PathVariable("problemId") Long problemId,
                                           @PathVariable("versionId") Long versionId) {
-        requireIds(problemId, versionId);
-        // 先验证版本内容及哈希，再返回原始清单，避免 JSON 重新序列化改变其哈希。
-        testDataService.getManifest(problemId, versionId);
-        TestDataVersion version = versionEntityService.lambdaQuery()
-                .eq(TestDataVersion::getId, versionId)
-                .eq(TestDataVersion::getProblemId, problemId)
-                .one();
-        if (version == null) {
-            throw new ResponseStatusException(NOT_FOUND);
-        }
+        log.debug("Worker 读取测试清单，题目编号：{}，版本编号：{}", problemId, versionId);
+        TestDataVersion version = judgeWorkerDataService.getVerifiedVersion(problemId, versionId);
         byte[] body = version.getManifest().getBytes(StandardCharsets.UTF_8);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
@@ -63,39 +54,22 @@ public class JudgeWorkerDataController {
                 .body(body);
     }
 
+    /**
+     * 下载指定版本清单中的文件，并验证实际传输长度。
+     * @param problemId 题目编号，必须为正数
+     * @param versionId 属于该题目的已发布版本编号
+     * @param fileId 必须属于该版本清单的文件编号
+     * @return 文件流、内容长度及哈希；不公开内部存储路径
+     */
     @GetMapping("/files/{fileId}")
     public ResponseEntity<StreamingResponseBody> file(@PathVariable("problemId") Long problemId,
                                                      @PathVariable("versionId") Long versionId,
                                                      @PathVariable("fileId") Long fileId) {
-        requireIds(problemId, versionId);
-        if (fileId == null || fileId <= 0) {
-            throw new ResponseStatusException(NOT_FOUND);
-        }
-        TestDataManifest manifest = testDataService.getManifest(problemId, versionId);
-        String logicalPath = null;
-        Long size = null;
-        String hash = null;
-        for (TestDataManifest.Entry entry : manifest.getEntries()) {
-            if (Objects.equals(fileId, entry.getInputFileId())) {
-                logicalPath = entry.getInput();
-                size = entry.getInputSize();
-                hash = entry.getInputSha256();
-                break;
-            }
-            if (Objects.equals(fileId, entry.getOutputFileId())) {
-                logicalPath = entry.getOutput();
-                size = entry.getOutputSize();
-                hash = entry.getOutputSha256();
-                break;
-            }
-        }
-        if (logicalPath == null || size == null || size < 0) {
-            throw new ResponseStatusException(NOT_FOUND);
-        }
-        String path = logicalPath;
-        long expectedSize = size;
+        log.debug("Worker 读取测试文件，题目编号：{}，版本编号：{}，文件编号：{}", problemId, versionId, fileId);
+        JudgeWorkerDataService.FileReference file = judgeWorkerDataService.resolveFile(problemId, versionId, fileId);
+        long expectedSize = file.size();
         StreamingResponseBody body = output -> {
-            try (InputStream input = testDataService.openFile(problemId, versionId, path)) {
+            try (InputStream input = judgeWorkerDataService.openFile(problemId, versionId, file)) {
                 byte[] buffer = new byte[8192];
                 long copied = 0;
                 int count;
@@ -117,13 +91,8 @@ public class JudgeWorkerDataController {
                 .contentLength(expectedSize)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileId + ".dat\"")
                 .header("X-Content-Type-Options", "nosniff")
-                .header("X-Content-SHA256", hash)
+                .header("X-Content-SHA256", file.sha256())
                 .body(body);
     }
 
-    private void requireIds(Long problemId, Long versionId) {
-        if (problemId == null || problemId <= 0 || versionId == null || versionId <= 0) {
-            throw new ResponseStatusException(NOT_FOUND);
-        }
-    }
 }

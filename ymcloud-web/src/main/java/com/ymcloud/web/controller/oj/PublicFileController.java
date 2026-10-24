@@ -1,12 +1,10 @@
 package com.ymcloud.web.controller.oj;
 
-import com.ymcloud.common.constant.FileConstants;
-import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
-import com.ymcloud.core.storage.StoredFileService;
-import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.pojo.entity.File;
-import com.ymcloud.pojo.enums.FileBizType;
+import com.ymcloud.web.service.oj.FileService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -23,28 +21,19 @@ import java.time.Duration;
 import java.util.Set;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-11
  * @Description: 公开文件统一代理，存储桶本身无需开放匿名权限。
  * 仅代理已登记并绑定存储配置的公开文件，不回退到历史目录。
  */
+@Slf4j
 @RestController
 public class PublicFileController {
 
     private static final Set<String> INLINE_TYPES = Set.of("image/png", "image/jpeg", "image/gif", "image/webp");
 
-    private final StoredFileService files;
-    private final FileEntityService metadata;
-
-    /**
-     * 初始化公开文件读取与访问范围查询依赖。
-     * @param files 文件存储服务
-     * @param metadata 文件元数据查询服务
-     */
-    public PublicFileController(StoredFileService files, FileEntityService metadata) {
-        this.files = files;
-        this.metadata = metadata;
-    }
+    @Autowired
+    private FileService fileService;
 
     /**
      * 读取已登记的公开文件；缺少存储配置、私有文件及测试数据按不存在处理。
@@ -54,34 +43,9 @@ public class PublicFileController {
      */
     @GetMapping("/files/public/{*path}")
     public ResponseEntity<Resource> download(@PathVariable("path") String path) {
-        if (!path.startsWith("/")
-                || path.length() > 1000
-                || path.contains("%")
-                || path.contains("\\")
-                || path.chars().anyMatch(character -> character < 32
-                || character == 127)) {
-            throw new FileException("非法公开文件路径", HttpStatus.NOT_FOUND);
-        }
-        String url = "/files/public" + path;
-        // 已登记的私有 URL 和测试数据不得通过公开接口读取。
-        boolean forbidden = metadata.lambdaQuery()
-                .eq(File::getUrl, url)
-                .and(record -> record.ne(File::getIsPublic, FileConstants.ACCESS_PUBLIC)
-                        .or()
-                        .isNull(File::getIsPublic)
-                        .or()
-                        .eq(File::getBizType, FileBizType.TEST_DATA))
-                .exists();
-        if (forbidden) {
-            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
-        }
-        File file = files.resolvePublicUrl(url);
-        if (file == null || file.getStorageProfile() == null || file.getStorageProfile().isBlank()
-                || file.getBizType() == FileBizType.TEST_DATA
-                || !Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())) {
-            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
-        }
+        File file = fileService.resolvePublicFile(path);
         String name = file.getFileName();
+        log.debug("读取公开文件，文件编号：{}", file.getId());
         String contentType = file.getFileType();
         boolean inline = contentType != null && INLINE_TYPES.contains(contentType);
         HttpHeaders headers = new HttpHeaders();
@@ -96,6 +60,6 @@ public class PublicFileController {
         }
         return ResponseEntity.ok()
                 .headers(headers)
-                .body(new InputStreamResource(files.open(file)));
+                .body(new InputStreamResource(fileService.openPublicFile(file)));
     }
 }

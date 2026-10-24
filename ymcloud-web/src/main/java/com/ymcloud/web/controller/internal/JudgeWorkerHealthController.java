@@ -1,8 +1,8 @@
 package com.ymcloud.web.controller.internal;
 
 import com.ymcloud.common.constant.HttpStatus;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
@@ -13,17 +13,27 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 
 /**
- * 部署就绪探针复用 Worker 专用服务身份，只返回状态，不公开连接信息与异常正文。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-16
+ * @Description: 部署就绪探针，仅返回状态，不公开连接信息与异常正文
  */
 @Slf4j
 @RestController
-@RequiredArgsConstructor
 public class JudgeWorkerHealthController {
 
-    private final DataSource dataSource;
-    private final StringRedisTemplate redis;
-    private final ConnectionFactory rabbit;
+    @Autowired
+    private DataSource dataSource;
 
+    @Autowired
+    private StringRedisTemplate redis;
+
+    @Autowired
+    private ConnectionFactory rabbit;
+
+    /**
+     * 检查数据库、Redis 和消息连接是否就绪；正常探针不重复记录日志。
+     * @return 全部就绪返回 200，任一不可用返回 503，均不返回响应体
+     */
     @GetMapping("/internal/judge-worker/health")
     public ResponseEntity<Void> health() {
         try (Connection database = dataSource.getConnection()) {

@@ -1,6 +1,7 @@
 package com.ymcloud.web;
 
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.config.SecurityConfig;
 import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.core.security.filter.AuthenticationEntryPointImpl;
@@ -20,6 +21,7 @@ import com.ymcloud.web.controller.admin.problem.AdminProblemController;
 import com.ymcloud.web.controller.oj.PublicFileController;
 import com.ymcloud.web.handler.GlobalExceptionHandler;
 import com.ymcloud.web.service.admin.AdminProblemService;
+import com.ymcloud.web.service.oj.impl.FileServiceImpl;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -68,7 +70,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-11
  * @Description: 使用真实安全链及方法鉴权，验证存储代理、迁移和测试数据接口权限边界。
  */
@@ -77,7 +79,7 @@ class StorageHttpSecurityTest {
     @Configuration
     @EnableWebSecurity
     @EnableWebMvc
-    @Import({SecurityConfig.class, PublicFileController.class, AdminStorageMigrationController.class,
+    @Import({SecurityConfig.class, PublicFileController.class, FileServiceImpl.class, AdminStorageMigrationController.class,
             AdminProblemController.class, GlobalExceptionHandler.class, AuthenticationEntryPointImpl.class,
             CustomAccessDeniedHandler.class, LogoutSuccessHandlerImpl.class})
     static class TestConfig {
@@ -115,6 +117,10 @@ class StorageHttpSecurityTest {
     private AdminProblemService problems;
     private LambdaQueryChainWrapper<File> publicMetadata;
 
+    /**
+     * 装配真实安全过滤链和文件业务服务，模拟存储及数据库边界。
+     * @throws Exception 测试上下文或模拟请求链初始化失败
+     */
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setup() throws Exception {
@@ -142,6 +148,7 @@ class StorageHttpSecurityTest {
         context = new AnnotationConfigWebApplicationContext();
         context.setServletContext(new MockServletContext());
         context.addBeanFactoryPostProcessor(beanFactory -> {
+            beanFactory.registerSingleton("redisCache", mock(RedisCache.class));
             beanFactory.registerSingleton("jwtAuthenticationTokenFilter", jwtFilter);
             beanFactory.registerSingleton("tokenService", mock(TokenService.class));
         });

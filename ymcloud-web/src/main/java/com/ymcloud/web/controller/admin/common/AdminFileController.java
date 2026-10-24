@@ -11,6 +11,8 @@ import com.ymcloud.pojo.query.admin.AdminFilePageQuery;
 import com.ymcloud.pojo.vo.admin.AdminFileVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminFileService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -34,31 +36,42 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-11
  * @Description: 通用文件管理，测试数据权限与删除生命周期由业务服务单独检查。
  */
+@Slf4j
 @RestController
 @RequestMapping("/admin/file")
 public class AdminFileController {
 
-    private final AdminFileService service;
-    private final StoredFileService storedFiles;
+    @Autowired
+    private AdminFileService service;
 
-    public AdminFileController(AdminFileService service, StoredFileService storedFiles) {
-        this.service = service;
-        this.storedFiles = storedFiles;
-    }
+    @Autowired
+    private StoredFileService storedFiles;
 
+    /**
+     * 按权限范围分页查询文件。
+     * @param query 分页及文件筛选条件
+     * @return 当前用户可见的文件分页
+     */
     @PreAuthorize("@ss.hasAnyPermi('file:file:list', 'problem:testcase:query')")
     @GetMapping("/list")
     public Result<PageVO<AdminFileVO>> list(@Validated AdminFilePageQuery query) {
+        log.info("查询文件列表，页码：{}", query.getPageNum());
         return Result.ok(service.queryList(query));
     }
 
+    /**
+     * 校验下载权限后返回文件流。
+     * @param id 文件编号
+     * @return 附件流及禁止缓存的响应头
+     */
     @PreAuthorize("@ss.hasAnyPermi('file:file:download', 'problem:testcase:query')")
     @GetMapping("/{id}/download")
     public ResponseEntity<Resource> download(@PathVariable("id") Long id) {
+        log.info("下载管理文件，文件编号：{}", id);
         File file = service.requireDownload(id);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
@@ -75,16 +88,29 @@ public class AdminFileController {
                 .body(new InputStreamResource(openDownload(file)));
     }
 
+    /**
+     * 上传普通文件，公开范围由服务校验。
+     * @param file 待上传文件
+     * @param isPublic 0 为私有，1 为公开
+     * @return 文件元数据及可执行操作
+     */
     @PreAuthorize("@ss.hasPermi('file:file:upload')")
     @PostMapping("/upload")
     public Result<AdminFileVO> upload(@RequestParam("file") MultipartFile file,
                                     @RequestParam("isPublic") Integer isPublic) {
+        log.info("上传管理文件，公开状态：{}", isPublic);
         return Result.ok(service.upload(file, isPublic));
     }
 
+    /**
+     * 按文件权限和业务关联约束删除文件。
+     * @param id 文件编号
+     * @return 操作结果
+     */
     @PreAuthorize("@ss.hasPermi('file:file:remove')")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable("id") Long id) {
+        log.info("删除管理文件，文件编号：{}", id);
         service.delete(id);
         return Result.ok();
     }

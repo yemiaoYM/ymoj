@@ -22,6 +22,7 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -43,16 +44,20 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 使用真实 MyBatis 条件构造器核对分页前的可见性 SQL 和绑定参数。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 使用真实 MyBatis 条件构造器核对分页前的可见性 SQL 和绑定参数
  */
 class AdminFileQueryTest {
 
     private FileEntityService entities;
     private FileMapper mapper;
     private AdminFileServiceImpl service;
+    private AnnotationConfigApplicationContext context;
     private final AtomicReference<Wrapper<File>> captured = new AtomicReference<>();
     private final AtomicReference<Page<File>> capturedPage = new AtomicReference<>();
 
+    /** 初始化查询边界 Mock，由 Spring 注入真实文件服务和权限策略。 */
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setup() {
@@ -69,13 +74,19 @@ class AdminFileQueryTest {
             page.setTotal(0);
             return page;
         });
-        service = new AdminFileServiceImpl(entities, mock(StoredFileService.class),
-                new FileAccessPolicy(new PermissionService()));
+        context = new AnnotationConfigApplicationContext();
+        context.registerBean(FileEntityService.class, () -> entities);
+        context.registerBean(StoredFileService.class, () -> mock(StoredFileService.class));
+        context.register(PermissionService.class, FileAccessPolicy.class, AdminFileServiceImpl.class);
+        context.refresh();
+        service = context.getBean(AdminFileServiceImpl.class);
     }
 
+    /** 清理认证状态并关闭隔离的 Spring 上下文。 */
     @AfterEach
     void cleanup() {
         SecurityContextHolder.clearContext();
+        context.close();
     }
 
     @Test

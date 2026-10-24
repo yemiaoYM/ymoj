@@ -1,10 +1,13 @@
 package com.ymcloud.web.controller.admin.common;
 
+import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.admin.CarouselSettingDTO;
 import com.ymcloud.pojo.vo.common.CarouselSettingVO;
 import com.ymcloud.web.service.common.CarouselSettingService;
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,11 +25,12 @@ import org.springframework.web.multipart.MultipartFile;
  * @Description: 系统配置中的轮播列表和图片上传入口，沿用系统设置权限
  */
 @RestController
-@RequiredArgsConstructor
+@Slf4j
 @RequestMapping("/admin/system-setting/carousel")
 public class AdminCarouselController {
 
-    private final CarouselSettingService service;
+    @Autowired
+    private CarouselSettingService service;
 
     /**
      * 查询当前轮播配置。
@@ -35,17 +39,20 @@ public class AdminCarouselController {
     @GetMapping
     @PreAuthorize("@ss.hasPermi('system:setting:list')")
     public Result<CarouselSettingVO> get() {
+        log.info("查询首页轮播配置");
         return Result.ok(service.get());
     }
 
     /**
-     * 保存轮播顺序，空数组隐藏首页轮播。
+     * 保存轮播顺序，空数组隐藏首页轮播；Service 短事务提交后失效公开缓存。
      * @param request 有序文件 ID，最多 10 张
      * @return 操作结果
      */
+    @CacheEvict(cacheNames = CacheConstants.CACHE_NAME, key = "'" + CacheConstants.HOME_CAROUSEL_KEY + "'")
     @PutMapping
     @PreAuthorize("@ss.hasPermi('system:setting:edit')")
     public Result<Void> save(@Validated @RequestBody CarouselSettingDTO request) {
+        log.info("保存首页轮播配置");
         service.save(request);
         return Result.ok();
     }
@@ -58,6 +65,7 @@ public class AdminCarouselController {
     @PostMapping("/image")
     @PreAuthorize("@ss.hasPermi('system:setting:edit')")
     public Result<CarouselSettingVO.Image> upload(@RequestParam("file") MultipartFile file) {
+        log.info("上传首页轮播图片");
         return Result.ok(service.upload(file));
     }
 }

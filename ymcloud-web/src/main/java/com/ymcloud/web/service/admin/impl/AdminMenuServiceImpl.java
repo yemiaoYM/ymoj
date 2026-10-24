@@ -2,7 +2,7 @@ package com.ymcloud.web.service.admin.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.core.web.mapper.AuthMapper;
+import com.ymcloud.core.web.dao.AuthEntityService;
 import com.ymcloud.pojo.entity.Auth;
 import com.ymcloud.pojo.vo.admin.MetaVo;
 import com.ymcloud.pojo.vo.admin.RouterVo;
@@ -26,7 +26,7 @@ import java.util.Map;
 public class AdminMenuServiceImpl implements AdminMenuService {
 
     @Autowired
-    private AuthMapper authMapper;
+    private AuthEntityService authEntityService;
 
     /**
      * 获取菜单树
@@ -38,10 +38,10 @@ public class AdminMenuServiceImpl implements AdminMenuService {
         List<Auth> auths = new ArrayList<>();
         //超级管理员获取所有菜单
         if(SecurityUtils.isSuperAdmin(userId)){
-            auths = authMapper.selectMenuTreeAll();
+            auths = authEntityService.selectMenuTreeAll();
         }else{
             //否则获取对应菜单
-            auths = authMapper.selectMenuTreeByUserId(userId);
+            auths = authEntityService.selectMenuTreeByUserId(userId);
         }
         //构建菜单树
         return buildMenuTree(auths);

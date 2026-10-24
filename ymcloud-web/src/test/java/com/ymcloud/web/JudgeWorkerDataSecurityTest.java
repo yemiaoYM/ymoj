@@ -10,6 +10,7 @@ import com.ymcloud.web.config.JudgeWorkerIdentityProperties;
 import com.ymcloud.web.config.JudgeWorkerSecurityConfig;
 import com.ymcloud.web.controller.internal.JudgeWorkerDataController;
 import com.ymcloud.web.controller.internal.JudgeWorkerDataExceptionHandler;
+import com.ymcloud.web.service.internal.impl.JudgeWorkerDataServiceImpl;
 import jakarta.servlet.Filter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,7 +54,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 使用真实服务安全链，验证身份隔离、清单原始字节和版本文件引用约束。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 真实服务安全链验证身份隔离、清单原始字节和版本文件引用约束
  */
 class JudgeWorkerDataSecurityTest {
 
@@ -65,7 +68,7 @@ class JudgeWorkerDataSecurityTest {
     @EnableWebMvc
     @EnableMethodSecurity
     @Import({JudgeWorkerSecurityConfig.class, JudgeWorkerDataController.class,
-            JudgeWorkerDataExceptionHandler.class})
+            JudgeWorkerDataExceptionHandler.class, JudgeWorkerDataServiceImpl.class})
     static class Config {
 
         @Bean
