@@ -1,15 +1,12 @@
 package com.ymcloud.pojo.vo.oj;
 
 import com.ymcloud.pojo.entity.Tag;
-import com.ymcloud.pojo.enums.ProblemSource;
 import lombok.Data;
 
 import java.io.Serializable;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.pojo.vo
- * @ClassName: ProblemTableVO
  * @Author: Yemiao
  * @CreateTime: 2025-07-22  19:55
  * @Description: 前端题目列表表单
@@ -26,11 +23,11 @@ public class ProblemTableVO implements Serializable {
      */
     private String title;
     /**
-     * 题目来源
+     * 题目来源说明，最多255字符，可为空；不参与判题和题号生成
      */
-    private ProblemSource source;
+    private String source;
     /**
-     * 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上
+     * 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师
      */
     private Integer difficulty;
     /**

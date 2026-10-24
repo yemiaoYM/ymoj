@@ -39,7 +39,6 @@ import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.JudgeStatus;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.vo.oj.JudgeResultVO;
 import com.ymcloud.web.judge.JudgeDispatchIdAllocator;
 import com.ymcloud.web.judge.JudgeDispatchProperties;
@@ -62,7 +61,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-12
  * @Description: 校验本站提交权限并持久化可靠任务快照，不携带业务实体或存储凭据。
  */
@@ -190,6 +189,9 @@ public class JudgeServiceImpl implements JudgeService {
      */
     private Long createSubmission(JudgeDTO request, User user, Problem problem,
                                   Contest contest, ContestProblem contestProblem) {
+        if (!ProblemConstants.JUDGE_MODE_DEFAULT.equals(problem.getJudgeMode())) {
+            throw new JudgeException("该题目的判题方式尚未支持", HttpStatus.BAD_REQUEST);
+        }
         Language language = requireLanguage(request.getLanguage());
         validateResources(problem.getTimeLimit(), problem.getMemoryLimit());
         Long versionId = testData.getCurrentVersion(problem.getId());
@@ -212,7 +214,7 @@ public class JudgeServiceImpl implements JudgeService {
         task.setManifestSha256(version.getManifestSha256());
         task.setTimeLimit(problem.getTimeLimit());
         task.setMemoryLimit(problem.getMemoryLimit());
-        task.setMode(contest == null ? problem.getMode() : contest.getMode());
+        task.setMode(resolveScoringMode(contest));
         enqueue(task, user.getId());
         Judge judge = Judge.builder()
                 .id(task.getSubmissionId())
@@ -236,6 +238,24 @@ public class JudgeServiceImpl implements JudgeService {
             throw new JudgeException("提交失败，请稍后再试");
         }
         return judge.getId();
+    }
+
+    /**
+     * 普通练习采用 ACM 判定，比赛按赛制选择单次提交的评分算法。
+     * OI 与 IOI 都按测试点计分，跨提交的取分规则由比赛排名负责。
+     * @param contest 所属比赛，普通练习为 null
+     * @return Worker 既有评分协议：0=ACM，1=测试点计分
+     * @throws JudgeException 比赛模式缺失或不受支持
+     */
+    private Integer resolveScoringMode(Contest contest) {
+        if (contest == null || Objects.equals(contest.getMode(), ContestConstants.MODE_ACM)) {
+            return JudgeConstants.ACM;
+        }
+        if (Objects.equals(contest.getMode(), ContestConstants.MODE_OI)
+                || Objects.equals(contest.getMode(), ContestConstants.MODE_IOI)) {
+            return JudgeConstants.OI;
+        }
+        throw new JudgeException("比赛计分模式配置无效", HttpStatus.BAD_REQUEST);
     }
 
     /**
@@ -272,7 +292,7 @@ public class JudgeServiceImpl implements JudgeService {
     private Language requireLanguage(String name) {
         Language language = languages.lambdaQuery()
                 .eq(Language::getName, name)
-                .eq(Language::getOj, ProblemSource.LOCAL.getCode())
+                .eq(Language::getOj, LanguageConstants.LOCAL_PLATFORM)
                 .eq(Language::getStatus, LanguageConstants.ABLE)
                 .one();
         if (language == null) {
@@ -328,7 +348,7 @@ public class JudgeServiceImpl implements JudgeService {
     private void enqueue(JudgeTask task, Long userId) {
         if (!Objects.equals(task.getMode(), JudgeConstants.ACM)
                 && !Objects.equals(task.getMode(), JudgeConstants.OI)) {
-            throw new JudgeException("题目或比赛的评测模式配置无效");
+            throw new JudgeException("提交计分模式配置无效");
         }
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC).withNano(0);
         JudgeDispatch dispatch = new JudgeDispatch();

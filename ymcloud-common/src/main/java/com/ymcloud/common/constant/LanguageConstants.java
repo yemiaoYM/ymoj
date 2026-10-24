@@ -1,13 +1,14 @@
 package com.ymcloud.common.constant;
 
 /**
- * @PackageName: com.ymcloud.common.constant
- * @ClassName: LanguageConstants
  * @Author: Yemiao
  * @CreateTime: 2025-07-24  20:34
  * @Description: 语言常用变量
  */
 public class LanguageConstants {
+    /** 本站语言配置的平台标识；与题目来源文本无关。 */
+    public static final String LOCAL_PLATFORM = "myy";
+
     public static final String ENGLISH = "en";
     public static final String CHINESE = "cn";
     /**

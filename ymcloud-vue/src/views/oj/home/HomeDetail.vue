@@ -224,7 +224,7 @@ import {
   getContestStatusType,
 } from "@/utils/utils";
 import { getPublicCarousel } from "@/api/carousel";
-import { defaultBanners } from "@/utils/defaultBanners";
+import banner from "@/assets/image/banner.jpg";
 
 
 const Avatar = defineAsyncComponent(
@@ -257,7 +257,7 @@ async function handleLoadCarousel() {
     const response = await getPublicCarousel();
     if (!disposed) {
       const config = response.data.data;
-      bannerList.value = config.configured ? config.images.map(image => image.url) : defaultBanners;
+      bannerList.value = config.configured ? config.images.map(image => image.url) : [banner];
     }
   } catch(e) {
     console.log(e);

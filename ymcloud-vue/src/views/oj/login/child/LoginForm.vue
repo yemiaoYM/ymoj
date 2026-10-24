@@ -32,16 +32,11 @@
           placeholder="请输入密码"
           :prefix-icon="Lock"
           show-password
-          :autocomplete="rememberPassword ? 'current-password' : 'off'"
+          autocomplete="current-password"
         />
       </el-form-item>
 
       <div class="password-options">
-        <el-tooltip content="使用浏览器密码管理器记住密码，请勿在公共设备上启用" placement="top">
-          <el-checkbox v-model="rememberPassword" :disabled="loading" @change="handleRememberChange">
-            记住密码
-          </el-checkbox>
-        </el-tooltip>
         <el-link type="primary" :underline="false" @click="$emit('switchTo', 'forget')">
           忘记密码？
         </el-link>
@@ -92,12 +87,6 @@ import { useUserStore } from '@/stores/user';
 import { getCaptcha } from '@/api/api';
 import type { LoginDTO } from '@/type/types';
 import LegalAgreement from '@/components/common/LegalAgreement.vue';
-import {
-  clearRememberedLogin,
-  getRememberedPassword,
-  getRememberedUsername,
-  rememberLogin
-} from '@/utils/rememberLogin';
 
 defineProps<{
   registerEnabled: boolean
@@ -114,10 +103,8 @@ const formRef = ref();
 const loading = ref(false);
 const shakeCheckbox = ref(false);
 const captchaImage = ref('');
-const rememberedUsername = getRememberedUsername();
-const form = ref({ username: rememberedUsername } as LoginDTO);
+const form = ref<LoginDTO>({ username: '', password: '', code: '', uuid: '' });
 const agree = ref(false);
-const rememberPassword = ref(Boolean(rememberedUsername));
 
 const rules = {
   username: [
@@ -136,29 +123,17 @@ const rules = {
 //生命周期
 onMounted(() => {
   loadCaptcha();
-  restoreRememberedPassword();
+  try {
+    localStorage.removeItem('RememberedUsername');
+  } catch {
+    // 清理旧功能的用户名记录；存储被禁用时仍允许登录。
+  }
 });
 //方法
 const resetForm = () => {
-  form.value = { uuid: form.value.uuid } as LoginDTO;
+  form.value = { username: '', password: '', code: '', uuid: form.value.uuid };
   agree.value = false;
   shakeCheckbox.value = false;
-};
-
-const handleRememberChange = () => {
-  if (!rememberPassword.value) {
-    clearRememberedLogin();
-  }
-};
-
-const restoreRememberedPassword = async () => {
-  if (!rememberPassword.value) {
-    return;
-  }
-  const password = await getRememberedPassword(rememberedUsername);
-  if (rememberPassword.value && form.value.username === rememberedUsername && !form.value.password) {
-    form.value.password = password;
-  }
 };
 
 // 输入法确认文字时不提交登录表单。
@@ -189,20 +164,14 @@ const handleLogin = async () => {
 
     const { username, password, code, uuid } = form.value;
     await userStore.doLogin(username, password, code, uuid);
-    if (rememberPassword.value) {
-      void rememberLogin(username.trim(), password);
-    } else {
-      clearRememberedLogin();
-    }
 
     ElNotification({
       title: '登录成功',
       message: '欢迎来到喵语云OJ',
       type: 'success',
     });
-  } catch (e) {
+  } catch {
     refreshCaptcha();
-    console.log(e);
   } finally {
     loading.value = false;
   }
@@ -260,14 +229,10 @@ const refreshCaptcha = () => {
 
 .password-options {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
   margin-bottom: 24px;
-}
-
-.password-options .el-checkbox {
-  margin-right: 0;
 }
 
 .auth-form :deep(.el-input__inner) {

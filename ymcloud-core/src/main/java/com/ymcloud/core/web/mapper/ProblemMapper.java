@@ -2,7 +2,6 @@ package com.ymcloud.core.web.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 import org.apache.ibatis.annotations.Mapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -10,8 +9,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * @PackageName: com.ymcloud.core.web.mapper
- * @ClassName: ProblemMapper
  * @Author: Yemiao
  * @CreateTime: 2025-07-22  19:40
  * @Description: ProblemMapper
@@ -21,10 +18,9 @@ public interface ProblemMapper extends BaseMapper<Problem> {
 
     /**
      * 查询并锁定当前最大的本地题目展示id
-     * @param source 题目来源
      * @return 本地题目展示id
      */
-    String selectLatestLocalProblemIdForUpdate(@Param("source") ProblemSource source);
+    String selectLatestLocalProblemIdForUpdate();
 
     /**
      * 题单列表分页查询

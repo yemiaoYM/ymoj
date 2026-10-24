@@ -16,14 +16,14 @@
           label-width="auto"
           style="width: 100%"
         >
-          <el-form-item label="原题来源" prop="source">
-            <el-select v-model="problem.source" style="width: 200px">
-              <el-option :value="ProblemSource.LOCAL" label="本地" />
-              <el-option :value="ProblemSource.LUOGU" label="洛谷" />
-              <el-option :value="ProblemSource.ATCODER" label="AtCoder" />
-              <el-option :value="ProblemSource.CODEFORCES" label="Codeforces" />
-              <el-option :value="ProblemSource.LEETCODE" label="LeetCode" />
-            </el-select>
+          <el-form-item label="题目来源" prop="source">
+            <el-input
+              placeholder="可选，例如：此题来源于洛谷 P1000"
+              clearable
+              maxlength="255"
+              show-word-limit
+              v-model="problem.source"
+            />
           </el-form-item>
           <el-form-item label="评测方式">
             <el-text type="info">统一使用本站判题，需在测试用例管理中上传评测数据。</el-text>
@@ -31,8 +31,8 @@
           <el-form-item label="题目展示id" prop="problemId">
             <el-input
               v-model="problem.problemId"
-              :disabled="problem.source===ProblemSource.LOCAL"
-              :placeholder="problem.source===ProblemSource.LOCAL?'新增后由系统自动生成':'请输入题目展示id'"
+              disabled
+              placeholder="新增后由系统自动生成"
             />
           </el-form-item>
           <el-form-item label="标题" prop="title">
@@ -63,17 +63,19 @@
           </el-form-item>
           <el-form-item label="难度" prop="difficulty">
             <el-select v-model="problem.difficulty" style="width: 200px">
-              <el-option :value="0" label="未评定" />
-              <el-option :value="1" label="入门" />
-              <el-option :value="2" label="普及" />
-              <el-option :value="3" label="提高" />
-              <el-option :value="4" label="省选及以上" />
+              <el-option
+                v-for="item in PROBLEM_DIFFICULTIES"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
             </el-select>
           </el-form-item>
-          <el-form-item label="模式" prop="mode">
-            <el-select v-model="problem.mode" style="width: 200px">
-              <el-option :value="0" label="ACM" />
-              <el-option :value="1" label="OI" />
+          <el-form-item label="判题方式" prop="judgeMode">
+            <el-select v-model="problem.judgeMode" style="width: 200px">
+              <el-option value="default" label="普通判题" />
+              <el-option value="spj" label="特殊判题（暂未支持）" disabled />
+              <el-option value="interactive" label="交互判题（暂未支持）" disabled />
             </el-select>
           </el-form-item>
           <el-form-item label="是否公开测试用例" prop="openCaseResult">
@@ -84,7 +86,7 @@
             <el-select
               v-model="problem.tagList"
               multiple
-              multiple-limit="5"
+              :multiple-limit="5"
               placeholder="请选择标签"
               clearable
               filterable
@@ -209,7 +211,7 @@ import { ElMessage } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/api/api";
 import type { Tag } from "@/type/types";
-import { ProblemSource } from "@/constants/problem";
+import { PROBLEM_DIFFICULTIES } from "@/constants/problem";
 //异步导入markdown
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/MarkdownEidt.vue")
@@ -224,20 +226,6 @@ const mode = ref('add');
 const problemId = ref<number | null>(null);
 const tagList = ref<Tag[]>([] as Tag[]);
 
-//验证题目展示id格式
-const validateProblemId = (rule: any, value: string, callback: any) => {
-  if (problem.value.source === ProblemSource.LOCAL) {
-    callback();
-  } else if (!value) {
-    callback(new Error("题目展示id不能为空"));
-  } else if (value.length > 20) {
-    callback(new Error("题目展示id长度不能超过20个字符"));
-  } else if (!/^[a-zA-Z0-9-]+$/.test(value)) {
-    callback(new Error("题目展示id只能包含字母、数字和 -"));
-  } else {
-    callback();
-  }
-};
 //验证测试用例
 const validateTestCases = (rule: any, value: any[], callback: any) => {
   if (value && value.length > 5) {
@@ -272,9 +260,6 @@ const validateTagList = (rule: any, value: any[], callback: any) => {
 };
 //表单验证规则
 const rules = {
-  problemId: [
-    { validator: validateProblemId, trigger: "blur" },
-  ],
   title: [
     { required: true, message: "题目标题不能为空", trigger: "blur" },
     { max: 50, message: "题目标题长度不能超过50个字符", trigger: "blur" },
@@ -289,28 +274,21 @@ const rules = {
     { max: 2000, message: "输出描述长度不能超过2000字符", trigger: "blur" },
   ],
   source: [
-    { required: true, message: "请选择题目来源", trigger: "change" },
     { max: 255, message: "题目来源长度不能超过255个字符", trigger: "blur" },
   ],
   difficulty: [
     { required: true, message: "请选择题目难度", trigger: "change" },
     {
       type: "number",
-      min: 0,
-      max: 4,
+      min: 1,
+      max: 5,
       message: "难度参数非法",
       trigger: "change",
     },
   ],
-  mode: [
-    { required: true, message: "请选择题目评测模式", trigger: "change" },
-    {
-      type: "number",
-      min: 0,
-      max: 1,
-      message: "评测模式参数非法",
-      trigger: "change",
-    },
+  judgeMode: [
+    { required: true, message: "请选择题目判题方式", trigger: "change" },
+    { type: "enum", enum: ['default'], message: "目前仅支持普通判题", trigger: "change" },
   ],
   visibility: [
     { required: true, message: "请选择题目可见性", trigger: "change" },
@@ -343,9 +321,9 @@ const rules = {
     { required: true, message: "请设定内存限制", trigger: "blur" },
     {
       type: "number",
-      min: 128,
+      min: 256,
       max: 512,
-      message: "内存限制必须在128MB到512MB之间",
+      message: "内存限制必须在256MB到512MB之间",
       trigger: "blur",
     },
   ],
@@ -360,9 +338,9 @@ const problem = ref({
   content: "请输入题干",
   input: "请输入输入描述",
   output: "请输入输出描述",
-  source: ProblemSource.LOCAL,
-  difficulty: 0,
-  mode: 0,
+  source: "",
+  difficulty: 1,
+  judgeMode: "default",
   visibility: 1,
   openCaseResult: false,
   timeLimit: 1000,
@@ -404,9 +382,9 @@ const handleSubmitProblem = () => {
         content: problem.value.content,
         input: problem.value.input,
         output: problem.value.output,
-        source: problem.value.source,
+        source: problem.value.source.trim() || null,
         difficulty: problem.value.difficulty,
-        mode: problem.value.mode,
+        judgeMode: problem.value.judgeMode,
         visibility: problem.value.visibility,
         openCaseResult: problem.value.openCaseResult,
         timeLimit: problem.value.timeLimit,
@@ -455,9 +433,9 @@ const resetForm = () => {
     content: "请输入题干",
     input: "请输入输入描述",
     output: "请输入输出描述",
-    source: ProblemSource.LOCAL,
-    difficulty: 0,
-    mode: 0,
+    source: "",
+    difficulty: 1,
+    judgeMode: "default",
     visibility: 1,
     openCaseResult: false,
     timeLimit: 1000,
@@ -492,9 +470,9 @@ const loadProblemData = async () => {
       input: data.input,
       output: data.output,
       visibility: data.visibility,
-      source: data.source,
+      source: data.source ?? "",
       difficulty: data.difficulty,
-      mode: data.mode,
+      judgeMode: data.judgeMode,
       openCaseResult: data.openCaseResult,
       timeLimit: data.timeLimit,
       memoryLimit: Math.round(data.memoryLimit / 1024), // 后端KB转换为前端MB

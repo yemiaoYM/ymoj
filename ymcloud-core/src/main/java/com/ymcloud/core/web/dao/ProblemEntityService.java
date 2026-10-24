@@ -4,13 +4,10 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 
 
 /**
- * @PackageName: com.ymcloud.core.web.dao
- * @ClassName: ProblemEntityService
  * @Author: Yemiao
  * @CreateTime: 2025-07-26  20:23
  * @Description: ProblemEntityService
@@ -18,10 +15,9 @@ import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 public interface ProblemEntityService extends IService<Problem> {
     /**
      * 查询并锁定当前最大的本地题目展示id
-     * @param source 题目来源
      * @return 本地题目展示id
      */
-    String selectLatestLocalProblemIdForUpdate(ProblemSource source);
+    String selectLatestLocalProblemIdForUpdate();
 
     /**
      * 题单列表分页查询

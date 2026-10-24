@@ -109,11 +109,12 @@
             <el-form-item label="难度">
               <el-select v-model="problemSearchParams.difficulty" placeholder="全部难度" clearable style="width: 120px;">
                 <el-option label="全部难度" value="" />
-                <el-option label="未评定" :value="0" />
-                <el-option label="入门" :value="1" />
-                <el-option label="普及" :value="2" />
-                <el-option label="提高" :value="3" />
-                <el-option label="省选及以上" :value="4" />
+                <el-option
+                  v-for="item in PROBLEM_DIFFICULTIES"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -134,9 +135,10 @@
           <el-table-column label="标题" prop="title" min-width="200" show-overflow-tooltip />
           <el-table-column label="难度" width="100" align="center">
             <template #default="scope">
-              <el-tag :type="getDifficultyTagType(scope.row.difficulty)" size="small">
-                {{ getDifficultyText(scope.row.difficulty) }}
-              </el-tag>
+              <el-tag
+                size="small"
+                :type="PROBLEM_DIFFICULTIES.find(item => item.value === scope.row.difficulty)?.type"
+              >{{ PROBLEM_DIFFICULTIES.find(item => item.value === scope.row.difficulty)?.label }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="作者" prop="authorUsername" width="120" align="center" />
@@ -217,6 +219,7 @@
 
 <script setup lang="ts">
 //import
+import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Edit, Delete } from '@element-plus/icons-vue';
@@ -293,28 +296,6 @@ const handleQuery = () => {
 //选择比赛题目记录
 const handleSelectionChange = (selection: any[]) => {
   contestProblemIds.value = selection.map(item => item.id);
-};
-//获取难度文本
-const getDifficultyText = (difficulty: number) => {
-  switch (difficulty) {
-    case 0: return '未评定';
-    case 1: return '入门';
-    case 2: return '普及';
-    case 3: return '提高';
-    case 4: return '省选及以上';
-    default: return '未知';
-  }
-};
-//获取难度标签类型
-const getDifficultyTagType = (difficulty: number) => {
-  switch (difficulty) {
-    case 0: return 'info';
-    case 1: return 'success';
-    case 2: return 'warning';
-    case 3: return 'danger';
-    case 4: return 'danger';
-    default: return 'info';
-  }
 };
 //添加题目
 const handleAddProblem = () => {

@@ -8,8 +8,7 @@
     <select id="selectLatestLocalProblemIdForUpdate" resultType="java.lang.String">
         SELECT problem_id
         FROM problem
-        WHERE source = #{source}
-          AND problem_id REGEXP '^YMOJ-[0-9]+$'
+        WHERE problem_id REGEXP '^YMOJ-[0-9]+$'
         ORDER BY CAST(SUBSTRING(problem_id, 6) AS UNSIGNED) DESC
         LIMIT 1
         FOR UPDATE

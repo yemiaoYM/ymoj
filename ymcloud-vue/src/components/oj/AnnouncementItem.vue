@@ -20,7 +20,7 @@
           preview-theme="cyanosis"
           :id="`announcement-${announcement.id}`"
           :model-value="announcement.content"
-          :sanitize="sanitizeHtml"
+          :sanitize="DOMPurify.sanitize"
         />
       </div>
     </div>
@@ -48,10 +48,6 @@ const contentRef = ref<HTMLElement>();
 const expanded = ref(false);
 const overflowing = ref(false);
 let resizeObserver: ResizeObserver | undefined;
-
-function sanitizeHtml(html: string): string {
-  return DOMPurify.sanitize(html);
-}
 
 function onToggleExpanded() {
   expanded.value = !expanded.value;

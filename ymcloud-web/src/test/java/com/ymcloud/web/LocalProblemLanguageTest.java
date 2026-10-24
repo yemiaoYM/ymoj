@@ -14,13 +14,13 @@ import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.vo.oj.LanguageVO;
 import com.ymcloud.pojo.vo.oj.ProblemVO;
 import com.ymcloud.web.service.oj.impl.ContestServiceImpl;
 import com.ymcloud.web.service.oj.impl.ProblemServiceImpl;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -42,14 +42,15 @@ class LocalProblemLanguageTest {
      * @param source 原题出处
      */
     @ParameterizedTest
-    @EnumSource(ProblemSource.class)
-    void problemDetailsUseLocalLanguages(ProblemSource source) {
+    @NullAndEmptySource
+    @ValueSource(strings = {"此题来源于洛谷 P1000", "AtCoder ABC100 A", "Codeforces 1A", "LeetCode 两数之和"})
+    void problemDetailsUseLocalLanguages(String source) {
         ProblemEntityService problems = mock(ProblemEntityService.class);
         LanguageEntityService languages = mock(LanguageEntityService.class);
         Problem problem = problem(source);
         doReturn(query(problem)).when(problems).lambdaQuery();
         List<LanguageVO> enabled = List.of(new LanguageVO());
-        when(languages.getByStatusAndOj(LanguageConstants.ABLE, ProblemSource.LOCAL.getCode()))
+        when(languages.getByStatusAndOj(LanguageConstants.ABLE, LanguageConstants.LOCAL_PLATFORM))
                 .thenReturn(enabled);
         ProblemServiceImpl service = new ProblemServiceImpl();
         ReflectionTestUtils.setField(service, "problemEntityService", problems);
@@ -60,9 +61,10 @@ class LocalProblemLanguageTest {
             security.when(SecurityUtils::isAdmin).thenReturn(false);
             ProblemVO response = service.getProblemInfo(problem.getProblemId());
             assertEquals(enabled, response.getLanguageList());
+            assertEquals(source, response.getSource());
             assertEquals(problem.getProblemId(), response.getProblemId());
         }
-        verify(languages).getByStatusAndOj(LanguageConstants.ABLE, ProblemSource.LOCAL.getCode());
+        verify(languages).getByStatusAndOj(LanguageConstants.ABLE, LanguageConstants.LOCAL_PLATFORM);
         verifyNoMoreInteractions(languages);
     }
 
@@ -71,8 +73,9 @@ class LocalProblemLanguageTest {
      * @param source 原题出处
      */
     @ParameterizedTest
-    @EnumSource(ProblemSource.class)
-    void contestProblemDetailsUseLocalLanguages(ProblemSource source) {
+    @NullAndEmptySource
+    @ValueSource(strings = {"此题来源于洛谷 P1000", "AtCoder ABC100 A", "Codeforces 1A", "LeetCode 两数之和"})
+    void contestProblemDetailsUseLocalLanguages(String source) {
         ProblemEntityService problems = mock(ProblemEntityService.class);
         ContestEntityService contests = mock(ContestEntityService.class);
         ContestProblemEntityService mappings = mock(ContestProblemEntityService.class);
@@ -90,7 +93,7 @@ class LocalProblemLanguageTest {
         mapping.setDisplayTitle("比赛题目");
         doReturn(query(mapping)).when(mappings).lambdaQuery();
         List<LanguageVO> enabled = List.of(new LanguageVO());
-        when(languages.getByStatusAndOj(LanguageConstants.ABLE, ProblemSource.LOCAL.getCode()))
+        when(languages.getByStatusAndOj(LanguageConstants.ABLE, LanguageConstants.LOCAL_PLATFORM))
                 .thenReturn(enabled);
         ContestServiceImpl service = new ContestServiceImpl();
         ReflectionTestUtils.setField(service, "problemEntityService", problems);
@@ -102,10 +105,11 @@ class LocalProblemLanguageTest {
             security.when(SecurityUtils::getUserId).thenReturn(2L);
             ProblemVO response = service.getContestProblem(contest.getId(), "A");
             assertEquals(enabled, response.getLanguageList());
+            assertEquals(source, response.getSource());
             assertEquals("A", response.getProblemId());
             assertEquals(mapping.getDisplayTitle(), response.getTitle());
         }
-        verify(languages).getByStatusAndOj(LanguageConstants.ABLE, ProblemSource.LOCAL.getCode());
+        verify(languages).getByStatusAndOj(LanguageConstants.ABLE, LanguageConstants.LOCAL_PLATFORM);
         verifyNoMoreInteractions(languages);
     }
 
@@ -114,7 +118,7 @@ class LocalProblemLanguageTest {
      * @param source 原题出处
      * @return 测试题目
      */
-    private Problem problem(ProblemSource source) {
+    private Problem problem(String source) {
         Problem problem = new Problem();
         problem.setId(10L);
         problem.setProblemId("P1000");

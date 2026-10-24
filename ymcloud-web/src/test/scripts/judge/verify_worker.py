@@ -314,7 +314,7 @@ class Regression:
 
     def fixture(self):
         self.execute("INSERT INTO problem(id,problem_id,title,source,visibility,time_limit,memory_limit,author_id,author_username) "
-                     "VALUES(%s,'E2E-10','Worker regression','myy',1,1000,262144,1,'admin')", (PROBLEM,))
+                     "VALUES(%s,'E2E-10','Worker regression',NULL,1,1000,262144,1,'admin')", (PROBLEM,))
         self.version(VERSION, INPUTS, [b"EXACT\n", b"EXACT\n"])
         self.version(NEW_VERSION, [b"changed"], [b"CHANGED\n"])
         self.execute("UPDATE problem SET test_data_version_id=%s WHERE id=%s", (VERSION, PROBLEM))
@@ -528,11 +528,11 @@ class Regression:
 
     def verify_oi_scoring(self, token):
         self.stage = "oi-scoring"
-        self.execute("UPDATE problem SET mode=1 WHERE id=%s", (PROBLEM,))
+        self.execute("UPDATE contest SET mode=1 WHERE id=20")
         try:
             code = ("import sys\ndata = sys.stdin.buffer.read()\n"
                     + "print('EXACT' if data == " + repr(INPUTS[0]) + " else 'WRONG')\n")
-            submission = self.submit(token, code + "# OI one accepted point\n")
+            submission = self.submit(token, code + "# OI one accepted point\n", contest=True)
             dispatch, _ = self.completed(submission, 8, 2)
             result = json.loads(dispatch["result_payload"])
             case_statuses = [case["status"] for case in result.get("testCaseResults", [])]
@@ -540,7 +540,7 @@ class Regression:
                        self.scalar("SELECT score FROM judge WHERE id=%s", (submission,)) == 50
                        and result.get("score") == 50 and case_statuses == [0, -1])
         finally:
-            self.execute("UPDATE problem SET mode=0 WHERE id=%s", (PROBLEM,))
+            self.execute("UPDATE contest SET mode=0 WHERE id=20")
 
     def run(self):
         self.prepare()

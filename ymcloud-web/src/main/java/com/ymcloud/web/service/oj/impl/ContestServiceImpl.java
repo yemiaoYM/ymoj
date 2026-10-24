@@ -26,7 +26,6 @@ import com.ymcloud.pojo.entity.ContestUser;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.oj.ContestPageQuery;
 import com.ymcloud.pojo.query.oj.ContestProblemSubmissionPageQuery;
 import com.ymcloud.pojo.query.oj.ContestRankPageQuery;
@@ -240,7 +239,7 @@ public class ContestServiceImpl implements ContestService {
         //比赛题目同样使用本站语言配置，原题来源不决定执行平台。
         List<LanguageVO> languageVOList = languageEntityService.getByStatusAndOj(
                 LanguageConstants.ABLE,
-                ProblemSource.LOCAL.getCode());
+                LanguageConstants.LOCAL_PLATFORM);
         problemVO.setLanguageList(languageVOList);
         //查询用户该题目的通过状态
         boolean isAccepted = judgeEntityService.lambdaQuery()
@@ -341,7 +340,7 @@ public class ContestServiceImpl implements ContestService {
     }
 
     /**
-     * 获取比赛排名列表
+     * 按比赛计分模式查询排名；OI 与 IOI 暂共用每题最高分规则。
      * @param query 查询请求题
      * @return 比赛排名列表
      */
@@ -368,7 +367,8 @@ public class ContestServiceImpl implements ContestService {
         //根据模式获取排名信息
         if(contest.getMode() == ContestConstants.MODE_ACM){
             contestRank = contestEntityService.getAcmContestRank(page, contest.getId(),keyword);
-        }else if(contest.getMode() == ContestConstants.MODE_OI){
+        }else if(contest.getMode() == ContestConstants.MODE_OI
+                || contest.getMode() == ContestConstants.MODE_IOI){
             contestRank = contestEntityService.getOIContestRank(page, contest.getId(),keyword);
         }
         if(contestRank!=null){

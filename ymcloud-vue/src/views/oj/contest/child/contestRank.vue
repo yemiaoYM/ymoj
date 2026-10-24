@@ -47,7 +47,7 @@
             </template>
           </el-table-column>
           <el-table-column prop="ac" label="AC" align="center" width="100" />
-          <el-table-column v-if="tableData.mode === 1" prop="totalScore" label="总分数" align="center" width="150" />
+          <el-table-column v-if="isScoreMode" prop="totalScore" label="总分数" align="center" width="150" />
           <el-table-column prop="totalTime" label="总时间" align="center" width="150" >
             <template #default="{ row }">
               {{ formatMinutes(row.totalTime) }}
@@ -79,7 +79,7 @@
                   placement="top"
                 >
                   <span class="problem-cell__main">
-                    {{ tableData.mode === 1 ? (row.submissionInfo[q.displayId].score ?? '--') : formatMinutes(row.submissionInfo[q.displayId].actime) }}
+                    {{ isScoreMode ? (row.submissionInfo[q.displayId].score ?? '--') : formatMinutes(row.submissionInfo[q.displayId].actime) }}
                   </span>
                 </el-tooltip>
                 <span class="problem-cell__tries">
@@ -108,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref,onMounted,watch,onBeforeUnmount } from 'vue';
+import { computed,ref,onMounted,watch,onBeforeUnmount } from 'vue';
 import { useRouter,useRoute } from 'vue-router';
 import { Balloon,Search } from '@vicons/ionicons5';
 import type { ContestRankTableVO } from '@/type/types';
@@ -119,6 +119,7 @@ const router=useRouter();
 const route=useRoute();
 const loading=ref<boolean>(false);
 const tableData=ref<ContestRankTableVO>({} as ContestRankTableVO);
+const isScoreMode = computed(() => tableData.value.mode === 1 || tableData.value.mode === 2);
 const contestId=ref<number>(0);
 const keyword=ref<string>('');
 const pageSize=ref<number>(50);

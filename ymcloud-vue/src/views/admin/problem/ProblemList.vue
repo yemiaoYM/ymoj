@@ -19,11 +19,12 @@
             <el-form-item label="难度" prop="difficulty">
               <el-select v-model="queryParams.difficulty" placeholder="全部题目" clearable style="width: 120px;">
                 <el-option label="全部题目" value="" />
-                <el-option label="未评定" :value="0" />
-                <el-option label="入门" :value="1" />
-                <el-option label="普及" :value="2" />
-                <el-option label="提高" :value="3" />
-                <el-option label="省选及以上" :value="4" />
+                <el-option
+                  v-for="item in PROBLEM_DIFFICULTIES"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -141,6 +142,7 @@
 
 <script lang="ts" setup>
 //import
+import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
 import { useUserStore } from '@/stores/user';
 import { ref, onMounted, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';

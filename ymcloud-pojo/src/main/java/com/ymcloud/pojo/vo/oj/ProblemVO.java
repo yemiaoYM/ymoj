@@ -1,14 +1,11 @@
 package com.ymcloud.pojo.vo.oj;
 
-import com.ymcloud.pojo.enums.ProblemSource;
 import lombok.Data;
 
 import java.io.Serializable;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.pojo.vo
- * @ClassName: ProblemVO
  * @Author: Yemiao
  * @CreateTime: 2025-07-23  12:20
  * @Description: 前端展示题目信息
@@ -39,17 +36,17 @@ public class ProblemVO implements Serializable {
      */
     private String output;
     /**
-     * 题目来源
+     * 题目来源说明，最多255字符，可为空；不参与判题和题号生成
      */
-    private ProblemSource source;
+    private String source;
     /**
-     * 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上
+     * 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师
      */
     private Integer difficulty;
     /**
-     * 评测模式：0=ACM，1=OI
+     * 判题方式：default=普通、spj=特殊、interactive=交互；当前仅支持 default
      */
-    private Integer mode;
+    private String judgeMode;
     /**
      * 时间限制（ms）
      */

@@ -12,6 +12,7 @@
                                     <div class="content-head-detail">
                                         <x-flex vertical>
                                             <p>题目 ID: {{ problem.problemId }}</p>
+                                            <p v-if="problem.source">来源：{{ problem.source }}</p>
                                             <p>出题人: 
                                             <el-link @click="handToUserInfo(problem.authorUsername)" underline="never" style="font-size: 16px;">
                                                 {{ problem.authorUsername }}

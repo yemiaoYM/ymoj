@@ -1,13 +1,14 @@
 package com.ymcloud.common.constant;
 
 /**
- * @PackageName: com.ymcloud.common.constant
- * @ClassName: ProblemConstants
  * @Author: Yemiao
  * @CreateTime: 2025-07-23  12:35
  * @Description: 题目常用变量
  */
 public class ProblemConstants {
+
+    /** 当前支持的普通判题方式，特殊判题和交互判题暂不开放。 */
+    public static final String JUDGE_MODE_DEFAULT = "default";
 
     /**
      * 可见公开

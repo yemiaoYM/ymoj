@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWra
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.JudgeConstants;
+import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
@@ -42,7 +43,6 @@ import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.JudgeStatus;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.web.judge.JudgeDispatchIdAllocator;
 import com.ymcloud.web.judge.JudgeDispatchProperties;
 import com.ymcloud.web.judge.JudgeDispatchState;
@@ -54,6 +54,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.slf4j.LoggerFactory;
@@ -72,7 +73,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-12
  * @Description: 验证本站提交、版本快照、比赛模式、自测持久化及状态恢复。
  */
@@ -149,6 +150,7 @@ class JudgeWebWorkflowTest {
             JudgeTask task = codec.task(dispatch.getValue().getTaskPayload());
             assertEquals(id, record.getValue().getId());
             assertEquals(id, task.getSubmissionId());
+            assertEquals(JudgeConstants.ACM, task.getMode());
             assertEquals(77L, record.getValue().getTestDataVersionId());
             assertEquals(77L, task.getTestDataVersionId());
             assertEquals(version().getManifestSha256(), task.getManifestSha256());
@@ -168,7 +170,7 @@ class JudgeWebWorkflowTest {
     @ValueSource(booleans = {false, true})
     void externalProblemSourceStillUsesLocalJudge(boolean contestSubmission) {
         Problem problem = problem();
-        problem.setSource(ProblemSource.CODEFORCES);
+        problem.setSource("此题来源于 Codeforces 1A");
         doReturn(query(problem)).when(problems).lambdaQuery();
         LambdaQueryChainWrapper<Language> languageQuery = query(language());
         doReturn(languageQuery).when(languages).lambdaQuery();
@@ -194,8 +196,8 @@ class JudgeWebWorkflowTest {
             security.when(SecurityUtils::getUser).thenReturn(user(2L));
             service.submitJudge(request(contestSubmission));
         }
-        verify(languageQuery).eq(any(), eq(ProblemSource.LOCAL.getCode()));
-        verify(languageQuery, never()).eq(any(), eq(problem.getSource().getCode()));
+        verify(languageQuery).eq(any(), eq(LanguageConstants.LOCAL_PLATFORM));
+        verify(languageQuery, never()).eq(any(), eq(problem.getSource()));
         ArgumentCaptor<JudgeDispatch> created = ArgumentCaptor.forClass(JudgeDispatch.class);
         verify(dispatches).save(created.capture());
         JudgeTask task = codec.task(created.getValue().getTaskPayload());
@@ -204,15 +206,20 @@ class JudgeWebWorkflowTest {
         assertEquals(77L, task.getTestDataVersionId());
     }
 
-    @Test
-    void contestTaskUsesContestModeAndMembershipChecks() {
+    /**
+     * ACM 使用全对判定，OI 与 IOI 使用相同的测试点评分，并保留比赛归属检查。
+     * @param mode 比赛模式：0=ACM，1=OI，2=IOI
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 2})
+    void contestTaskUsesContestModeAndMembershipChecks(int mode) {
         stubProblemAndLanguage();
         Contest contest = new Contest();
         contest.setId(20L);
         contest.setVisibility(ContestConstants.VISIBILITY_PUBLIC);
         contest.setStartTime(LocalDateTime.now().minusMinutes(1));
         contest.setEndTime(LocalDateTime.now().plusMinutes(1));
-        contest.setMode(JudgeConstants.OI);
+        contest.setMode(mode);
         ContestProblem contestProblem = new ContestProblem();
         contestProblem.setId(30L);
         contestProblem.setProblemId(10L);
@@ -230,8 +237,27 @@ class JudgeWebWorkflowTest {
         }
         ArgumentCaptor<JudgeDispatch> dispatch = ArgumentCaptor.forClass(JudgeDispatch.class);
         verify(dispatches).save(dispatch.capture());
-        assertEquals(JudgeConstants.OI, codec.task(dispatch.getValue().getTaskPayload()).getMode());
+        assertEquals(mode == ContestConstants.MODE_ACM ? JudgeConstants.ACM : JudgeConstants.OI,
+                codec.task(dispatch.getValue().getTaskPayload()).getMode());
         verifyNoInteractions(contestUsers);
+    }
+
+    /**
+     * 独立校验判题方式，拒绝尚未实现的模式，不能降级后发出普通任务。
+     * @param judgeMode 不支持或缺失的判题方式
+     */
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"spj", "interactive", "unknown"})
+    void unsupportedJudgeModeDoesNotEnqueue(String judgeMode) {
+        Problem problem = problem();
+        problem.setJudgeMode(judgeMode);
+        doReturn(query(problem)).when(problems).lambdaQuery();
+        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+            assertThrows(JudgeException.class, () -> service.submitJudge(request(false)));
+        }
+        verifyNoInteractions(testData, judges, dispatches, languages);
     }
 
     @Test
@@ -587,8 +613,8 @@ class JudgeWebWorkflowTest {
         problem.setProblemId("YMOJ-10");
         problem.setTitle("Versioned problem");
         problem.setVisibility(ProblemConstants.PUBLIC);
-        problem.setSource(ProblemSource.LOCAL);
-        problem.setMode(JudgeConstants.ACM);
+        problem.setSource(null);
+        problem.setJudgeMode(ProblemConstants.JUDGE_MODE_DEFAULT);
         problem.setTimeLimit(1000L);
         problem.setMemoryLimit(262144L);
         return problem;

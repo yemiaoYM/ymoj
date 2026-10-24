@@ -2,12 +2,12 @@ package com.ymcloud.pojo.query.admin;
 
 import com.ymcloud.pojo.query.PageQuery;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Max;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * @PackageName: com.ymcloud.pojo.query.admin
- * @ClassName: AdminProblemPageQuery
  * @Author: Yemiao
  * @CreateTime: 2025-09-21  21:30
  * @Description: 管理端题目分页查询
@@ -23,8 +23,10 @@ public class AdminProblemPageQuery extends PageQuery {
     private String keyword;
 
     /**
-     * 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上
+     * 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师；null 不筛选
      */
+    @Min(value = 1, message = "难度参数非法")
+    @Max(value = 5, message = "难度参数非法")
     private Integer difficulty;
 
     /**

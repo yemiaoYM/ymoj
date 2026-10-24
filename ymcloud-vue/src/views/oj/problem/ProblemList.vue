@@ -75,10 +75,14 @@
           </el-table-column>
           <el-table-column label="难度" width="120" align="center">
             <template #default="{ row }">
-              <el-tag effect="dark" round disable-transitions size="large"
-                :type="difficultyList.find(e => e.value === row.difficulty)?.type" style="padding: 0px 20px;">
-                {{difficultyList.find(e => e.value === row.difficulty)?.label}}
-              </el-tag>
+              <el-tag
+                effect="dark"
+                round
+                disable-transitions
+                size="large"
+                style="padding: 0px 20px;"
+                :type="PROBLEM_DIFFICULTIES.find(item => item.value === row.difficulty)?.type"
+              >{{ PROBLEM_DIFFICULTIES.find(item => item.value === row.difficulty)?.label }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="标签" min-width="200" align="center">
@@ -135,6 +139,7 @@
 
 <script lang="ts" setup>
 //import
+import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
 import { useRouter, useRoute } from 'vue-router';
 import { onMounted, ref, watch } from 'vue';
 import { MagicStick, Check, Close, Refresh, Search } from '@element-plus/icons-vue';
@@ -145,14 +150,7 @@ import { getTagsList, getProblemTableList, getRandomProblem } from '@/api/api';
 const route = useRoute();
 const router = useRouter();
 const isLabel = ref<boolean>(false);
-const difficultyList = [
-  { label: '全部', value: -1 },
-  { label: '暂未评定', value: 0, type: 'info' },
-  { label: '入门', value: 1, type: 'danger' },
-  { label: '普及', value: 2, type: 'warning' },
-  { label: '提高', value: 3, type: 'primary' },
-  { label: '省选', value: 4, type: 'success' },
-];
+const difficultyList = [{ label: '全部', value: -1 }, ...PROBLEM_DIFFICULTIES];
 const colors = [
   { color: '#f56c6c', percentage: 20 },
   { color: '#e6a23c', percentage: 40 },

@@ -18,7 +18,6 @@ import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
 import com.ymcloud.pojo.entity.User;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ProblemVO;
 import com.ymcloud.pojo.vo.common.PageVO;
@@ -68,9 +67,10 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         Page<Problem> page = Page.of(pageQuery.getPageNo(), pageQuery.getPageSize());
         //条件分页查询题目列表（管理端可以查看所有可见性的题目）
         Page<Problem> record = problemEntityService.lambdaQuery()
-                .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Problem::getTitle, pageQuery.getKeyword())
-                .or(StrUtil.isNotBlank(pageQuery.getKeyword()))
-                .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Problem::getProblemId, pageQuery.getKeyword())
+                .and(StrUtil.isNotBlank(pageQuery.getKeyword()), query -> query
+                        .like(Problem::getTitle, pageQuery.getKeyword())
+                        .or()
+                        .like(Problem::getProblemId, pageQuery.getKeyword()))
                 .eq(pageQuery.getDifficulty() != null, Problem::getDifficulty, pageQuery.getDifficulty())
                 .eq(pageQuery.getVisibility() != null, Problem::getVisibility, pageQuery.getVisibility())
                 .orderByDesc(Problem::getCreatedTime)
@@ -113,21 +113,19 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String addProblem(ProblemDTO problemDTO) {
-        String problemId;
-        if (ProblemSource.LOCAL.equals(problemDTO.getSource())) {
-            problemId = generateLocalProblemId();
-            problemDTO.setProblemId(problemId);
-        } else {
-            problemId = problemDTO.getProblemId();
-            validateProblemId(problemId);
-        }
+        validateJudgeMode(problemDTO.getJudgeMode());
+        String problemId = generateLocalProblemId();
         //题目展示id需保证唯一
-        boolean exists = problemEntityService.lambdaQuery().eq(Problem::getProblemId, problemId).exists();
+        boolean exists = problemEntityService.lambdaQuery()
+                .eq(Problem::getProblemId, problemId)
+                .exists();
         if (exists) {
             throw new ProblemException("该题目展示id已被使用");
         }
         //构造实体
         Problem problem = BeanUtil.copyProperties(problemDTO, Problem.class);
+        problem.setProblemId(problemId);
+        problem.setSource(normalizeSource(problemDTO.getSource()));
         //题目创建者信息
         User user = SecurityUtils.getUser();
         problem.setAuthorId(user.getId());
@@ -171,32 +169,18 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateProblem(Long id, ProblemDTO problemDTO) {
+        validateJudgeMode(problemDTO.getJudgeMode());
         //检查题目是否存在
         Problem existProblem = problemEntityService.getById(id);
         if (existProblem == null) {
             throw new ProblemNotExistException();
         }
-        String problemId;
-        if (ProblemSource.LOCAL.equals(problemDTO.getSource())) {
-            problemId = ProblemSource.LOCAL.equals(existProblem.getSource())
-                    ? existProblem.getProblemId()
-                    : generateLocalProblemId();
-            problemDTO.setProblemId(problemId);
-        } else {
-            problemId = problemDTO.getProblemId();
-            validateProblemId(problemId);
-        }
-        //检查题目展示id是否重复（排除当前题目）
-        boolean exists = problemEntityService.lambdaQuery()
-                .eq(Problem::getProblemId, problemId)
-                .ne(Problem::getId, id)
-                .exists();
-        if (exists) {
-            throw new ProblemException("该题目展示id已被使用");
-        }
         //构造实体
         Problem problem = BeanUtil.copyProperties(problemDTO, Problem.class);
         problem.setId(id);
+        // 题号与来源无关，编辑出处不改变已有链接和提交记录。
+        problem.setProblemId(existProblem.getProblemId());
+        problem.setSource(normalizeSource(problemDTO.getSource()));
         problem.setMemoryLimit(problemDTO.getMemoryLimit()*1024);
         //保留原有的创建者信息
         problem.setAuthorId(existProblem.getAuthorId());
@@ -235,7 +219,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
      * @return 本地题目展示id
      */
     private String generateLocalProblemId() {
-        String latestProblemId = problemEntityService.selectLatestLocalProblemIdForUpdate(ProblemSource.LOCAL);
+        String latestProblemId = problemEntityService.selectLatestLocalProblemIdForUpdate();
         long nextNumber = ProblemConstants.INITIAL_LOCAL_PROBLEM_NUMBER;
         if (StrUtil.isNotBlank(latestProblemId)) {
             nextNumber = Long.parseLong(latestProblemId.substring(ProblemConstants.LOCAL_PROBLEM_ID_PREFIX.length())) + 1;
@@ -244,19 +228,23 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 校验非本地题目展示id
-     * @param problemId 题目展示id
+     * 拒绝尚未实现的特殊判题和交互判题配置。
+     * @param judgeMode 题目判题方式
+     * @throws ProblemException 判题方式不受支持
      */
-    private void validateProblemId(String problemId) {
-        if (StrUtil.isBlank(problemId)) {
-            throw new ProblemException("题目展示id不能为空");
+    private void validateJudgeMode(String judgeMode) {
+        if (!ProblemConstants.JUDGE_MODE_DEFAULT.equals(judgeMode)) {
+            throw new ProblemException("目前仅支持普通判题（default）", HttpStatus.BAD_REQUEST);
         }
-        if (problemId.length() > 20) {
-            throw new ProblemException("题目展示id长度不能超过20个字符");
-        }
-        if (!problemId.matches("^[a-zA-Z0-9-]+$")) {
-            throw new ProblemException("题目展示id只能包含字母、数字和 -");
-        }
+    }
+
+    /**
+     * 规范化可选的题目来源说明，空白表示清空。
+     * @param source 来源文本，可为 null
+     * @return 去除首尾空白后的来源，无内容时为 null
+     */
+    private String normalizeSource(String source) {
+        return source == null || source.isBlank() ? null : source.strip();
     }
 
     /**

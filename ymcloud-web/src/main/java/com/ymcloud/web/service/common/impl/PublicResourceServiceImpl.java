@@ -1,12 +1,12 @@
 package com.ymcloud.web.service.common.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.core.web.dao.TagEntityService;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Tag;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.vo.oj.LanguageTableVO;
 import com.ymcloud.pojo.vo.oj.UserAcRankVO;
 import com.ymcloud.web.service.common.PublicResourceService;
@@ -49,7 +49,7 @@ public class PublicResourceServiceImpl implements PublicResourceService {
     @Override
     public List<LanguageTableVO> listLanguages() {
         List<Language> languages = languageEntityService.lambdaQuery()
-                .eq(Language::getOj, ProblemSource.LOCAL.getCode())
+                .eq(Language::getOj, LanguageConstants.LOCAL_PLATFORM)
                 .list();
         return BeanUtil.copyToList(languages, LanguageTableVO.class);
     }

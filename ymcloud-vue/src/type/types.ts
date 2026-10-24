@@ -1,7 +1,7 @@
 /**
  * types 管理项目类型字段
  */
-import type { ProblemSource } from "@/constants/problem";
+import type { ProblemJudgeMode } from "@/constants/problem";
 
 /**
  * 系统配置
@@ -255,11 +255,11 @@ export type ProblemVO = {
   /** 输出描述 */
   output: string
   /** 题目来源，例如 洛谷、ICPC 区域赛 */
-  source: ProblemSource
-  /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
+  source: string | null
+  /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
   difficulty: number
-  /** 评测模式：0=ACM，1=OI */
-  mode: number
+  /** 判题方式；当前只开放 default。 */
+  judgeMode: ProblemJudgeMode
   /** 时间限制（单位：ms） */
   timeLimit: number
   /** 内存限制（单位：KB） */
@@ -325,8 +325,8 @@ export type ProblemTableVO = {
   /** 题目描述内容（题干） */
   title: string;
   /** 题目来源 */
-  source: ProblemSource|null;
-  /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
+  source: string | null;
+  /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
   difficulty: number;
   /** 标签 */
   tagList: Tag[]|null;
@@ -359,11 +359,11 @@ export type AdminProblemVO = {
   /** 题面样例 */
   examples?: string;
   /** 题目来源 */
-  source?: ProblemSource;
-  /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
+  source?: string | null;
+  /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
   difficulty: number;
-  /** 评测模式：0=ACM，1=OI */
-  mode?: number;
+  /** 判题方式；当前只开放 default。 */
+  judgeMode?: ProblemJudgeMode;
   /** 权限：1=公开，2=私有，3=比赛专用 */
   visibility: number;
   /** 是否允许查看测试样例结果（0=否，1=是） */
@@ -443,11 +443,11 @@ export type ProblemDTO = {
   /** 题面样例 */
   examples: string;
   /** 题目来源 */
-  source: ProblemSource;
-  /** 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上 */
+  source: string | null;
+  /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
   difficulty: number;
-  /** 评测模式：0=ACM，1=OI */
-  mode: number;
+  /** 判题方式；当前只开放 default。 */
+  judgeMode: ProblemJudgeMode;
   /** 可见性：1=公开，2=私有，3=比赛专用 */
   visibility: number;
   /** 是否允许查看测试样例结果 */

@@ -1,15 +1,17 @@
 package com.ymcloud.pojo.dto.admin;
 
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
-import com.ymcloud.pojo.enums.ProblemSource;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.pojo.dto
- * @ClassName: ProblemAddOrUpdateDTO
  * @Author: Yemiao
  * @CreateTime: 2025-08-20  22:10
  * @Description: 添加题目请求体
@@ -51,26 +53,25 @@ public class ProblemDTO {
     private String output;
 
     /**
-     * 题目来源
+     * 题目来源说明，最多255字符，可为空；不参与判题和题号生成
      */
-    @NotNull(message = "请选择题目来源")
-    private ProblemSource source;
+    @Size(max = 255, message = "题目来源长度不能超过255个字符")
+    private String source;
 
     /**
-     * 难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上
+     * 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师
      */
     @NotNull(message = "请选择题目难度")
-    @Min(value = 0, message = "难度参数非法")
-    @Max(value = 4, message = "难度参数非法")
+    @Min(value = 1, message = "难度参数非法")
+    @Max(value = 5, message = "难度参数非法")
     private Integer difficulty;
 
     /**
-     * 评测模式：0=ACM，1=OI
+     * 判题方式：default=普通、spj=特殊、interactive=交互；当前仅支持 default
      */
-    @NotNull(message = "请选择题目评测模式")
-    @Min(value = 0, message = "评测模式参数非法")
-    @Max(value = 1, message = "评测模式参数非法")
-    private Integer mode;
+    @NotBlank(message = "请选择题目判题方式")
+    @Pattern(regexp = "default|spj|interactive", message = "判题方式参数非法")
+    private String judgeMode;
 
     /**
      * 题目可见性

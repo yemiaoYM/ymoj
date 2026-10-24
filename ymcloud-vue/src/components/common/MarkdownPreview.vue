@@ -1,7 +1,8 @@
 <template>
   <div style="width: 100%;height: 100%;">
     <MdPreview 
-      v-model="content"
+      :model-value="content"
+      :sanitize="DOMPurify.sanitize"
       previewTheme="cyanosis"
     />
   </div>
@@ -10,6 +11,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { MdPreview } from 'md-editor-v3';
+import DOMPurify from 'dompurify';
 import 'md-editor-v3/lib/preview.css';
 
 export default defineComponent({
@@ -22,6 +24,9 @@ export default defineComponent({
       type: String,
       default: "写点什么呢？"
     }
+  },
+  setup() {
+    return { DOMPurify };
   }
 })
 </script>

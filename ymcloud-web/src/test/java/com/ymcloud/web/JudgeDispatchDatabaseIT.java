@@ -15,6 +15,7 @@ import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
 import com.ymcloud.core.web.dao.impl.ContestEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.ContestProblemEntityServiceImpl;
@@ -36,6 +37,7 @@ import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeDispatch;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.web.judge.JudgeDispatchIdAllocator;
 import com.ymcloud.web.judge.JudgeDispatchProperties;
@@ -98,7 +100,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** 显式启用且仅连接本地 MySQL，在随机临时库验证真实事务、并发及任务恢复。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 仅连接本地 MySQL，在随机临时库验证真实事务、并发及任务恢复。
+ */
 @EnabledIfEnvironmentVariable(named = "YMCLOUD_JUDGE_DB_IT", matches = "true")
 class JudgeDispatchDatabaseIT {
 
@@ -169,6 +175,7 @@ class JudgeDispatchDatabaseIT {
         codec = context.getBean(JudgeMessageCodec.class);
     }
 
+    /** 创建与业务库隔离的普通判题数据，每个测试从同一状态开始。 */
     @BeforeEach
     void clear() {
         assertEquals(schema, jdbc.queryForObject("SELECT DATABASE()", String.class));
@@ -181,8 +188,8 @@ class JudgeDispatchDatabaseIT {
         jdbc.update("INSERT INTO `user` (id,username,password,email,status) "
                 + "VALUES (2,'judge-test','unused','judge-test@example.invalid',1)");
         jdbc.update("INSERT INTO problem "
-                + "(id,problem_id,title,source,mode,time_limit,memory_limit,visibility,author_id) "
-                + "VALUES (10,'YMOJ-10','Isolated test','myy',0,1000,262144,1,2)");
+                + "(id,problem_id,title,source,judge_mode,time_limit,memory_limit,visibility,author_id) "
+                + "VALUES (10,'YMOJ-10','Isolated test',NULL,'default',1000,262144,1,2)");
         jdbc.update("INSERT INTO test_data_version (id,problem_id,manifest,manifest_sha256,created_time) "
                         + "VALUES (77,10,'{}',?,CURRENT_TIMESTAMP)",
                 "ab".repeat(32));
@@ -203,6 +210,29 @@ class JudgeDispatchDatabaseIT {
             verifySchema();
             new JdbcTemplate(administrator).execute("DROP DATABASE `" + schema + "`");
         }
+    }
+
+    /** 验证实体映射可清空来源，且数据库拒绝非法难度和判题方式。 */
+    @Test
+    void problemMetadataMappingAndConstraintsAreEffective() {
+        ProblemEntityService problems = context.getBean(ProblemEntityService.class);
+        Problem problem = problems.getById(10L);
+        assertEquals("default", problem.getJudgeMode());
+        assertEquals(1, problem.getDifficulty());
+        problem.setSource("此题来源于洛谷 P1000");
+        problem.setDifficulty(5);
+        assertTrue(problems.updateById(problem));
+        assertEquals(problem.getSource(), problems.getById(10L).getSource());
+        problem.setSource(null);
+        assertTrue(problems.updateById(problem));
+        assertNull(problems.getById(10L).getSource());
+        assertEquals(5, problems.getById(10L).getDifficulty());
+        assertThrows(org.springframework.dao.DataAccessException.class,
+                () -> jdbc.update("UPDATE problem SET difficulty=0 WHERE id=10"));
+        assertThrows(org.springframework.dao.DataAccessException.class,
+                () -> jdbc.update("UPDATE problem SET judge_mode='unknown' WHERE id=10"));
+        assertEquals("default", problems.getById(10L).getJudgeMode());
+        assertEquals(0, count("judge"));
     }
 
     @Test

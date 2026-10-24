@@ -20,7 +20,6 @@ import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
-import com.ymcloud.pojo.enums.ProblemSource;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
 import com.ymcloud.pojo.query.oj.ProblemSubmissionPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
@@ -118,7 +117,7 @@ public class ProblemServiceImpl implements ProblemService {
         //来源只记录出处，题目统一使用本站启用的语言配置。
         List<LanguageVO> languageVOList = languageEntityService.getByStatusAndOj(
                 LanguageConstants.ABLE,
-                ProblemSource.LOCAL.getCode());
+                LanguageConstants.LOCAL_PLATFORM);
         problemVO.setLanguageList(languageVOList);
         //查询用户该题目的通过状态
         boolean isAccepted = judgeEntityService.lambdaQuery()

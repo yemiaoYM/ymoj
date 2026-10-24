@@ -135,9 +135,9 @@ CREATE TABLE `problem` (
   `input` text COMMENT '输入描述',
   `output` text COMMENT '输出描述',
   `examples` text COMMENT '题面样例',
-  `source` varchar(255) DEFAULT NULL COMMENT '题目来源',
-  `difficulty` tinyint NOT NULL DEFAULT '0' COMMENT '难度：0=未评定，1=入门，2=普及，3=提高，4=省选及以上',
-  `mode` tinyint NOT NULL DEFAULT '0' COMMENT '评测模式：0=ACM，1=OI',
+  `source` varchar(255) DEFAULT NULL COMMENT '题目来源说明，可为空，不参与判题',
+  `difficulty` tinyint NOT NULL DEFAULT '1' COMMENT '难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师',
+  `judge_mode` varchar(16) NOT NULL DEFAULT 'default' COMMENT '判题方式：default=普通，spj=特殊，interactive=交互；当前仅支持default',
   `visibility` tinyint NOT NULL DEFAULT '1' COMMENT '可见性：1=公开，2=私有，3=比赛专用',
   `open_case_result` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否允许查看测试样例结果（0=否，1=是）',
   `time_limit` bigint NOT NULL DEFAULT '1000' COMMENT '时间限制（ms）',
@@ -148,7 +148,9 @@ CREATE TABLE `problem` (
   `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `test_data_version_id` bigint DEFAULT NULL COMMENT '测试数据版本ID；NULL表示未绑定或历史版本未知',
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE KEY `problem_id` (`problem_id`) USING BTREE
+  UNIQUE KEY `problem_id` (`problem_id`) USING BTREE,
+  CONSTRAINT `chk_problem_difficulty` CHECK (`difficulty` BETWEEN 1 AND 5),
+  CONSTRAINT `chk_problem_judge_mode` CHECK (`judge_mode` IN ('default','spj','interactive'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='题目表';
 
 CREATE TABLE `problem_tag` (
@@ -180,7 +182,7 @@ CREATE TABLE `contest` (
   `description` text COMMENT '比赛说明内容',
   `source_id` bigint unsigned DEFAULT '0' COMMENT '来源比赛ID（0表示原创，其它为克隆赛ID）',
   `rated` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否计入Rating积分（0=否，1=是）',
-  `mode` tinyint NOT NULL DEFAULT '0' COMMENT '赛制模式：0=ACM，1=OI',
+  `mode` tinyint NOT NULL DEFAULT '0' COMMENT '赛制模式：0=ACM，1=OI，2=IOI；OI与IOI暂共用最高分规则',
   `style` tinyint NOT NULL DEFAULT '0' COMMENT '比赛类型：0=其他，1=周赛，2=月赛，3=娱乐赛，4=挑战赛',
   `visibility` tinyint NOT NULL DEFAULT '0' COMMENT '访问权限：0=公开，1=私有（进入需密码）',
   `password` varchar(255) DEFAULT NULL COMMENT '比赛密码（私有模式时使用）',
