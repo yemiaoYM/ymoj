@@ -91,7 +91,6 @@ declare module 'vue' {
     MarkdownPreview: typeof import('./src/components/common/MarkdownPreview.vue')['default']
     NButton: typeof import('naive-ui')['NButton']
     NCard: typeof import('naive-ui')['NCard']
-    NCode: typeof import('naive-ui')['NCode']
     NCollapse: typeof import('naive-ui')['NCollapse']
     NCollapseItem: typeof import('naive-ui')['NCollapseItem']
     NCountdown: typeof import('naive-ui')['NCountdown']

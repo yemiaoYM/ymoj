@@ -104,9 +104,7 @@
             <span>代码展示</span>
           </div>
         </template>
-        <div style="overflow: auto">
-          <CodeHighLight :code="submissionData.code" :language="submissionData.language" />
-        </div>
+        <CodeHighLight :code="submissionData.code" :language="submissionData.language" />
         <template #footer>
           <el-button size="large" :icon="Clipboard" type="primary" @click="copyCode">复制代码</el-button>
         </template>
