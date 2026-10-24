@@ -39,8 +39,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
-import type { CSSProperties } from 'vue';
+import type {CSSProperties} from 'vue';
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch} from 'vue';
 
 interface PlainTextViewerProps {
   content?: string;
@@ -152,8 +152,7 @@ const visibleContent = computed(() => {
   const lines = new Array<string>(end - start);
   for (let line = start; line < end; line++) {
     const lineStart = lineStarts[line];
-    const nextLineStart = line + 1 < lineStarts.length ? lineStarts[line + 1] : props.content.length;
-    let lineEnd = nextLineStart;
+    let lineEnd = line + 1 < lineStarts.length ? lineStarts[line + 1] : props.content.length;
     while (lineEnd > lineStart && (props.content.charCodeAt(lineEnd - 1) === 10 || props.content.charCodeAt(lineEnd - 1) === 13)) {
       lineEnd--;
     }

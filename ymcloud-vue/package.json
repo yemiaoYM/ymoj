@@ -12,7 +12,8 @@
     "prebuild-only": "node scripts/sync-version.mjs",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "test:version": "node --test src/test/version.test.mjs"
+    "test:version": "node --test src/test/version.test.mjs",
+    "test:flex": "node --test src/test/xFlex.test.mjs"
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",
@@ -23,12 +24,11 @@
     "cropperjs": "1.7.0",
     "dompurify": "^3.2.6",
     "echarts": "^5.6.0",
-    "element-plus": "^2.10.7",
+    "element-plus": "2.14.6",
     "highlight.js": "^11.11.1",
     "marked": "^16.1.2",
     "marked-katex-extension": "^5.1.5",
     "md-editor-v3": "^5.8.4",
-    "naive-ui": "^2.42.0",
     "pinia": "^3.0.1",
     "vue": "^3.5.13",
     "vue-clipboard3": "^2.0.0",

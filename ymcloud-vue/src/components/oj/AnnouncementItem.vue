@@ -1,14 +1,14 @@
 <template>
   <article ref="articleRef" class="announcement-item">
     <header>
-      <n-flex align="center" :size="8">
+      <x-flex align="center" :size="8">
         <el-tag v-if="announcement.pinned" type="warning" effect="dark">置顶</el-tag>
         <h3>{{ announcement.title }}</h3>
-      </n-flex>
-      <n-flex class="announcement-meta" align="center" :size="12">
+      </x-flex>
+      <x-flex class="announcement-meta" align="center" :size="12">
         <time>{{ announcement.updatedTime }}</time>
         <span>{{ announcement.authorUsername }}</span>
-      </n-flex>
+      </x-flex>
     </header>
     <div
       class="announcement-body"

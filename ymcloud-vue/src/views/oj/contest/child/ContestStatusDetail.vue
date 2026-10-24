@@ -3,24 +3,24 @@
     <el-card v-if="dataLoading">
       <el-skeleton :rows="15" animated />
     </el-card>
-    <n-flex vertical v-else>
+    <x-flex vertical v-else>
       <!-- 状态显示 -->
-      <n-flex>
+      <x-flex>
         <el-alert :title="submissionData.status" :type="getStatusType(submissionData.status).alter" show-icon
           effect="dark" :closable="false" style="padding: 20px">
-          <n-flex style="padding: 10px 0px">
-            <n-flex align="center">
-              <n-icon :component="TimeOutline" size="25" />
+          <x-flex style="padding: 10px 0px">
+            <x-flex align="center">
+              <el-icon size="25"><component :is="TimeOutline" /></el-icon>
               <span>运行时间 {{ formatSubmissionTime(submissionData.time) }}</span>
-            </n-flex>
-            <n-flex align="center">
-              <n-icon :component="HardwareChipSharp" size="25" />
+            </x-flex>
+            <x-flex align="center">
+              <el-icon size="25"><component :is="HardwareChipSharp" /></el-icon>
               <span>运行内存
                 {{ formatSubmissionMemory(submissionData.memory) }}</span>
-            </n-flex>
-          </n-flex>
+            </x-flex>
+          </x-flex>
         </el-alert>
-      </n-flex>
+      </x-flex>
       <!-- 错误信息展示 -->
       <el-card v-if="Object.keys(submissionData).length > 0 && submissionData.errorMessage">
         <template #header>
@@ -80,22 +80,22 @@
             <span>测试点详情</span>
           </div>
         </template>
-        <n-flex>
+        <x-flex>
           <div v-for="(judgeCase, index) in submissionData.judgeCases" :key="judgeCase.caseIndex" class="test-case-box"
             :class="getTestCaseClass(judgeCase.status)">
-            <n-flex :size="0" justify="center" align="center" vertical>
+            <x-flex :size="0" justify="center" align="center" vertical>
               <span style="font-weight: bold">Test #{{ judgeCase.caseIndex }}</span>
               <span style="font-size: 20px; font-weight: bold">{{ judgeCase.status }}</span>
               <span style="font-size: 15px; font-weight: bold; color: #666">
                 {{ formatSubmissionTime(judgeCase.time) }} / {{ formatSubmissionMemory(judgeCase.memory) }}</span>
-              <n-flex align="center">
+              <x-flex align="center">
                 <span>{{ judgeCase.score !== null ? judgeCase.score : "- -" }}</span>
-                <n-icon v-if="judgeCase.status === 'Accepted'" :component="CheckmarkCircleOutline" size="25" />
-                <n-icon v-else :component="CloseCircleOutline" size="25" />
-              </n-flex>
-            </n-flex>
+                <el-icon v-if="judgeCase.status === 'Accepted'" size="25"><component :is="CheckmarkCircleOutline" /></el-icon>
+                <el-icon v-else size="25"><component :is="CloseCircleOutline" /></el-icon>
+              </x-flex>
+            </x-flex>
           </div>
-        </n-flex>
+        </x-flex>
       </el-card>
       <!-- 代码展示 -->
       <el-card v-if="Object.keys(submissionData).length > 0 && submissionData.code">
@@ -109,7 +109,7 @@
           <el-button size="large" :icon="Clipboard" type="primary" @click="copyCode">复制代码</el-button>
         </template>
       </el-card>
-    </n-flex>
+    </x-flex>
   </div>
 </template>
 

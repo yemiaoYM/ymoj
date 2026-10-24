@@ -1,46 +1,65 @@
 <template>
   <header class="common-header">
-    <n-flex style="width: 100%;height: 100%;" justify="space-between">
-      <n-flex class="l-content" style="height: 100%;" align="center">
+    <x-flex style="width: 100%;height: 100%;" justify="space-between">
+      <x-flex class="l-content" style="height: 100%;" align="center">
         <BrandLogo :compact="isMobile" />
-      </n-flex>
-      <!-- 移动端菜单 -->
-      <n-flex v-if="isMobile" align="center">
-        <el-button size="large" :icon="Menu" circle @click="showMobileMenu = !showMobileMenu" />
-        <el-drawer v-model="showMobileMenu" direction="ltr" size="70%">
-          <el-menu
-            mode="vertical"
-            :default-active="activeMenu"
-            background-color="transparent"
-            active-text-color="#2196f3"
-            text-color="#495060"
-            router
-            @select="showMobileMenu=false"
-          >
-            <el-menu-item index="/">
-              <el-icon><House /></el-icon>
-              首页
-            </el-menu-item>
-            <el-menu-item index="/problem">
-              <el-icon><Document /></el-icon>
-              题库
-            </el-menu-item>
-            <el-menu-item index="/status">
-              <el-icon><Check /></el-icon>
-              状态
-            </el-menu-item>
-            <el-menu-item index="/contest">
-              <el-icon><Trophy /></el-icon>
-              比赛
-            </el-menu-item>
-            <el-menu-item index="/about">
-              <el-icon><InfoFilled /></el-icon>
-              关于
-            </el-menu-item>
-          </el-menu>
+      </x-flex>
+      <!-- 保持挂载，切到桌面时让抽屉完成关闭动画。 -->
+      <x-flex v-show="isMobile" align="center">
+        <el-button
+          aria-label="打开导航菜单"
+          size="large"
+          circle
+          :icon="Menu"
+          :aria-expanded="showMobileMenu"
+          @click="showMobileMenu = true"
+        />
+        <!-- 页面与菜单均由受限的 el-scrollbar 滚动，无需锁定 body。 -->
+        <el-drawer
+          title="导航菜单"
+          body-class="oj-menu-drawer-body"
+          direction="ltr"
+          size="min(280px, 85vw)"
+          append-to-body
+          destroy-on-close
+          v-model="showMobileMenu"
+          :lock-scroll="false"
+        >
+          <el-scrollbar height="100%">
+            <el-menu
+              mode="vertical"
+              background-color="transparent"
+              active-text-color="#2196f3"
+              text-color="#495060"
+              router
+              :default-active="activeMenu"
+              @select="onCloseMobileMenu"
+            >
+              <el-menu-item index="/">
+                <el-icon><House /></el-icon>
+                首页
+              </el-menu-item>
+              <el-menu-item index="/problem">
+                <el-icon><Document /></el-icon>
+                题库
+              </el-menu-item>
+              <el-menu-item index="/status">
+                <el-icon><Check /></el-icon>
+                状态
+              </el-menu-item>
+              <el-menu-item index="/contest">
+                <el-icon><Trophy /></el-icon>
+                比赛
+              </el-menu-item>
+              <el-menu-item index="/about">
+                <el-icon><InfoFilled /></el-icon>
+                关于
+              </el-menu-item>
+            </el-menu>
+          </el-scrollbar>
         </el-drawer>
-      </n-flex>
-      <n-flex v-else class="menu-content" style="height: 100%;">
+      </x-flex>
+      <x-flex v-if="!isMobile" class="menu-content" style="height: 100%;">
         <el-menu
           :default-active="activeMenu"
           mode="horizontal"
@@ -69,22 +88,22 @@
             关于
           </el-menu-item>
         </el-menu>
-      </n-flex>
-      <n-flex class="r-content" align="center" style="margin-right: 25px;">
+      </x-flex>
+      <x-flex class="r-content" align="center" style="margin-right: 25px;">
         <el-button v-if="!isLogin" type="primary" plain round size="large" @click="Login">登录 | 注册</el-button>
-        <n-flex v-else>
+        <x-flex v-else>
           <Avatar
             :src="user.avatar" 
             :text="user.username" 
             :size="40"
           />
           <el-dropdown trigger="click" placement="bottom">
-            <n-flex align="center" style="cursor: pointer;">
+            <x-flex align="center" style="cursor: pointer;">
               <span style="font-size: 17px;font-weight: bold;margin: 0 4px;">{{ user.username }}</span>
               <el-icon class="el-icon--right">
                 <arrow-down />
               </el-icon>
-            </n-flex>
+            </x-flex>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item @click="toUserHome">我的首页</el-dropdown-item>
@@ -94,14 +113,14 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-        </n-flex>
-      </n-flex>
-    </n-flex>
+        </x-flex>
+      </x-flex>
+    </x-flex>
   </header>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount,defineAsyncComponent } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 import { storeToRefs } from 'pinia';
@@ -116,20 +135,26 @@ const router=useRouter();
 const route=useRoute();
 const { user, isLogin }=storeToRefs(userStore);
 
-const isMobile = ref<boolean>(false);
+const isMobile = ref<boolean>(window.innerWidth <= 1024);
 const showMobileMenu = ref<boolean>(false);
 
 //methods
-const checkMobile = () => {
-  isMobile.value = window.innerWidth <= 1024
-}
-onMounted(()=>{
-  checkMobile();
-  window.addEventListener('resize', checkMobile);
-})
+const onCloseMobileMenu = () => {
+  showMobileMenu.value = false;
+};
+const onViewportChange = () => {
+  isMobile.value = window.innerWidth <= 1024;
+  if (!isMobile.value) {
+    onCloseMobileMenu();
+  }
+};
+watch(() => route.fullPath, onCloseMobileMenu);
+onMounted(() => {
+  window.addEventListener('resize', onViewportChange);
+});
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', checkMobile)
-})
+  window.removeEventListener('resize', onViewportChange);
+});
 //动态获取当前路由
 const activeMenu=computed(()=>{
   const path = route.path;
@@ -181,8 +206,17 @@ const toAdmin=()=>{
   margin-left: 20px;
 }
 .el-menu{
-  border-bottom: none;
+  border: none;
   background: transparent;
+}
+.el-menu--horizontal {
   min-width: 600px;
+}
+
+/* 抽屉传送到 body；只由内部 el-scrollbar 负责滚动。 */
+:global(.oj-menu-drawer-body) {
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
 }
 </style>

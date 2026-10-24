@@ -1,33 +1,33 @@
 <template>
   <div class="dashboard-container">
-    <n-flex vertical :size="24">
+    <x-flex vertical :size="24">
       <!-- 欢迎横幅 -->
       <el-card class="welcome-card">
-        <n-flex align="center" justify="space-between">
-          <n-flex align="center" :size="16">
+        <x-flex align="center" justify="space-between">
+          <x-flex align="center" :size="16">
             <Avatar
               :text="userStore.user.username"
               :src="userStore.user.avatar"
               :size="64"
             />
-            <n-flex vertical :size="4">
+            <x-flex vertical :size="4">
               <el-text size="large" tag="b"
                 >欢迎回来，{{ userStore.user.username }}</el-text
               >
               <el-text type="info"
                 >今天是个美好的一天，开始您的工作吧！</el-text
               >
-            </n-flex>
-          </n-flex>
-          <n-flex vertical :size="8" style="text-align: right">
+            </x-flex>
+          </x-flex>
+          <x-flex vertical :size="8" style="text-align: right">
             <el-text type="primary" size="large">{{ currentTime }}</el-text>
             <el-text type="info" size="large">{{ currentDate }}</el-text>
-          </n-flex>
-        </n-flex>
+          </x-flex>
+        </x-flex>
       </el-card>
 
       <!-- 统计卡片区域 -->
-      <n-flex :size="16">
+      <x-flex :size="16">
         <InfoCard
           color="#909399"
           :icon-component="People"
@@ -52,21 +52,21 @@
           :value="statsData.totalContests"
           :loading="statsLoading"
         />
-      </n-flex>
+      </x-flex>
 
       <!-- 主要内容区域 -->
-      <n-flex :size="16">
+      <x-flex :size="16">
         <!-- 左侧内容 -->
-        <n-flex vertical :size="16" style="flex: 2">
+        <x-flex vertical :size="16" style="flex: 2">
           <!-- 快速操作 -->
           <el-card>
             <template #header>
-              <n-flex align="center" :size="8">
+              <x-flex align="center" :size="8">
                 <el-icon><Operation /></el-icon>
                 <span>快速操作</span>
-              </n-flex>
+              </x-flex>
             </template>
-            <n-flex :size="12" wrap>
+            <x-flex :size="12" wrap>
               <el-button
                 type="primary"
                 :icon="Plus"
@@ -109,19 +109,19 @@
               >
                 标签管理
               </el-button>
-            </n-flex>
+            </x-flex>
           </el-card>
 
           <!-- 提交趋势图 -->
           <el-card>
             <template #header>
-              <n-flex align="center" justify="space-between">
-                <n-flex align="center" :size="8">
+              <x-flex align="center" justify="space-between">
+                <x-flex align="center" :size="8">
                   <el-icon><TrendCharts /></el-icon>
                   <span>提交趋势</span>
-                </n-flex>
+                </x-flex>
                 <el-text type="info" size="small">最近2周</el-text>
-              </n-flex>
+              </x-flex>
             </template>
             <div v-loading="chartLoading">
               <SubmissionChart
@@ -131,17 +131,17 @@
               />
             </div>
           </el-card>
-        </n-flex>
+        </x-flex>
 
         <!-- 右侧内容 -->
-        <n-flex vertical :size="16" style="flex: 1">
+        <x-flex vertical :size="16" style="flex: 1">
           <!-- 登录信息 -->
           <el-card>
             <template #header>
-              <n-flex align="center" :size="8">
+              <x-flex align="center" :size="8">
                 <el-icon><InfoFilled /></el-icon>
                 <el-text tag="b">登录信息</el-text>
-              </n-flex>
+              </x-flex>
             </template>
             <el-descriptions :column="1" border>
               <el-descriptions-item label="用户名">
@@ -171,11 +171,11 @@
           <!-- 最新公告 -->
           <el-card>
             <template #header>
-              <n-flex align="center" justify="space-between">
-                <n-flex align="center" :size="8">
+              <x-flex align="center" justify="space-between">
+                <x-flex align="center" :size="8">
                   <el-icon><Bell /></el-icon>
                   <el-text tag="b">最新公告</el-text>
-                </n-flex>
+                </x-flex>
                 <el-button
                   type="primary"
                   text
@@ -184,17 +184,17 @@
                 >
                   查看全部
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
             <div v-loading="announcementsLoading">
-              <n-flex vertical :size="8">
+              <x-flex vertical :size="8">
                 <div
                   v-for="announcement in latestAnnouncements"
                   :key="announcement.id"
                   class="announcement-item"
                 >
-                  <n-flex align="center" justify="space-between">
-                    <n-flex align="center" :size="8">
+                  <x-flex align="center" justify="space-between">
+                    <x-flex align="center" :size="8">
                       <el-tag
                         v-if="announcement.pinned"
                         type="danger"
@@ -208,23 +208,23 @@
                       >
                         {{ announcement.title }}
                       </el-text>
-                    </n-flex>
+                    </x-flex>
                     <el-text type="info" size="small">
                       {{ formatDate(announcement.updatedTime) }}
                     </el-text>
-                  </n-flex>
+                  </x-flex>
                 </div>
                 <el-empty
                   v-if="latestAnnouncements.length === 0"
                   description="暂无公告"
                   :image-size="60"
                 />
-              </n-flex>
+              </x-flex>
             </div>
           </el-card>
-        </n-flex>
-      </n-flex>
-    </n-flex>
+        </x-flex>
+      </x-flex>
+    </x-flex>
   </div>
 </template>
 
@@ -444,11 +444,11 @@ const formatDate = (dateStr: string) => {
     padding: 16px;
   }
 
-  :deep(.n-flex[style*="flex: 2"]) {
+  :deep(.x-flex[style*="flex: 2"]) {
     flex: 1 !important;
   }
 
-  :deep(.n-flex[style*="flex: 1"]) {
+  :deep(.x-flex[style*="flex: 1"]) {
     flex: 1 !important;
     margin-top: 16px;
   }

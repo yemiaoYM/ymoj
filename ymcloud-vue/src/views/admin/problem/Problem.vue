@@ -7,7 +7,7 @@
           {{ mode ==='edit' ? '编辑题目' : '增加题目' }}
         </span>
       </template>
-      <n-flex vertical :size="[12, 12]" style="width: 100%; padding: 15px">
+      <x-flex vertical :size="[12, 12]" style="width: 100%; padding: 15px">
         <!-- 基础信息 -->
         <el-form
           ref="formRef"
@@ -186,7 +186,7 @@
             </el-table>
           </el-form-item>
         </el-form>
-      </n-flex>
+      </x-flex>
       <template #footer>
         <el-button
           v-permission="mode === 'edit' ? ['problem:problem:edit'] : ['problem:problem:add']"

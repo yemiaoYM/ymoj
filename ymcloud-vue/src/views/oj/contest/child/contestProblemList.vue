@@ -8,10 +8,10 @@
       >
       <el-table-column prop="displayId" align="center" label="#" >
         <template #default="{ row }">
-          <n-flex justify="center">
-            <n-icon :size="30" :component="Balloon" :color="row.color"></n-icon>
+          <x-flex justify="center">
+            <el-icon :size="30" :color="row.color"><component :is="Balloon" /></el-icon>
             {{ row.displayId }}
-          </n-flex>
+          </x-flex>
         </template>
       </el-table-column>
       <el-table-column prop="displayTitle" align="center" label="题目" />

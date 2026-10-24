@@ -1,9 +1,9 @@
 <template>
   <div class="role-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <el-form :model="queryParams" label-width="auto">
-          <n-flex :size="10">
+          <x-flex :size="10">
             <el-form-item label="角色名称">
               <el-input v-model="queryParams.name" placeholder="请输入角色名称" clearable />
             </el-form-item>
@@ -25,9 +25,9 @@
               <el-button type="primary" :icon="Search" @click="handleQuery">搜索</el-button>
               <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>
-          </n-flex>
+          </x-flex>
         </el-form>
-        <n-flex :size="10" style="padding-bottom: 15px">
+        <x-flex :size="10" style="padding-bottom: 15px">
           <el-button
             v-permission="['system:role:add']"
             plain
@@ -37,7 +37,7 @@
           >
             新增
           </el-button>
-        </n-flex>
+        </x-flex>
         <el-table :data="roleList" v-loading="loading">
           <el-table-column label="ID" prop="id" width="80" align="center" />
           <el-table-column label="角色名称" prop="name" min-width="130" />
@@ -59,7 +59,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="230" align="center">
             <template #default="{ row }">
-              <n-flex :size="0" justify="center">
+              <x-flex :size="0" justify="center">
                 <el-button
                   v-permission="['system:role:query', 'system:role:edit']"
                   type="success"
@@ -93,11 +93,11 @@
                 >
                   删除
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
         </el-table>
-        <n-flex justify="center" style="margin-top: 20px">
+        <x-flex justify="center" style="margin-top: 20px">
           <el-pagination
             v-model:current-page="queryParams.pageNo"
             v-model:page-size="queryParams.pageSize"
@@ -108,9 +108,9 @@
             @current-change="loadRoles"
             @size-change="handleQuery"
           />
-        </n-flex>
+        </x-flex>
       </el-card>
-    </n-flex>
+    </x-flex>
     <el-dialog
       v-model="dialogVisible"
       :title="editingRole ? '编辑角色' : '新增角色'"

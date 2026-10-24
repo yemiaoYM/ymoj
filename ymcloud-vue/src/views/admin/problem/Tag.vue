@@ -1,17 +1,17 @@
 <template>
   <div class="tag-management">
     <el-card shadow="never">
-      <n-flex justify="space-between" align="center" :size="16">
+      <x-flex justify="space-between" align="center" :size="16">
         <div>
           <h2 class="page-title">标签管理</h2>
           <el-text type="info">共 {{ tagCount }} 个标签 · {{ classifications.length }} 个分类，点击标签可编辑</el-text>
         </div>
-        <n-flex class="tag-actions" align="center" :size="8">
+        <x-flex class="tag-actions" align="center" :size="8">
           <el-button :icon="Refresh" :loading="loading" :disabled="busy" @click="onRefresh">刷新</el-button>
           <el-button v-permission="['problem:tag:add']" :icon="FolderAdd" :disabled="busy" @click="onOpenClassification()">添加分类</el-button>
           <el-button v-permission="['problem:tag:add']" type="primary" :icon="Plus" :disabled="busy" @click="onOpenTag()">添加标签</el-button>
-        </n-flex>
-      </n-flex>
+        </x-flex>
+      </x-flex>
       <el-input
         class="tag-search"
         placeholder="搜索标签或分类"
@@ -32,20 +32,20 @@
         shadow="never"
       >
         <template #header>
-          <n-flex justify="space-between" align="center" :size="12">
-            <n-flex align="center" :size="8">
+          <x-flex justify="space-between" align="center" :size="12">
+            <x-flex align="center" :size="8">
               <el-icon><Folder /></el-icon>
               <strong>{{ group.classification?.name || '未分类' }}</strong>
               <el-tag type="info" size="small" round>{{ group.tagList.length }} 个标签</el-tag>
               <el-text v-if="group.classification" type="info" size="small">排序 {{ group.classification.priority }}</el-text>
-            </n-flex>
-            <n-flex v-if="group.classification" class="tag-actions" align="center" :size="4">
+            </x-flex>
+            <x-flex v-if="group.classification" class="tag-actions" align="center" :size="4">
               <el-button v-permission="['problem:tag:edit']" text size="small" :icon="Edit" :disabled="busy" @click="onOpenClassification(group.classification)">编辑分类</el-button>
               <el-button v-permission="['problem:tag:remove']" text type="danger" size="small" :icon="Delete" :disabled="busy" @click="onDeleteClassification(group.classification)">删除分类</el-button>
-            </n-flex>
-          </n-flex>
+            </x-flex>
+          </x-flex>
         </template>
-        <n-flex align="center" :size="8">
+        <x-flex align="center" :size="8">
           <el-tag
             v-for="item in group.tagList"
             :key="item.id"
@@ -72,7 +72,7 @@
             @click="onOpenTag(null, group.classification)"
           >添加标签</el-button>
           <el-text v-if="!group.tagList.length" type="info" size="small">此分类暂无标签</el-text>
-        </n-flex>
+        </x-flex>
       </el-card>
     </div>
 
@@ -89,10 +89,10 @@
           <el-input placeholder="1～20 个字符" maxlength="20" show-word-limit v-model="tag.name" />
         </el-form-item>
         <el-form-item label="标签颜色" prop="color">
-          <n-flex align="center" :size="12">
+          <x-flex align="center" :size="12">
             <el-color-picker v-model="tag.color" />
             <el-tag effect="dark" :color="tag.color">{{ tag.name || '标签预览' }}</el-tag>
-          </n-flex>
+          </x-flex>
         </el-form-item>
         <el-form-item label="所属分类">
           <el-select placeholder="未分类" clearable v-model="tag.parentId" :value-on-clear="null">
@@ -394,7 +394,7 @@ onBeforeUnmount(() => {
   margin-top: 16px;
 }
 .tag-actions :deep(.el-button + .el-button) {
-  /* n-flex 已提供间距，避免按钮默认外边距造成换行后左侧错位。 */
+  /* x-flex 已提供间距，避免按钮默认外边距造成换行后左侧错位。 */
   margin-left: 0;
 }
 .editable-tag {

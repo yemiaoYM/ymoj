@@ -1,6 +1,6 @@
 <template>
   <div class="storage-config-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <template #header>
           <span class="card-title">存储配置</span>
@@ -20,7 +20,7 @@
           show-icon
           class="storage-alert"
         />
-        <n-flex :size="10" class="toolbar">
+        <x-flex :size="10" class="toolbar">
           <el-button
             v-if="canOperate('add')"
             type="primary"
@@ -32,7 +32,7 @@
             新增配置
           </el-button>
           <el-button :icon="Refresh" :loading="loading" :disabled="!!busyKey" @click="loadConfigs">刷新</el-button>
-        </n-flex>
+        </x-flex>
         <p class="storage-description">待配置的行仅是服务示例，填写并保存后才建立配置。</p>
         <el-alert
           v-if="!loaded && !loading"
@@ -68,7 +68,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="265" align="center" fixed="right">
             <template #default="{ row }">
-              <n-flex :size="0" justify="center">
+              <x-flex :size="0" justify="center">
                 <el-button
                   v-if="canEdit(row)"
                   type="success"
@@ -122,12 +122,12 @@
                 >
                   删除
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
-    </n-flex>
+    </x-flex>
     <el-dialog
       v-model="dialogVisible"
       class="storage-config-dialog"

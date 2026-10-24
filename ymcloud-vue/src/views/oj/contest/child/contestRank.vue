@@ -2,8 +2,8 @@
   <div class="container">
     <el-card>
       <el-skeleton v-if="loading" style="width: 100%;" :rows="20" />
-      <n-flex v-else vertical :size="10">
-        <n-flex justify="space-between">
+      <x-flex v-else vertical :size="10">
+        <x-flex justify="space-between">
           <!-- 查询框 -->
           <el-input
             v-model="keyword"
@@ -20,7 +20,7 @@
             自动刷新(10s)
             <el-switch v-model="autoRefresh"/>
           </span>
-        </n-flex>
+        </x-flex>
         
         <!-- 排名列表信息 -->
         <el-table
@@ -33,7 +33,7 @@
           <el-table-column prop="rank" label="排名" align="center" width="80"/>
           <el-table-column prop="username" label="用户" align="center" width="350">
             <template #default="{ row }">
-              <n-flex justify="center">
+              <x-flex justify="center">
                 <el-tag size="large" disable-transitions color="#21c1c6" style="cursor:pointer;">
                   <span style="color: white;font-weight:bold;" @click="toUserInfo(row.username)">{{ row.username }}</span>
                 </el-tag>
@@ -43,7 +43,7 @@
                 <el-tag v-if="row.school" size="large" disable-transitions color="#fe9000" style="color: white;">
                   {{ row.school }}
                 </el-tag>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
           <el-table-column prop="ac" label="AC" align="center" width="100" />
@@ -60,10 +60,10 @@
           >
             <!-- 题目信息 -->
             <template #header>
-              <n-flex justify="center">
-                <n-icon :size="25" :component="Balloon" :color="q.color"></n-icon>
+              <x-flex justify="center">
+                <el-icon :size="25" :color="q.color"><component :is="Balloon" /></el-icon>
                 <span style="font-weight: bold;">{{ q.displayId }}</span>
-              </n-flex>
+              </x-flex>
               <span style="font-size: 12px;">({{q.ac}}/{{q.total}})</span>
             </template>
             <!-- 用户该题评测信息 -->
@@ -90,7 +90,7 @@
           </el-table-column>
         </el-table>
         <!-- 分页 -->
-        <n-flex justify="end" style="width: 100%;">
+        <x-flex justify="end" style="width: 100%;">
           <el-pagination
             v-model:current-page="pageNo"
             v-model:page-size="pageSize"
@@ -101,8 +101,8 @@
             @current-change="handlePageChange"
             background
           />
-        </n-flex>
-      </n-flex>
+        </x-flex>
+      </x-flex>
     </el-card>
   </div>
 </template>

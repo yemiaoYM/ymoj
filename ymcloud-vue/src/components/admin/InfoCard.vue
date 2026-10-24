@@ -6,7 +6,7 @@
         :style="{ 'background-color': color }"
         class="height-100"
       >
-        <n-icon class="info-card-icon" :size="iconSize" color="white" :component="iconComponent"/>
+        <el-icon class="info-card-icon" color="white" :size="iconSize"><component :is="iconComponent" /></el-icon>
       </el-col>
       <el-col :span="16" class="info-card-text">
         <p :style="textStyle">{{ value }}</p>
@@ -73,7 +73,7 @@ export default {
   justify-content: center;
 }
 .info-card-icon {
-  line-height: 95px;
+  height: 100%;
   color: white;
 }
 .info-card-text p {

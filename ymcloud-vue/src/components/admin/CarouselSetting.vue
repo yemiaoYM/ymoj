@@ -1,11 +1,11 @@
 <template>
   <el-card v-loading="loading">
     <template #header><span class="card-title">首页轮播图</span></template>
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-text type="info">图片固定为 16:9，建议 1600×900 像素。最多 10 张，单张不超过 5MB；上传前可裁剪。</el-text>
       <el-alert v-if="failed" title="轮播图加载失败，请重试" type="error" show-icon :closable="false" />
-      <n-flex align="flex-start" :size="16">
-        <n-flex v-for="(image, index) in images" :key="image.id" class="carousel-item" vertical :size="8">
+      <x-flex align="flex-start" :size="16">
+        <x-flex v-for="(image, index) in images" :key="image.id" class="carousel-item" vertical :size="8">
           <el-image
             class="carousel-image"
             fit="cover"
@@ -15,12 +15,12 @@
             :preview-src-list="images.map(item => item.url)"
             :initial-index="index"
           />
-          <n-flex v-if="canEdit" justify="space-between" :size="4">
+          <x-flex v-if="canEdit" justify="space-between" :size="4">
             <el-button text size="small" :disabled="busy || index === 0" @click="onMove(index, -1)">前移</el-button>
             <el-button text size="small" :disabled="busy || index === images.length - 1" @click="onMove(index, 1)">后移</el-button>
             <el-button text type="danger" size="small" :disabled="busy" @click="onRemove(index)">移除</el-button>
-          </n-flex>
-        </n-flex>
+          </x-flex>
+        </x-flex>
         <ImageCropUpload
           v-if="canEdit && images.length < 10"
           :disabled="!loaded || busy"
@@ -30,22 +30,22 @@
         >
           <el-button class="carousel-add" aria-label="添加轮播图" :disabled="!loaded || busy" :loading="uploading" :icon="Plus" />
         </ImageCropUpload>
-      </n-flex>
+      </x-flex>
       <el-text v-if="loaded && !images.length && configured" type="info">
         {{ dirty ? '列表为空，保存后隐藏首页轮播。' : '尚无轮播图，首页轮播区域已隐藏。' }}
       </el-text>
       <el-text v-if="dirty" type="warning">列表有未保存的更改。移除仅取消首页展示，不删除存储文件。</el-text>
       <el-alert v-if="saveFailed" title="保存失败，更改已保留，请重试" type="error" :closable="false" />
-      <n-flex v-if="pendingUpload" align="center">
+      <x-flex v-if="pendingUpload" align="center">
         <el-text type="warning">图片上传失败，裁剪结果已保留。</el-text>
         <el-button :disabled="busy || !canEdit" @click="onUpload(pendingUpload)">重试上传</el-button>
-      </n-flex>
-    </n-flex>
+      </x-flex>
+    </x-flex>
     <template #footer>
-      <n-flex>
+      <x-flex>
         <el-button v-if="canEdit" type="primary" :loading="saving" :disabled="!loaded || uploading" @click="onSave">保存轮播图</el-button>
         <el-button :icon="Refresh" :disabled="loading || busy" @click="onReload">重新加载</el-button>
-      </n-flex>
+      </x-flex>
     </template>
   </el-card>
 </template>

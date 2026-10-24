@@ -1,12 +1,12 @@
 <template>
   <div class="login-container">
-    <n-flex justify="center" align="center" style="height: 100%">
+    <x-flex justify="center" align="center" style="height: 100%">
       <el-card>
         <template #header>
-          <n-flex vertical align="center" :size="8">
+          <x-flex vertical align="center" :size="8">
             <BrandLogo class="login-logo" />
             <h2 class="login-title">管理后台登录</h2>
-          </n-flex>
+          </x-flex>
         </template>
         <el-form
           ref="formRef"
@@ -39,7 +39,7 @@
           </el-form-item>
 
           <el-form-item prop="code">
-            <n-flex :wrap="false" style="width: 100%;">
+            <x-flex :wrap="false" style="width: 100%;">
               <el-input
                 v-model="form.code"
                 placeholder="请输入验证码"
@@ -54,7 +54,7 @@
                 @click="refreshCaptcha"
                 style="width: 100px; cursor: pointer; margin-left: 10px"
               />
-            </n-flex>
+            </x-flex>
           </el-form-item>
 
           <el-form-item>
@@ -73,7 +73,7 @@
           <LegalAgreement />
         </div>
       </el-card>
-    </n-flex>
+    </x-flex>
   </div>
 </template>
 

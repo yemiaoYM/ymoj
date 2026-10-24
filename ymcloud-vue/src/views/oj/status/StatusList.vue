@@ -1,15 +1,15 @@
 <template>
   <div class="status-list-container">
     <el-card>
-      <n-flex vertical :size="20">
+      <x-flex vertical :size="20">
         <!-- 筛选区域 -->
-        <n-flex
+        <x-flex
           justify="space-between"
           align="center"
           :wrap="true"
           :size="[20, 16]"
         >
-          <n-flex align="center" :size="24" :wrap="true">
+          <x-flex align="center" :size="24" :wrap="true">
             <span class="filter-label">范围</span>
             <el-switch
               v-model="isMine"
@@ -19,15 +19,23 @@
               @change="pushRouter"
             />
             <span class="filter-label">状态</span>
-            <n-select
-              v-model:value="status"
-              :options="statusOptions"
+            <el-select
+              style="width: 200px"
+              aria-label="评测状态"
               clearable
               placeholder="选择状态"
-              style="width: 200px"
-              @update:value="pushRouter"
-            />
-          </n-flex>
+              v-model="status"
+              :value-on-clear="null"
+              @change="pushRouter"
+            >
+              <el-option
+                v-for="item in statusOptions"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
+          </x-flex>
           <el-button
             style="margin-right: 15px"
             round
@@ -37,7 +45,7 @@
             >重置</el-button
           >
           <!-- 设置搜索框 -->
-          <n-flex align="center" :size="16">
+          <x-flex align="center" :size="16">
             <el-input
               v-model="problemKey"
               style="width: 240px"
@@ -56,8 +64,8 @@
               :suffix-icon="Search"
               @keyup.enter="pushRouter"
             />
-          </n-flex>
-        </n-flex>
+          </x-flex>
+        </x-flex>
 
         <!-- 表格展示 -->
         <div>
@@ -81,7 +89,7 @@
                 </span>
               </template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" min-width="150">
+            <el-table-column prop="status" label="状态" min-width="180">
               <template #default="{ row }">
                 <el-tag
                   :type="getStatusType(row.status).tag"
@@ -153,7 +161,7 @@
         </div>
 
         <!-- 分页组件 -->
-        <n-flex justify="flex-end" v-if="total > 0">
+        <x-flex justify="flex-end" v-if="total > 0">
           <el-pagination
             background
             layout="total, sizes, prev, pager, next"
@@ -164,8 +172,8 @@
             @update:current-page="handleCurrentChange"
             @update:page-size="handleSizeChange"
           />
-        </n-flex>
-      </n-flex>
+        </x-flex>
+      </x-flex>
     </el-card>
   </div>
 </template>

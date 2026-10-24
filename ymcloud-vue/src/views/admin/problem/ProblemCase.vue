@@ -1,18 +1,18 @@
 <template>
   <div class="problem-case-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <template #header>
           <!-- 页面标题 -->
-          <n-flex justify="space-between">
+          <x-flex justify="space-between">
             <span style="font-size: 22px; font-weight: 600; color: #409eff">
               测试用例管理
             </span>
             <el-button type="primary" :icon="ArrowLeft" @click="handleBack">返回题目列表</el-button>
-          </n-flex>
+          </x-flex>
         </template>
         <!-- 操作区域 -->
-        <n-flex :size="10" align="center" style="padding-bottom: 15px;">
+        <x-flex :size="10" align="center" style="padding-bottom: 15px;">
           <el-upload
             v-permission="['problem:testcase:add']"
             :http-request="uploadFiles"
@@ -36,7 +36,7 @@
             批量删除
           </el-button>
           <el-button :icon="Refresh" @click="refreshTestCases">刷新</el-button>
-        </n-flex>
+        </x-flex>
 
         <div v-if="uploading" class="upload-progress">
           <div class="upload-progress__status">{{ uploadStatus }}</div>
@@ -69,7 +69,7 @@
           <el-table-column label="序号" type="index" width="80" align="center" />
           <el-table-column label="输入文件" prop="input" min-width="200" align="center">
             <template #default="scope">
-              <n-flex :size="15" justify="center" align="center">
+              <x-flex :size="15" justify="center" align="center">
                 {{ scope.row.input }}
                 <el-button
                   type="primary"
@@ -78,12 +78,12 @@
                 >
                   下载输入
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
           <el-table-column label="输出文件" prop="output" min-width="200" align="center">
             <template #default="scope">
-              <n-flex :size="15" justify="center" align="center">
+              <x-flex :size="15" justify="center" align="center">
                 {{ scope.row.output }}
                 <el-button
                   type="primary"
@@ -92,7 +92,7 @@
                 >
                   下载输出
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="260" align="center">
@@ -118,7 +118,7 @@
           </el-table-column>
         </el-table>
       </el-card>
-    </n-flex>
+    </x-flex>
     <el-dialog
       v-model="previewVisible"
       width="85%"
@@ -144,17 +144,17 @@
           class="case-preview-card"
         >
           <template #header>
-            <n-flex justify="space-between" align="center" :wrap="false">
-              <n-flex align="center" :size="10" :wrap="false" class="case-preview-card__title">
+            <x-flex justify="space-between" align="center" :wrap="false">
+              <x-flex align="center" :size="10" :wrap="false" class="case-preview-card__title">
                 <el-tag :type="preview.kind === 'input' ? 'primary' : 'success'" effect="dark">
                   {{ preview.kind === 'input' ? '输入' : '输出' }}
                 </el-tag>
                 <el-text truncated>{{ getDisplayFileName(preview.fileName) }}</el-text>
-              </n-flex>
+              </x-flex>
               <el-text v-if="preview.size > 0" type="info" size="small">
                 {{ formatFileSize(preview.size) }}
               </el-text>
-            </n-flex>
+            </x-flex>
           </template>
 
           <div class="case-preview-card__content">

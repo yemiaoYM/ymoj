@@ -1,9 +1,9 @@
 <template>
   <div class="auth-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <el-form label-width="auto">
-          <n-flex :size="10">
+          <x-flex :size="10">
             <el-form-item label="菜单名称">
               <el-input v-model="keyword" placeholder="请输入名称或权限编码" clearable />
             </el-form-item>
@@ -13,9 +13,9 @@
               </el-button>
               <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>
-          </n-flex>
+          </x-flex>
         </el-form>
-        <n-flex :size="10" style="padding-bottom: 15px">
+        <x-flex :size="10" style="padding-bottom: 15px">
           <el-button
             v-if="isSuperAdmin"
             v-permission="['system:auth:add']"
@@ -27,7 +27,7 @@
             新增
           </el-button>
           <el-button :icon="Refresh" @click="loadAuths">刷新</el-button>
-        </n-flex>
+        </x-flex>
         <el-alert
           v-if="!isSuperAdmin"
           title="菜单权限定义由超级管理员维护，角色授权请在角色管理中配置。"
@@ -56,7 +56,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="200" align="center">
             <template #default="{ row }">
-              <n-flex v-if="isSuperAdmin" :size="0" justify="center">
+              <x-flex v-if="isSuperAdmin" :size="0" justify="center">
                 <el-button
                   v-permission="['system:auth:edit']"
                   type="success"
@@ -88,12 +88,12 @@
                 >
                   删除
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
-    </n-flex>
+    </x-flex>
     <el-dialog
       v-model="dialogVisible"
       :title="editingAuth ? '编辑菜单权限' : '新增菜单权限'"

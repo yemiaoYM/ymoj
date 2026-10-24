@@ -5,11 +5,11 @@
       <el-skeleton style="width: 100%" :rows="15" animated />
     </el-card>
     <!-- 比赛信息 -->
-    <n-flex v-else vertical>
+    <x-flex v-else vertical>
       <el-card>
         <!-- 标题 -->
         <template #header>
-          <n-flex justify="center" align="center">
+          <x-flex justify="center" align="center">
             <h1 style="font-weight: bold; font-size: 30px">
               {{ contestData.title }}
             </h1>
@@ -25,12 +25,12 @@
             >
               <span style="font-weight: bold">{{ contestData.creatorUsername }}</span>
             </el-tag>
-          </n-flex>
+          </x-flex>
         </template>
         <!-- 信息 -->
-        <n-flex vertical>
+        <x-flex vertical>
           <!-- 标签 -->
-          <n-flex :size="10" justify="center">
+          <x-flex :size="10" justify="center">
             <el-tag
               size="large"
               disable-transitions
@@ -71,50 +71,47 @@
                 >Rated
               </span>
             </el-tag>
-          </n-flex>
+          </x-flex>
 
           <!-- 时间信息：开始时间靠左，结束时间靠右 -->
-          <n-flex justify="space-between">
-            <n-flex>
-              <n-icon :size="25" :component="Alarm" color="#67c23a"></n-icon>
+          <x-flex justify="space-between">
+            <x-flex>
+              <el-icon color="#67c23a" :size="25"><component :is="Alarm" /></el-icon>
               <span>开始时间 {{ contestData.startTime }}</span>
-            </n-flex>
-            <n-flex>
-              <n-icon :size="25" :component="Alarm" color="#f56c6c"></n-icon>
+            </x-flex>
+            <x-flex>
+              <el-icon color="#f56c6c" :size="25"><component :is="Alarm" /></el-icon>
               <span>结束时间 {{ contestData.endTime }}</span>
-            </n-flex>
-          </n-flex>
+            </x-flex>
+          </x-flex>
 
           <!-- 倒计时 -->
-          <n-flex justify="center" align="center">
+          <x-flex justify="center" align="center">
             <!-- 开始倒计时 -->
-            <n-flex
+            <x-flex
               v-if="active"
               align="center"
               style="font-size: 25px; font-weight: 600"
             >
-              <n-icon size="30" :component="HourglassOutline"></n-icon>
-              <n-countdown
-                :duration="
-                  new Date(contestData.endTime).getTime() -
-                  new Date(contestData.now).getTime()
-                "
-                :active="active"
+              <el-icon size="30"><component :is="HourglassOutline" /></el-icon>
+              <el-countdown
+                :value="countdownDeadline"
+                :value-style="{ fontSize: '25px', fontWeight: 600, color: 'inherit' }"
               />
-            </n-flex>
+            </x-flex>
             <!-- 比赛状态 -->
-            <n-flex v-else>
-              <n-icon :size="25" :component="InfiniteSharp"></n-icon>
+            <x-flex v-else>
+              <el-icon :size="25"><component :is="InfiniteSharp" /></el-icon>
               <span>{{ contestData.status }}</span>
-            </n-flex>
-          </n-flex>
+            </x-flex>
+          </x-flex>
 
           <!-- 参与人数 -->
-          <n-flex v-if="contestData.count" justify="center" align="center">
-            <n-icon size="25" :component="People" color="#55a8ff"></n-icon>
+          <x-flex v-if="contestData.count" justify="center" align="center">
+            <el-icon size="25" color="#55a8ff"><component :is="People" /></el-icon>
             <span>{{ contestData.count }} 人参与</span>
-          </n-flex>
-        </n-flex>
+          </x-flex>
+        </x-flex>
       </el-card>
 
       <!-- 选项卡 -->
@@ -198,7 +195,7 @@
       <router-view class="router-view"
         v-if="contestData.access && !contestMenuDisabled"
       ></router-view>
-    </n-flex>
+    </x-flex>
   </div>
 </template>
 
@@ -226,6 +223,7 @@ const route = useRoute();
 const isLoading = ref<boolean>(true);
 const contestMenuDisabled = ref<boolean>(false);
 const active = ref<boolean>(true);
+const countdownDeadline = ref(0);
 const contestPassword = ref<string>("");
 const contestData = ref<ContestVO>({} as ContestVO);
 
@@ -253,6 +251,10 @@ const initContestInfo = (contestID: number) => {
     .then((res) => {
       contestData.value = res.data.data;
       active.value = contestData.value.status === "进行中";
+      // 以服务端剩余时间换算本地截止点，避免客户端时钟偏差。
+      const remaining = new Date(contestData.value.endTime).getTime()
+        - new Date(contestData.value.now).getTime();
+      countdownDeadline.value = Date.now() + Math.max(0, remaining);
       if (!contestData.value.access) {
         ElMessage.error("对不起，请先到比赛首页输入比赛密码进行注册！");
         routeName.value = "ContestDetail";

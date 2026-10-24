@@ -1,10 +1,10 @@
 <template>
   <div class="announcement-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <!-- 搜索区域 -->
         <el-form :model="queryParams" ref="queryFormRef" label-width="auto">
-          <n-flex :size="10">
+          <x-flex :size="10">
             <el-form-item label="公告标题" prop="title">
               <el-input
                 v-model="queryParams.title"
@@ -40,11 +40,11 @@
               >
               <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>
-          </n-flex>
+          </x-flex>
         </el-form>
 
         <!-- 操作区域 -->
-        <n-flex :size="10" align="center" style="padding-bottom: 15px">
+        <x-flex :size="10" align="center" style="padding-bottom: 15px">
           <el-button
             v-permission="['announcement:announcement:add']"
             plain
@@ -72,7 +72,7 @@
             @click="handleDelete"
             >删除</el-button
           >
-        </n-flex>
+        </x-flex>
 
         <!-- 公告列表 -->
         <el-table
@@ -140,7 +140,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="150" align="center">
             <template #default="scope">
-              <n-flex :size="0" justify="center">
+              <x-flex :size="0" justify="center">
                 <el-button
                   v-permission="['announcement:announcement:query', 'announcement:announcement:edit']"
                   class="operation-button"
@@ -163,13 +163,13 @@
                 >
                   删除
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
         </el-table>
 
         <!-- 分页 -->
-        <n-flex justify="center" style="margin-top: 20px">
+        <x-flex justify="center" style="margin-top: 20px">
           <el-pagination
             :page-size="queryParams.pageSize"
             :current-page="queryParams.pageNo"
@@ -180,9 +180,9 @@
             @update:current-page="handleCurrentChange"
             @update:page-size="handleSizeChange"
           />
-        </n-flex>
+        </x-flex>
       </el-card>
-    </n-flex>
+    </x-flex>
 
     <!-- 新增/编辑对话框 -->
     <el-dialog

@@ -15,19 +15,33 @@
       </el-form-item>
 
       <el-form-item label="验证码" prop="code">
-        <n-flex style="width: 100%;">
-          <n-input-otp block v-model:value="form.code" style="flex: 8;"/>
-          <el-button style="flex: 2;" effect="dark" type="primary" @click="sendCode" :disabled="isCountingDown">
-            <n-countdown
+        <x-flex style="width: 100%;">
+          <el-input-otp
+            class="code-input"
+            size="default"
+            inputmode="numeric"
+            aria-label="六位数字验证码"
+            v-model="form.code"
+            :length="6"
+            :validator="handleValidateCodeDigit"
+          />
+          <el-button
+            style="flex: 2;"
+            type="primary"
+            :loading="sendingCode"
+            :disabled="isCountingDown"
+            @click="onSendCode"
+          >
+            <el-countdown
               v-if="isCountingDown"
-              :duration="59000"
-              :active="isCountingDown"
-              :on-finish="finishCountdown"
-              :render="renderCountdown"
+              format="ss [秒后重试]"
+              :value="retryAt"
+              :value-style="{ fontSize: 'inherit', color: 'inherit' }"
+              @finish="onCountdownFinish"
             />
             <span v-else>发送验证码</span>
           </el-button>
-        </n-flex>
+        </x-flex>
       </el-form-item>
 
       <el-form-item prop="password">
@@ -41,7 +55,7 @@
       </el-form-item>
 
       <div class="form-buttons">
-        <el-button type="primary" class="auth-button" :loading="loading" @click="resetPassword">
+        <el-button class="auth-button" type="primary" :loading="loading" @click="onResetPassword">
           确认重置
         </el-button>
       </div>
@@ -59,7 +73,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { Lock, Message, User } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type FormInstance, type FormItemRule, type FormRules } from 'element-plus';
 import { forgetPasswordSendCode, forgetPasswordResetPassword } from '@/api/api';
 
 //定义事件
@@ -68,26 +82,28 @@ const emit = defineEmits<{
 }>();
 
 //数据
-const formRef = ref();
+const formRef = ref<FormInstance>();
 const loading = ref<boolean>(false);
+const sendingCode = ref(false);
 const isCountingDown = ref<boolean>(false);
+const retryAt = ref(0);
 const form = ref({
   username: '',
   email: '',
-  code: ''.split(''),
+  code: '',
   password: '',
   rePassword: '',
 });
 const uuid = ref<string>('');
 
-const validatePassword = (rule: any, value: string, callback: Function) => {
+const validatePassword: FormItemRule['validator'] = (rule, value, callback) => {
   if (value !== form.value.password) {
     callback(new Error('两次输入的密码不一致'));
   } else {
     callback();
   }
 };
-const rules = ref({
+const rules: FormRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
     { min: 2, max: 20, message: '账号长度应在 2 到 20 个字符之间', trigger: 'blur' },
@@ -96,7 +112,10 @@ const rules = ref({
     { required: true, message: '请输入邮箱地址', trigger: 'blur' },
     { type: 'email', message: '请输入有效的邮箱地址', trigger: ['blur', 'change'] },
   ],
-  code: [{ required: true, message: '请输入6位验证码', trigger: 'blur' }],
+  code: [
+    { required: true, message: '请输入6位验证码', trigger: 'blur' },
+    { pattern: /^\d{6}$/, message: '验证码必须是6位数字', trigger: 'blur' },
+  ],
   password: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
     { min: 5, max: 20, message: '密码长度在5到20之间', trigger: 'blur' }
@@ -105,25 +124,32 @@ const rules = ref({
     { required: true, message: '请确认密码', trigger: 'blur' },
     { validator: validatePassword, message: '两次输入的密码不一致!', trigger: 'blur' },
   ],
-});
+};
 
 //methods
 //发送验证码
-const sendCode = () => {
-  forgetPasswordSendCode({
-    username: form.value.username,
-    email: form.value.email
-  }).then(res => {
+const onSendCode = async () => {
+  if (!formRef.value || sendingCode.value || isCountingDown.value) return;
+  sendingCode.value = true;
+  try {
+    await formRef.value.validateField(['username', 'email']);
+    const res = await forgetPasswordSendCode({
+      username: form.value.username,
+      email: form.value.email,
+    });
     uuid.value = res.data.data;
     ElMessage.success('验证码已发送，请注意查收！');
+    retryAt.value = Date.now() + 59000;
     isCountingDown.value = true;
-  }).catch(e => {
-    console.log(e);
-  });
+  } catch {
+    // 字段错误由表单显示；请求失败由统一请求层提示，保留重试入口。
+  } finally {
+    sendingCode.value = false;
+  }
 };
 //重置密码
-const resetPassword = async () => {
-  if(!formRef.value)return;
+const onResetPassword = async () => {
+  if (!formRef.value || loading.value) return;
   loading.value = true;
   try{
     const valid = await formRef.value.validate();
@@ -135,7 +161,7 @@ const resetPassword = async () => {
       username: form.value.username,
       password: form.value.password,
       rePassword: form.value.rePassword,
-      code: form.value.code.join(''),
+      code: form.value.code,
       uuid: uuid.value
     });
     ElMessage.success(res.data.msg);
@@ -145,12 +171,10 @@ const resetPassword = async () => {
     loading.value = false;
   }
 };
-//倒计时发送验证码
-const renderCountdown = ({ seconds }: { seconds: number }) => {
-  return `${String(seconds).padStart(2, '0')} 秒后重试`;
-};
+//逐位校验；验证码始终使用字符串，保留开头的 0。
+const handleValidateCodeDigit = (value: string) => value === '' || /^\d$/.test(value);
 //倒计时结束
-const finishCountdown = () => {
+const onCountdownFinish = () => {
   isCountingDown.value = false;
 };
 </script>
@@ -195,35 +219,12 @@ const finishCountdown = () => {
   border-radius: 10px;
 }
 
-.captcha-item :deep(.el-form-item__content) {
-  display: flex;
-  align-items: center;
-}
-
-.email-code-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.send-code-btn {
-  height: 40px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-
-.captcha-image {
-  width: 100px;
-  height: 40px;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.3s;
-  object-fit: cover;
-}
-
-.captcha-image:hover {
-  border-color: #409EFF;
+.code-input {
+  flex: 8;
+  min-width: 0;
+  align-self: center;
+  --el-input-otp-size: 34px;
+  --el-input-otp-field-width: calc((100% - 40px) / 6);
 }
 
 .form-buttons {

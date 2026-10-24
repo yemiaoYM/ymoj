@@ -1,12 +1,12 @@
 <template>
   <div class="file-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <template #header>
           <span class="card-title">文件管理</span>
         </template>
         <el-form :model="queryParams" label-width="auto" @submit.prevent="handleQuery">
-          <n-flex :size="10">
+          <x-flex :size="10">
             <el-form-item label="文件名称">
               <el-input v-model="queryParams.fileName" maxlength="255" placeholder="请输入文件名称" clearable />
             </el-form-item>
@@ -43,9 +43,9 @@
               <el-button type="primary" :icon="Search" native-type="submit">搜索</el-button>
               <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>
-          </n-flex>
+          </x-flex>
         </el-form>
-        <n-flex :size="10" class="toolbar">
+        <x-flex :size="10" class="toolbar">
           <el-button
             v-permission="['file:file:upload']"
             type="primary"
@@ -56,7 +56,7 @@
             上传文件
           </el-button>
           <el-button :icon="Refresh" :loading="loading" @click="loadFiles">刷新</el-button>
-        </n-flex>
+        </x-flex>
         <el-alert
           title="测试数据通过题目页面管理版本。这里可按权限下载，不提供删除或修改公开范围的操作。"
           type="info"
@@ -95,7 +95,7 @@
           <el-table-column label="上传时间" prop="createdTime" min-width="170" />
           <el-table-column label="操作" min-width="270" align="center" fixed="right">
             <template #default="{ row }">
-              <n-flex :size="0" justify="center">
+              <x-flex :size="0" justify="center">
                 <el-button
                   v-if="row.canDownload"
                   type="primary"
@@ -130,11 +130,11 @@
                 >
                   删除
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
         </el-table>
-        <n-flex justify="center" class="pagination">
+        <x-flex justify="center" class="pagination">
           <el-pagination
             v-model:current-page="queryParams.pageNum"
             v-model:page-size="queryParams.pageSize"
@@ -145,9 +145,9 @@
             @current-change="loadFiles"
             @size-change="handleQuery"
           />
-        </n-flex>
+        </x-flex>
       </el-card>
-    </n-flex>
+    </x-flex>
     <el-dialog
       v-model="uploadVisible"
       title="上传通用文件"

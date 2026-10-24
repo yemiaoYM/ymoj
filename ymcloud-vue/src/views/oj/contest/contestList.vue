@@ -1,15 +1,15 @@
 <template>
   <div class="container">
-    <n-flex vertical style="width: 100%;height: 100%;">
+    <x-flex vertical style="width: 100%;height: 100%;">
       <!-- 比赛查询模块 -->
       <el-card>
         <template #header>
-          <n-flex align="center">
+          <x-flex align="center">
             <el-icon :size="24" color="#409eff">
               <Promotion />
             </el-icon>
             <span style="font-size: 20px; font-weight: 600; margin-left: 8px;">比赛查询</span>
-          </n-flex>
+          </x-flex>
         </template>
         <el-input v-model="keyword" placeholder="请输入搜索比赛名称" size="large" @keyup.enter="handleSearch" clearable>
           <template #append>
@@ -21,12 +21,12 @@
       <!-- 比赛列表模块 -->
       <el-card>
         <template #header>
-          <n-flex align="center">
+          <x-flex align="center">
             <el-icon :size="24" color="#409eff">
               <List />
             </el-icon>
             <span style="font-size: 20px; font-weight: 600; margin-left: 8px;">比赛列表</span>
-          </n-flex>
+          </x-flex>
         </template>
         <el-skeleton v-if="ContestListLoading" :rows="20" :animated="true" />
         <!-- 比赛列表 -->
@@ -36,15 +36,15 @@
           }" shadow="hover">
           <template #header>
             <!-- 比赛名称和进行状态 -->
-            <n-flex justify="space-between" align="center">
-              <n-flex>
+            <x-flex justify="space-between" align="center">
+              <x-flex>
                 <span style="font-size: 20px; font-weight: 600;cursor: pointer;"
                   @click="toContestDetail(competition.id)">{{ competition.title }}</span>
                 <el-tag v-if="competition.visibility === 0" disable-transitions size="large" effect="plain"
                   type="success">公开赛</el-tag>
                 <el-tag v-else disable-transitions size="large" effect="plain" type="danger">私有赛</el-tag>
-              </n-flex>
-              <n-flex align="center">
+              </x-flex>
+              <x-flex align="center">
                 <el-tooltip effect="light" content="需要密码才能加入比赛" placement="top">
                   <el-icon v-show="competition.visibility" size="20">
                     <Lock />
@@ -54,16 +54,16 @@
                   @click="toContestDetail(competition.id)">
                   {{ competition.status }}
                 </el-button>
-              </n-flex>
-            </n-flex>
+              </x-flex>
+            </x-flex>
           </template>
-          <n-flex align="center">
+          <x-flex align="center">
             <!-- 比赛图片 -->
-            <n-image lazy :src="competition.image as string" preview-disabled width="150" />
+            <el-image class="contest-image" lazy :alt="competition.title" :src="competition.image || ''" />
             <!-- 比赛信息 -->
-            <n-flex vertical size="large">
+            <x-flex vertical size="large">
               <!-- 标签 -->
-              <n-flex :size="10">
+              <x-flex :size="10">
                 <el-tag size="large" disable-transitions color="#ffc171" style="color: white;">
                   <span style="display: flex;align-items: center;">
                     <el-icon>
@@ -83,47 +83,47 @@
                       <Flag />
                     </el-icon>Rated</span>
                 </el-tag>
-              </n-flex>
-              <n-flex align="center">
+              </x-flex>
+              <x-flex align="center">
                 <el-icon size="20">
                   <Clock />
                 </el-icon>比赛时间
                 <span>{{ competition.startTime + " ~ " + competition.endTime }}</span>
-              </n-flex>
-              <n-flex>
+              </x-flex>
+              <x-flex>
                 <el-icon size="20">
                   <AlarmClock />
                 </el-icon>比赛时长
                 <span>{{ formatContestDuration(competition.duration) }}</span>
-              </n-flex>
-              <n-flex align="center">
+              </x-flex>
+              <x-flex align="center">
                 <el-icon size="20">
                   <CollectionTag />
                 </el-icon>主办方
                 <el-tag round size="large" disable-transitions color="#15bec4" style="color: white;font-size: 13px;">
                   {{ competition.creatorUsername }}</el-tag>
-              </n-flex>
-              <n-flex v-if="competition.visibility !== 0" align="center">
+              </x-flex>
+              <x-flex v-if="competition.visibility !== 0" align="center">
                 <el-icon size="20">
                   <User />
                 </el-icon>已报名
                 <el-tag round effect="plain" disable-transitions style="font-size: 13px;"> × {{
                   competition.participantCount
                   }}</el-tag>
-              </n-flex>
-            </n-flex>
-          </n-flex>
+              </x-flex>
+            </x-flex>
+          </x-flex>
         </el-card>
       </el-card>
       <!-- 分页 -->
       <el-card>
-        <n-flex justify="center">
+        <x-flex justify="center">
           <el-pagination background layout="total, sizes, prev, pager, next" :page-sizes="[5, 10]" :total="total"
             :page-size="pageSize" :current-page="pageNo" @update:current-page="handleCurrentChange"
             @update:page-size="handleSizeChange" />
-        </n-flex>
+        </x-flex>
       </el-card>
-    </n-flex>
+    </x-flex>
   </div>
 </template>
 
@@ -187,6 +187,11 @@ const toContestDetail = (contestID: number) => {
 </script>
 
 <style lang="css" scoped>
+.contest-image {
+  width: 150px;
+  flex-shrink: 0;
+}
+
 .container {
   height: 100%;
   width: 100%;

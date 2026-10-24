@@ -1,15 +1,16 @@
 <template>
-    <n-flex class="container" :size="[0,0]">
+    <x-flex class="container" :size="[0,0]">
         <el-splitter :layout="layout" style="height: 100%;width: 100%;">
             <el-splitter-panel collapsible min="25%">
                 <!-- 题目详细 -->
                 <el-tabs v-model="activeTabName" type="border-card" @tab-click="handleTabClick" style="height: 100%;width: 100%;">
                     <el-tab-pane label="题目详细" name="problemDetail" style="height: 100%;font-family: Consolas;">
                         <el-scrollbar style="height: 100%;">
-                            <n-flex vertical>
-                                <n-card :title="problem.title">
+                            <x-flex vertical>
+                                <el-card class="problem-card" shadow="never">
+                                    <template #header>{{ problem.title }}</template>
                                     <div class="content-head-detail">
-                                        <n-flex vertical>
+                                        <x-flex vertical>
                                             <p>题目 ID: {{ problem.problemId }}</p>
                                             <p>出题人: 
                                             <el-link @click="handToUserInfo(problem.authorUsername)" underline="never" style="font-size: 16px;">
@@ -26,27 +27,32 @@
                                                 <el-tag style="font-size: 14px;">空间限制</el-tag> 
                                                 C/C++ {{ formatSubmissionMemory(problem.memoryLimit)}}, 其他语言 {{ formatSubmissionMemory(2*problem.memoryLimit) }}
                                             </p>
-                                        </n-flex>
+                                        </x-flex>
                                     </div>
-                                </n-card>
-                                <n-card title="题目描述">
+                                </el-card>
+                                <el-card class="problem-card" shadow="never">
+                                    <template #header>题目描述</template>
                                     <MarkdownPreview :content="problem.content"/>
-                                </n-card>
-                                <n-card title="输入描述">
+                                </el-card>
+                                <el-card class="problem-card" shadow="never">
+                                    <template #header>输入描述</template>
                                     <MarkdownPreview :content="problem.input"/>
-                                </n-card>
-                                <n-card title="输出描述">
+                                </el-card>
+                                <el-card class="problem-card" shadow="never">
+                                    <template #header>输出描述</template>
                                     <MarkdownPreview :content="problem.output"/>
-                                </n-card>
-                                <n-card title="测试用例">
-                                    <n-collapse>
-                                        <n-collapse-item
+                                </el-card>
+                                <el-card class="problem-card" shadow="never">
+                                    <template #header>测试用例</template>
+                                    <el-collapse class="problem-cases" expand-icon-position="left">
+                                        <el-collapse-item
                                             v-for="(test, index) in problem.problemCaseList"
                                             :key="index"
+                                            :name="index"
                                             :title="`测试用例${index+1}`"
                                         >
-                                            <n-flex vertical>
-                                                <n-flex>
+                                            <x-flex vertical>
+                                                <x-flex>
                                                     <h4>
                                                         用例输入
                                                         <el-button 
@@ -57,16 +63,17 @@
                                                             <el-icon size="16"><DocumentCopy /></el-icon>
                                                         </el-button>
                                                     </h4>
-                                                    <n-input
+                                                    <el-input
                                                         placeholder="用例输入"
                                                         type="textarea"
                                                         size="small"
                                                         autosize
-                                                        v-model:value="test.input"
                                                         readonly
+                                                        resize="none"
+                                                        :model-value="test.input"
                                                     />
-                                                </n-flex>
-                                                <n-flex>
+                                                </x-flex>
+                                                <x-flex>
                                                     <h4>
                                                         用例输出
                                                         <el-button 
@@ -77,31 +84,33 @@
                                                             <el-icon size="16"><DocumentCopy /></el-icon>
                                                         </el-button>
                                                     </h4>
-                                                    <n-input
+                                                    <el-input
                                                         placeholder="用例输出"
                                                         type="textarea"
                                                         size="small"
                                                         autosize
                                                         readonly
-                                                        v-model:value="test.output"
+                                                        resize="none"
+                                                        :model-value="test.output"
                                                     />
-                                                </n-flex>
-                                                <n-flex>
+                                                </x-flex>
+                                                <x-flex>
                                                     <h4>备注</h4>
-                                                    <n-input
+                                                    <el-input
                                                         placeholder="备注"
                                                         type="textarea"
                                                         size="small"
                                                         autosize
-                                                        v-model:value="test.note"
                                                         readonly
+                                                        resize="none"
+                                                        :model-value="test.note"
                                                     />
-                                                </n-flex>
-                                            </n-flex>
-                                        </n-collapse-item>
-                                    </n-collapse>
-                                </n-card>
-                            </n-flex>
+                                                </x-flex>
+                                            </x-flex>
+                                        </el-collapse-item>
+                                    </el-collapse>
+                                </el-card>
+                            </x-flex>
                         </el-scrollbar> 
                     </el-tab-pane>
                     <!-- 用户当前题目提交记录 -->
@@ -177,7 +186,7 @@
                 />
             </el-splitter-panel>
         </el-splitter>
-    </n-flex>
+    </x-flex>
 </template>
 
 <script setup lang="ts">
@@ -201,7 +210,7 @@ const route=useRoute();
 const router=useRouter();
 const { toClipboard }=useClipboard();
 const isMobile=ref<boolean>(false);
-const layout=ref<string>("horizontal");
+const layout=ref<'horizontal' | 'vertical'>("horizontal");
 const activeTabName=ref<string>("problemDetail");
 const problemId=ref<string>('');
 const isContest=ref<boolean>(false);
@@ -391,11 +400,38 @@ const copyText = async (text: string) => {
     border-left: 3px solid #51a2f4;
     padding: 20px;
 }
-:deep(.n-card-header__main){
-    color: #7cb9f7 !important;
+.problem-card {
+    border-color: #efeff5;
+    border-radius: 3px;
+    color: #333639;
+    line-height: 1.6;
 }
-:deep(.n-card__content){
-    font-size: 16px !important;
+:deep(.problem-card > .el-card__header) {
+    padding: 19px 24px 20px;
+    border-bottom: 0;
+    color: #7cb9f7;
+    font-size: 18px;
+    font-weight: 500;
+}
+:deep(.problem-card > .el-card__body) {
+    padding: 0 24px 20px;
+    font-size: 16px;
+}
+.problem-cases {
+    border: 0;
+    --el-collapse-header-height: 24px;
+}
+:deep(.problem-cases .el-collapse-item__header),
+:deep(.problem-cases .el-collapse-item__wrap) {
+    border-bottom: 0;
+}
+:deep(.problem-cases .el-collapse-item + .el-collapse-item) {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #efeff5;
+}
+:deep(.problem-cases .el-collapse-item__content) {
+    padding: 16px 0 0;
 }
 /* 隐藏 el-scrollbar 的滚动条（但内容仍可滚动） */
 :deep(.el-scrollbar__bar) {

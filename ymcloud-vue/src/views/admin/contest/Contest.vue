@@ -7,7 +7,7 @@
           {{ mode === 'edit' ? '编辑比赛' : '创建比赛' }}
         </span>
       </template>
-      <n-flex vertical :size="[12, 12]" style="width: 100%; padding: 15px">
+      <x-flex vertical :size="[12, 12]" style="width: 100%; padding: 15px">
         <!-- 基础信息 -->
         <el-form
           ref="formRef"
@@ -122,7 +122,7 @@
             <MarkdownEidt v-model:content="contest.description" :key="`description-${mode}-${contestId}`" />
           </el-form-item>
         </el-form>
-      </n-flex>
+      </x-flex>
       <template #footer>
         <el-button
           v-permission="mode === 'edit' ? ['contest:contest:edit'] : ['contest:contest:add']"

@@ -1,10 +1,10 @@
 <template>
   <div class="contest-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <!-- 搜索区域 -->
         <el-form :model="queryParams" label-width="auto">
-          <n-flex :size="10">
+          <x-flex :size="10">
             <el-form-item label="关键词" prop="keyword">
               <el-input v-model="queryParams.keyword" placeholder="请输入比赛标题或创建者" clearable />
             </el-form-item>
@@ -12,11 +12,11 @@
               <el-button type="primary" :icon="Search" @click="handleQuery">搜索</el-button>
               <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>
-          </n-flex>
+          </x-flex>
         </el-form>
         
         <!-- 操作区域 -->
-        <n-flex :size="10" align="center" style="padding-bottom: 15px;">
+        <x-flex :size="10" align="center" style="padding-bottom: 15px;">
           <el-button
             v-permission="['contest:contest:add']"
             plain
@@ -36,7 +36,7 @@
           >
             删除
           </el-button>
-        </n-flex>
+        </x-flex>
         
         <!-- 比赛列表 -->
         <el-table :data="contestList" v-loading="loading" @selection-change="handleSelectionChange">
@@ -76,7 +76,7 @@
           </el-table-column>
           <el-table-column label="操作" width="260" align="center">
             <template #default="scope">
-              <n-flex :size="0" justify="center">
+              <x-flex :size="0" justify="center">
                 <el-button
                   v-permission="['contest:contest:query', 'contest:contest:edit']"
                   class="operation-button" 
@@ -121,13 +121,13 @@
                 >
                   删除
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
         </el-table>
 
         <!-- 分页 -->
-        <n-flex justify="center" style="margin-top: 20px;">
+        <x-flex justify="center" style="margin-top: 20px;">
           <el-pagination 
             :page-size="queryParams.pageSize" 
             :current-page="queryParams.pageNo" 
@@ -138,9 +138,9 @@
             @update:current-page="handleCurrentChange" 
             @update:page-size="handleSizeChange" 
           />
-        </n-flex>
+        </x-flex>
       </el-card>
-    </n-flex>
+    </x-flex>
   </div>
 </template>
 

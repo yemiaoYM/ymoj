@@ -3,7 +3,7 @@
     v-if="settings?.filingEnabled && (settings.icpFilingNumber || settings.policeFilingNumber)"
     class="site-filing"
   >
-    <n-flex justify="center" align="center" :size="16">
+    <x-flex justify="center" align="center" :size="16">
       <a
         v-if="settings.policeFilingNumber"
         class="filing-link"
@@ -25,7 +25,7 @@
         rel="noopener noreferrer"
         target="_blank"
       >{{ settings.icpFilingNumber }}</a>
-    </n-flex>
+    </x-flex>
   </footer>
 </template>
 

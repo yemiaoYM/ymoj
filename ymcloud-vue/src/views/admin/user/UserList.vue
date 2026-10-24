@@ -1,10 +1,10 @@
 <template>
   <div class="user-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <!-- 搜索区域 -->
         <el-form :model="queryParams" ref="queryFormRef" label-width="auto">
-          <n-flex :size="10">
+          <x-flex :size="10">
             <el-form-item label="用户名" prop="username">
               <el-input v-model="queryParams.username" placeholder="请输入用户名" clearable />
             </el-form-item>
@@ -21,10 +21,10 @@
               <el-button type="primary" :icon="Search" @click="handleQuery">搜索</el-button>
               <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
             </el-form-item>
-          </n-flex>
+          </x-flex>
         </el-form>
         <!-- 操作区域 -->
-        <n-flex :size="10" align="center" style="padding-bottom: 15px;">
+        <x-flex :size="10" align="center" style="padding-bottom: 15px;">
           <el-button
             v-permission="['user:user:add']"
             plain
@@ -54,7 +54,7 @@
           >
             删除
           </el-button>
-        </n-flex>
+        </x-flex>
         <!-- 用户列表 -->
         <el-table :data="userList" v-loading="loading" @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="55" align="center" />
@@ -81,7 +81,7 @@
           <el-table-column label="创建时间" prop="createdTime" width="160" align="center" />
           <el-table-column label="操作" min-width="200" align="center">
             <template #default="scope">
-              <n-flex :size="0" justify="center" v-if="scope.row.id !== 1">
+              <x-flex :size="0" justify="center" v-if="scope.row.id !== 1">
                 <el-button
                   v-permission="['user:user:query', 'user:user:edit']"
                   class="operation-button"
@@ -127,35 +127,35 @@
                 >
                   删除
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
         </el-table>
 
         <!-- 分页 -->
-        <n-flex justify="center" style="margin-top: 20px;">
+        <x-flex justify="center" style="margin-top: 20px;">
           <el-pagination :page-size="queryParams.pageSize" :current-page="queryParams.pageNo" :total="total"
             :page-sizes="[15, 25, 50]" background layout="total, sizes, prev, pager, next"
             @update:current-page="handleCurrentChange" @update:page-size="handleSizeChange" />
-        </n-flex>
+        </x-flex>
       </el-card>
-    </n-flex>
+    </x-flex>
 
     <!-- 添加或修改用户配置对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px" :close-on-click-modal="false" destroy-on-close
       top="5vh" append-to-body>
       <el-form :model="userForm" :rules="userRules" ref="userFormRef" label-width="auto">
-        <n-flex vertical :size="16">
-          <n-flex :size="16">
+        <x-flex vertical :size="16">
+          <x-flex :size="16">
             <el-form-item label="用户名" prop="username" style="flex: 1;">
               <el-input v-model="userForm.username" placeholder="请输入用户名" />
             </el-form-item>
             <el-form-item label="昵称" prop="nickname" style="flex: 1;">
               <el-input v-model="userForm.nickname" placeholder="请输入昵称" />
             </el-form-item>
-          </n-flex>
+          </x-flex>
 
-          <n-flex :size="16">
+          <x-flex :size="16">
             <el-form-item label="邮箱" prop="email" style="flex: 1;">
               <el-input v-model="userForm.email" placeholder="请输入邮箱" />
             </el-form-item>
@@ -166,7 +166,7 @@
                 <el-radio label="女" value="女">女</el-radio>
               </el-radio-group>
             </el-form-item>
-          </n-flex>
+          </x-flex>
 
           <el-form-item label="学校" prop="school">
             <el-input v-model="userForm.school" placeholder="请输入学校" />
@@ -182,12 +182,12 @@
           </el-form-item>
 
           <el-form-item v-if="userForm.id !== null" label="头像" prop="avatar">
-            <n-flex style="width: 100%;">
+            <x-flex style="width: 100%;">
               <Avatar :src="userForm.avatar" :text="userForm.username" :size="80" />
               <el-input v-model="userForm.avatar" disabled></el-input>
               <!-- 重置头像 -->
               <el-button type="primary" @click="userForm.avatar = null">重置头像</el-button>
-            </n-flex>
+            </x-flex>
           </el-form-item>
 
           <el-form-item label="状态" prop="status">
@@ -201,11 +201,11 @@
             <el-input v-model="userForm.password" type="password" placeholder="请输入密码" show-password
               autocomplete="new-password" />
           </el-form-item>
-        </n-flex>
+        </x-flex>
       </el-form>
 
       <template #footer>
-        <n-flex justify="end" :size="12">
+        <x-flex justify="end" :size="12">
           <el-button @click="dialogVisible = false">取消</el-button>
           <el-button
             v-permission="userForm.id === null ? ['user:user:add'] : ['user:user:edit']"
@@ -215,7 +215,7 @@
           >
             确定
           </el-button>
-        </n-flex>
+        </x-flex>
       </template>
     </el-dialog>
 

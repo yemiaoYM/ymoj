@@ -24,30 +24,30 @@
     @closed="handleRelease"
   >
     <el-scrollbar max-height="70vh">
-      <n-flex vertical :size="16">
-        <n-flex justify="space-between" align="center">
+      <x-flex vertical :size="16">
+        <x-flex justify="space-between" align="center">
           <el-text type="info">拖动选框或边角裁剪，滚轮／双指缩放图片。</el-text>
           <el-tag>{{ aspectRatio.join(':') }} 固定比例</el-tag>
-        </n-flex>
+        </x-flex>
         <div class="crop-stage" tabindex="0" aria-label="图片裁剪区域，可用方向键移动图片" @keydown="onMoveImage">
           <img ref="imageRef" alt="待裁剪原图" :src="imageUrl" />
         </div>
-        <n-flex justify="center" :size="8">
+        <x-flex justify="center" :size="8">
           <el-button aria-label="向左旋转90度" title="向左旋转90度" :icon="RefreshLeft" :disabled="!ready || exporting" @click="onRotate(-90)" />
           <el-button aria-label="向右旋转90度" title="向右旋转90度" :icon="RefreshRight" :disabled="!ready || exporting" @click="onRotate(90)" />
           <el-button aria-label="缩小图片" title="缩小图片" :icon="ZoomOut" :disabled="!ready || exporting" @click="onZoom(-0.1)" />
           <el-button aria-label="放大图片" title="放大图片" :icon="ZoomIn" :disabled="!ready || exporting" @click="onZoom(0.1)" />
           <el-button aria-label="重置裁剪" title="重置裁剪" :icon="Refresh" :disabled="!ready || exporting" @click="onReset" />
-        </n-flex>
-        <n-flex align="center" :size="16">
+        </x-flex>
+        <x-flex align="center" :size="16">
           <div ref="previewRef" class="crop-result" aria-label="裁剪结果预览" :style="{ aspectRatio: ratio }" />
-          <n-flex vertical :size="4">
+          <x-flex vertical :size="4">
             <el-text>结果预览</el-text>
             <el-text type="info" size="small">选区 {{ selectionSize }} px</el-text>
             <el-text type="info" size="small">导出 {{ outputWidth }} × {{ outputHeight }} px</el-text>
-          </n-flex>
-        </n-flex>
-      </n-flex>
+          </x-flex>
+        </x-flex>
+      </x-flex>
     </el-scrollbar>
     <template #footer>
       <el-button :disabled="exporting" @click="onClose">取消</el-button>

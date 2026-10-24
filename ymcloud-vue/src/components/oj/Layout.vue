@@ -1,12 +1,12 @@
 <template>
-  <el-container style="height: 100vh">
+  <el-container class="oj-layout">
     <el-header>
       <CommonHeader/>
     </el-header>
     <el-main>
-      <el-scrollbar>
+      <el-scrollbar class="oj-content" height="100%">
         <router-view />
-        <el-backtop :right="40" :bottom="60" target=".el-scrollbar__wrap"/>
+        <el-backtop target=".oj-content > .el-scrollbar__wrap" :right="40" :bottom="60"/>
       </el-scrollbar>
     </el-main>
   </el-container>
@@ -19,7 +19,14 @@ const CommonHeader = defineAsyncComponent(() => import('@/components/oj/CommonHe
 </script>
 
 <style scoped lang="css">
+.oj-layout {
+  height: 100vh;
+  height: 100dvh;
+}
 .el-main{
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 0;
   background-color: #eff3f5;
 }

@@ -1,6 +1,6 @@
 <template>
   <div class="system-setting-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card v-loading="loading">
         <template #header>
           <span class="card-title">网站设置</span>
@@ -63,7 +63,7 @@
             :closable="false"
           />
         </el-form>
-        <n-flex>
+        <x-flex>
           <el-button
             v-if="canEdit"
             type="primary"
@@ -74,10 +74,10 @@
           <el-button :icon="Refresh" :disabled="saving || loading" @click="onReloadSetting">
             {{ loaded ? '刷新' : '重新加载' }}
           </el-button>
-        </n-flex>
+        </x-flex>
       </el-card>
       <CarouselSetting />
-    </n-flex>
+    </x-flex>
   </div>
 </template>
 

@@ -1,6 +1,6 @@
 <template>
   <div class="contest-problem-management">
-    <n-flex vertical :size="16">
+    <x-flex vertical :size="16">
       <el-card>
         <template #header>
           <span style="font-size: 18px; font-weight: 600; color: #409eff;">
@@ -9,7 +9,7 @@
         </template>
         
         <!-- 操作区域 -->
-        <n-flex :size="10" align="center" style="padding-bottom: 15px;">
+        <x-flex :size="10" align="center" style="padding-bottom: 15px;">
           <el-button
             v-permission="['contest:problem:add']"
             plain
@@ -29,7 +29,7 @@
           >
             移除选中题目
           </el-button>
-        </n-flex>
+        </x-flex>
         
         <!-- 题目列表 -->
         <el-table :data="contestProblemList" v-loading="loading" @selection-change="handleSelectionChange">
@@ -37,27 +37,27 @@
           <el-table-column label="ID" prop="id" width="100" align="center" />
           <el-table-column label="原题显示" min-width="150" align="center" show-overflow-tooltip>
             <template #default="scope">
-              <n-flex :size="8" vertical style="font-family: Consolas;">
+              <x-flex :size="8" vertical style="font-family: Consolas;">
                 <span>展示ID: {{ scope.row.problemDisplayId }}</span>
                 <span>标题: {{ scope.row.problemDisplayTitle }}</span>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
           <el-table-column label="比赛显示" min-width="150" align="center" show-overflow-tooltip>
             <template #default="scope">
-              <n-flex :size="8" vertical style="font-family: Consolas;">
+              <x-flex :size="8" vertical style="font-family: Consolas;">
                 <span>展示ID: {{ scope.row.displayId }}</span>
                 <span>标题: {{ scope.row.displayTitle }}</span>
-                <n-flex align="center" justify="center">
-                  气球颜色: <n-icon :size="30" :component="Balloon" :color="scope.row.color"></n-icon>
-                </n-flex>
-              </n-flex>
+                <x-flex align="center" justify="center">
+                  气球颜色: <el-icon :size="30" :color="scope.row.color"><component :is="Balloon" /></el-icon>
+                </x-flex>
+              </x-flex>
             </template>
           </el-table-column>
           <el-table-column label="作者" prop="authorUsername" width="180" align="center" />
           <el-table-column label="操作" width="200" align="center">
             <template #default="scope">
-              <n-flex :size="5" justify="center">
+              <x-flex :size="5" justify="center">
                 <el-button
                   v-permission="['contest:problem:edit']"
                   class="operation-button" 
@@ -80,12 +80,12 @@
                 >
                   移除
                 </el-button>
-              </n-flex>
+              </x-flex>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
-    </n-flex>
+    </x-flex>
 
     <!-- 添加题目对话框 -->
     <el-dialog 
@@ -97,7 +97,7 @@
       <div class="add-problem-content">
         <!-- 搜索区域 -->
         <el-form :model="problemSearchParams" label-width="auto" style="margin-bottom: 20px;">
-          <n-flex :size="10">
+          <x-flex :size="10">
             <el-form-item label="关键词">
               <el-input 
                 v-model="problemSearchParams.keyword" 
@@ -119,7 +119,7 @@
             <el-form-item>
               <el-button type="primary" @click="searchProblems">搜索题目</el-button>
             </el-form-item>
-          </n-flex>
+          </x-flex>
         </el-form>
 
         <!-- 题目选择表格 -->
@@ -143,7 +143,7 @@
         </el-table>
 
         <!-- 分页 -->
-        <n-flex justify="center" style="margin-top: 15px;">
+        <x-flex justify="center" style="margin-top: 15px;">
           <el-pagination 
             :page-size="problemSearchParams.pageSize" 
             :current-page="problemSearchParams.pageNo" 
@@ -154,7 +154,7 @@
             @update:current-page="handleProblemSearchPageChange" 
             @update:page-size="handleProblemSearchSizeChange" 
           />
-        </n-flex>
+        </x-flex>
       </div>
       
       <template #footer>
@@ -194,14 +194,14 @@
           />
         </el-form-item>
         <el-form-item label="气球颜色" prop="color">
-          <n-flex align="center" :size="12">
+          <x-flex align="center" :size="12">
             <el-color-picker v-model="editingProblem.color" />
             <el-input 
               v-model="editingProblem.color" 
               placeholder="#ff4757"
               style="width: 120px;"
             />
-          </n-flex>
+          </x-flex>
         </el-form-item>
       </el-form>
       

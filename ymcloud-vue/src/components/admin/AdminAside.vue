@@ -10,9 +10,9 @@
     :unique-opened="true"
     @select="onSelect"
   >
-    <n-flex class="menu-brand" justify="center" align="center">
+    <x-flex class="menu-brand" justify="center" align="center">
       <BrandLogo class="menu-logo" :class="{ 'is-collapsed': collapse }" :compact="collapse" />
-    </n-flex>
+    </x-flex>
     <el-menu-item index="/admin/index">
       <el-icon><Odometer /></el-icon>
       <template #title>仪表盘</template>

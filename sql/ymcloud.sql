@@ -553,38 +553,28 @@ INSERT INTO `role_auth` (`role_id`, `auth_id`) VALUES
 INSERT INTO `language` (`id`, `name`, `image`, `env`, `version`, `content_type`, `file_name`, `file_extension`, `compile_cmd`, `run_cmd`, `template_code`, `code_template`, `type`, `status`, `oj`) VALUES
     (1, 'C++', 'go-judge:v1.13.3', 'debian12-toolchains', 'G++ 12.2.0 (C++17)', 'text/x-c++src', 'main.cpp', '.cpp', 'g++ -O2 -w -fmax-errors=3 -std=c++17 main.cpp -lm -o main', './main', '#include <iostream>
 using namespace std;
-
 int main() {
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
-    // 在这里编写解题代码
+    int a, b;
+    cin >> a >> b;
+    cout << a + b << endl;
     return 0;
-}
-', NULL, 0, 1, 'myy'),
+}', NULL, 0, 1, 'myy'),
     (2, 'C', 'go-judge:v1.13.3', 'debian12-toolchains', 'GCC 12.2.0 (C11)', 'text/x-csrc', 'main.c', '.c', 'gcc -O2 -w -fmax-errors=3 -std=c11 main.c -lm -o main', './main', '#include <stdio.h>
-
-int main(void) {
-    // 在这里编写解题代码
+int main() {
+    int a, b;
+    scanf("%d %d", &a, &b);
+    printf("%d\\n", a + b);
     return 0;
-}
-', NULL, 0, 1, 'myy'),
-    (3, 'Java', 'go-judge:v1.13.3', 'debian12-toolchains', 'OpenJDK 17.0.20.1', 'text/x-java', 'Main.java', '.java', 'javac -encoding UTF8 Main.java', 'java Main', 'import java.util.Scanner;
-
-public class Main {
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        // 在这里编写解题代码
+}', NULL, 0, 1, 'myy'),
+    (3, 'Java', 'go-judge:v1.13.3', 'debian12-toolchains', 'OpenJDK 17.0.20.1', 'text/x-java', 'Main.java', '.java', 'javac -encoding UTF8 Main.java', 'java Main', 'public class Main {
+    public static void main(String[] args) throws Exception {
+        java.util.Scanner sc = new java.util.Scanner(System.in);
+        int a = sc.nextInt(), b = sc.nextInt();
+        System.out.println(a + b);
     }
-}
-', NULL, 0, 1, 'myy'),
-    (4, 'Python', 'go-judge:v1.13.3', 'debian12-toolchains', 'Python 3.11.2', 'text/x-python', 'main.py', '.py', 'python3 -m py_compile main.py', 'python3 main.py', 'def main():
-    # 在这里编写解题代码
-    pass
-
-
-if __name__ == "__main__":
-    main()
-', NULL, 1, 1, 'myy');
+}', NULL, 0, 1, 'myy'),
+    (4, 'Python', 'go-judge:v1.13.3', 'debian12-toolchains', 'Python 3.11.2', 'text/x-python', 'main.py', '.py', 'python3 -m py_compile main.py', 'python3 main.py', 'a, b = map(int, input().split())
+print(a + b)', NULL, 1, 1, 'myy');
 
 INSERT INTO `system_setting` (`setting_key`, `setting_value`) VALUES
     ('register_enabled', 'true');

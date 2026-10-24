@@ -2,8 +2,8 @@
   <div class="editor-container">
     <!-- 编辑器配置 -->
     <div class="editor-config-header">
-      <n-flex justify="space-between" style="width: 100%;margin-bottom: 10px;">
-        <n-flex>
+      <x-flex justify="space-between" style="width: 100%;margin-bottom: 10px;">
+        <x-flex>
           <el-select
             v-model="selectedLanguage"
             placeholder="选择语言"
@@ -23,8 +23,8 @@
           <el-button @click="uploadCode" aria-label="上传代码">
             <el-icon><UploadFilled /></el-icon>
           </el-button>
-        </n-flex>
-        <n-flex>
+        </x-flex>
+        <x-flex>
           <el-tag effect="dark" size="large">主题</el-tag>
           <el-select
             id="theme-select"
@@ -41,8 +41,8 @@
               :value="item.value"
             />
           </el-select>
-        </n-flex>
-      </n-flex>
+        </x-flex>
+      </x-flex>
     </div>
 
     <!-- 编辑器 -->
@@ -64,9 +64,9 @@
       <el-tabs type="border-card" v-model="activeTabName" style="height: 100%;">
         <el-tab-pane label="自测输入" name="test" style="height: 100%;">
           <el-scrollbar height="100%">
-            <n-flex vertical style="height: 100%;padding: 10px;">
+            <x-flex vertical style="height: 100%;padding: 10px;">
               <!-- 载入用例 -->
-              <n-flex style="margin-bottom: 10px;">
+              <x-flex style="margin-bottom: 10px;">
                 <el-tag
                   v-for="(item, index) in problemCaseList"
                   :key="index"
@@ -77,36 +77,36 @@
                   size="large"
                   style="margin-right: 10px; cursor: pointer;"
                 >载入用例{{index+1}}</el-tag>
-              </n-flex>
+              </x-flex>
               <!-- 自测输入 -->
-              <n-flex>
+              <x-flex>
                 <span style="flex: 1;text-align: center;">自测输入</span>
-                <n-input
+                <el-input
+                  style="flex: 10;"
                   placeholder="请输入自测输入"
                   type="textarea"
                   resize="none"
                   size="small"
-                  :autosize="{ minRows: 1, maxRows: 10}"
-                  style="flex: 10;"
-                  v-model:value="userInput"
                   maxlength="1000"
+                  v-model="userInput"
+                  :autosize="{ minRows: 1, maxRows: 10}"
                 />
-              </n-flex>
+              </x-flex>
               <!-- 预期输出 -->
-              <n-flex>
+              <x-flex>
                 <span style="flex: 1;text-align: center;">预期输出</span>
-                <n-input
+                <el-input
+                  style="flex: 10;"
                   placeholder="请输入预期输出"
                   type="textarea"
                   resize="none"
                   size="small"
-                  :autosize="{ minRows: 1, maxRows: 10}"
-                  style="flex: 10;"
-                  v-model:value="expectedOutput"
                   maxlength="1000"
+                  v-model="expectedOutput"
+                  :autosize="{ minRows: 1, maxRows: 10}"
                 />
-              </n-flex>
-            </n-flex>
+              </x-flex>
+            </x-flex>
           </el-scrollbar>
         </el-tab-pane>
         <el-tab-pane label="运行结果" name="result" style="height: 100%;">
@@ -120,19 +120,19 @@
                   :closable="false"
                   style="padding: 20px;"
               >
-                  <n-flex style="padding: 10px 0px;">
-                      <n-flex align="center">
-                          <n-icon :component="TimeOutline" size="25"/>
+                  <x-flex style="padding: 10px 0px;">
+                      <x-flex align="center">
+                          <el-icon size="25"><component :is="TimeOutline" /></el-icon>
                           <span>运行时间 {{ formatSubmissionTime(judgeResult.time) }}</span>
-                      </n-flex>
-                      <n-flex align="center">
-                          <n-icon :component="HardwareChipSharp" size="25"/>
+                      </x-flex>
+                      <x-flex align="center">
+                          <el-icon size="25"><component :is="HardwareChipSharp" /></el-icon>
                           <span>运行内存 {{ formatSubmissionMemory(judgeResult.memory) }}</span>
-                      </n-flex>
-                  </n-flex>
+                      </x-flex>
+                  </x-flex>
               </el-alert>
-              <n-flex vertical style="margin-top: 15px;">
-                <n-flex>
+              <x-flex vertical style="margin-top: 15px;">
+                <x-flex>
                   <span style="flex: 1;text-align: center;">自测输入</span>
                   <el-input
                     style="flex: 10;"
@@ -142,8 +142,8 @@
                     :autosize="{ minRows: 1, maxRows: 4}"
                     v-model="judgeResult.input"
                   />
-                </n-flex>
-                <n-flex>
+                </x-flex>
+                <x-flex>
                   <span style="flex: 1;text-align: center;">预期输出</span>
                   <el-input
                     style="flex: 10;"
@@ -153,8 +153,8 @@
                     :autosize="{ minRows: 1, maxRows: 4}"
                     v-model="judgeResult.expectedOutput"
                   />
-                </n-flex>
-                <n-flex>
+                </x-flex>
+                <x-flex>
                   <span style="flex: 1;text-align: center;">实际输出</span>
                   <el-input
                     style="flex: 10;"
@@ -164,8 +164,8 @@
                     :autosize="{ minRows: 1, maxRows: 4}"
                     v-model="judgeResult.output"
                   />
-                </n-flex>
-                <n-flex v-if="judgeResult.errorMessage">
+                </x-flex>
+                <x-flex v-if="judgeResult.errorMessage">
                   <span style="flex: 1;text-align: center;">错误信息</span>
                   <span style="flex: 10;
                               background-color: #f5f5f5;
@@ -175,10 +175,10 @@
                   >
                     <pre style="font-family: Consolas;">{{ judgeResult.errorMessage }}</pre>
                   </span>
-                </n-flex>
-              </n-flex>
+                </x-flex>
+              </x-flex>
             </div>
-            <n-empty description="保存并提交之后，这里将会显示运行结果" v-else/>
+            <el-empty v-else class="judge-empty" description="保存并提交之后，这里将会显示运行结果" :image-size="40" />
           </el-scrollbar>
         </el-tab-pane>
         <el-tab-pane name="test-play" disabled>
@@ -200,8 +200,8 @@
     </div>
 
     <!-- 状态栏 -->
-    <n-flex justify="space-between" style="width: 100%;margin-top: 10px;">
-      <n-flex :wrap="false" align="center">
+    <x-flex justify="space-between" style="width: 100%;margin-top: 10px;">
+      <x-flex :wrap="false" align="center">
         <!-- 已解决 -->
         <el-alert
           v-if="accepted && Object.keys(judgeResult).length == 0"
@@ -222,7 +222,7 @@
           :type="getStatusType(judgeResult.status).tag"
           style="padding: 20px;"
         >
-          <n-flex justify="center" align="center">
+          <x-flex justify="center" align="center">
             <template v-if="judgeResult.status == 'Pending' 
             || judgeResult.status == 'Compiling' 
             || judgeResult.status == 'Judging' 
@@ -232,10 +232,10 @@
             <span style="font-size: 15px;font-family: Consolas;">
               {{ judgeResult.status }}
             </span>
-          </n-flex>
+          </x-flex>
         </el-tag>
-      </n-flex>
-      <n-flex>
+      </x-flex>
+      <x-flex>
         <el-button
           type="success"
           effect="dark"
@@ -255,8 +255,8 @@
         >
           <el-icon style="margin-right: 10px;"><Edit/></el-icon>提交测评
         </el-button>
-      </n-flex>
-    </n-flex>
+      </x-flex>
+    </x-flex>
   </div>
 </template>
 
@@ -264,7 +264,6 @@
 //import
 import { onMounted, onUnmounted, ref, type PropType } from 'vue';
 import { ElMessage,ElMessageBox } from 'element-plus';
-import { NFlex, NInput,NEmpty,NIcon,NCard } from 'naive-ui';
 import { TimeOutline,HardwareChipSharp,Bug } from '@vicons/ionicons5';
 import type { ProblemCaseVO,LanguageVO,EditorCache,JudgeResult } from '@/type/types';
 import { getStatusType,formatSubmissionTime,formatSubmissionMemory } from '@/utils/utils';
@@ -301,12 +300,7 @@ import "codemirror/addon/fold/indent-fold.js";
 export default {
   name: 'CodeMirrorEditor',
   components: {
-      Codemirror,
-      NInput,
-      NFlex,
-      NEmpty,
-      NIcon,
-      NCard
+      Codemirror
   },
   //props接收父组件传递的数据
   props: {
@@ -745,6 +739,10 @@ export default {
 }
 .editor-judge{
   height: 40%;
+}
+.judge-empty {
+  --el-empty-padding: 0;
+  --el-empty-description-margin-top: 8px;
 }
 .judge-loading{
   display: inline-block;

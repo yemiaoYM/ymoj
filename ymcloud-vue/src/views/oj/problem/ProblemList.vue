@@ -1,34 +1,57 @@
 <template>
   <div class="container">
-    <n-flex vertical class="l-content">
+    <x-flex vertical class="l-content">
       <el-card>
         <template #header>
-          <n-flex justify="space-between">
+          <x-flex justify="space-between" align="center">
             <span style="font-size: 20px;font-weight: bold;">题目筛选</span>
-            <el-button style="margin-right: 15px;" round type="primary" :icon="Refresh" @click="reset">重置</el-button>
-          </n-flex>
+            <el-button round type="primary" :icon="Refresh" @click="reset">重置</el-button>
+          </x-flex>
         </template>
 
-        <span style="margin-right: 20px;">难度</span>
-        <el-segmented v-model="query.difficulty" :options="difficultyList" size="large" @change="pushRouter" />
-        <el-divider />
-        <n-flex>
-          <el-input style="width: 50%" placeholder="请输入搜索题目/题号" v-model="query.keyword" size="large" clearable>
-            <template #append>
-              <el-button @click="pushRouter">
-                <el-icon>
-                  <Search />
-                </el-icon>
-              </el-button>
+        <x-flex vertical :size="20">
+          <el-input
+            class="problem-search"
+            aria-label="搜索题目或题号"
+            placeholder="搜索题目名称或题号…"
+            size="large"
+            clearable
+            v-model="query.keyword"
+            :prefix-icon="Search"
+            @keyup.enter="pushRouter"
+          >
+            <template #suffix>
+              <el-button type="primary" @click="pushRouter">搜索</el-button>
             </template>
           </el-input>
-          <!-- 显示标签 -->
-          <n-flex align="center">
-            <el-switch v-model="isLabel" class="mt-2" style="margin-left: 24px" inline-prompt :active-icon="Check"
-              :inactive-icon="Close" />
-            <span>显示标签</span>
-          </n-flex>
-        </n-flex>
+          <x-flex justify="space-between" align="center" :size="16">
+            <x-flex class="difficulty-filter" align="center" :size="12" :wrap="false">
+              <span>难度</span>
+              <el-radio-group
+                class="difficulty-options"
+                aria-label="题目难度"
+                v-model="query.difficulty"
+                @change="pushRouter"
+              >
+                <el-radio-button
+                  v-for="item in difficultyList"
+                  :key="item.value"
+                  :value="item.value"
+                >{{ item.label }}</el-radio-button>
+              </el-radio-group>
+            </x-flex>
+            <x-flex align="center" :size="8" :wrap="false">
+              <el-switch
+                aria-label="显示标签"
+                inline-prompt
+                v-model="isLabel"
+                :active-icon="Check"
+                :inactive-icon="Close"
+              />
+              <span>显示标签</span>
+            </x-flex>
+          </x-flex>
+        </x-flex>
       </el-card>
       <!-- 题目列表 -->
       <el-card>
@@ -38,19 +61,19 @@
         <!-- 表单 -->
         <el-skeleton v-if="problemListLoading" style="width: 100%;" :rows="10" />
         <el-table v-else :data="tableData" stripe style="width: 100%;" empty-text="暂无相关题目列表" highlight-current-row>
-          <el-table-column label="题目ID" prop="problemId">
+          <el-table-column label="题目ID" width="120" prop="problemId">
             <template #default="{ row }">
               <span style="font-weight: 600;">{{ row.problemId }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="题目">
+          <el-table-column min-width="250" label="题目">
             <template #default="{ row }">
               <span @click="doProblem(row.problemId)" style="color: #409EFF; cursor: pointer;font-weight: bold;">
                 {{ row.title }}
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="难度" width="150" align="center">
+          <el-table-column label="难度" width="120" align="center">
             <template #default="{ row }">
               <el-tag effect="dark" round disable-transitions size="large"
                 :type="difficultyList.find(e => e.value === row.difficulty)?.type" style="padding: 0px 20px;">
@@ -58,7 +81,7 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="标签" align="center">
+          <el-table-column label="标签" min-width="200" align="center">
             <template #default="{ row }">
               <div v-show="isLabel">
                 <el-tag disable-transitions v-for="tag in row.tagList" :key="tag.id" :color="tag.color"
@@ -86,27 +109,27 @@
             style="margin-top: 10px;" />
         </div>
       </el-card>
-    </n-flex>
-    <n-flex vertical class="r-content">
+    </x-flex>
+    <x-flex vertical class="r-content">
       <!-- 标签分类 -->
       <el-card style="padding: 10px;">
         <template #header>
           <span style="text-align: center;font-size: 20px;font-weight: bold;">标签分类</span>
         </template>
         <el-skeleton v-if="tagListLoading" style="width: 100%;" :rows="10" />
-        <n-flex v-else :size="8">
+        <x-flex v-else :size="8">
           <el-tag v-for="tag in tagsList" :key="tag.id" size="large" :color="tag.color"
             style="color: white;font-size: 15px;padding: 16px;">
             {{ tag.name }}
           </el-tag>
-        </n-flex>
+        </x-flex>
         <!-- 底部 -->
         <template #footer>
           <el-button type="primary" :icon="MagicStick" style="height: 40px;width: 100%;" @click="handRandomProblem"
             color="#626aef">随机选择一题</el-button>
         </template>
       </el-card>
-    </n-flex>
+    </x-flex>
   </div>
 </template>
 
@@ -114,8 +137,7 @@
 //import
 import { useRouter, useRoute } from 'vue-router';
 import { onMounted, ref, watch } from 'vue';
-import { NFlex } from 'naive-ui';
-import { MagicStick, Check, Close, Refresh } from '@element-plus/icons-vue'
+import { MagicStick, Check, Close, Refresh, Search } from '@element-plus/icons-vue';
 import type { Tag, ProblemTableVO } from '@/type/types';
 import { getTagsList, getProblemTableList, getRandomProblem } from '@/api/api';
 
@@ -263,10 +285,51 @@ watch(
 
 .l-content {
   flex: 2;
+  min-width: 0;
 }
 
 .r-content {
   flex: 1;
+}
+
+.problem-search {
+  --el-border-radius-base: 10px;
+  --el-input-border-color: #dce7fa;
+  height: 48px;
+}
+
+.problem-search :deep(.el-input__wrapper) {
+  padding: 0 8px 0 16px;
+}
+
+.problem-search :deep(.el-input__prefix) {
+  margin-right: 4px;
+  color: #7186a6;
+  font-size: 20px;
+}
+
+.problem-search :deep(.el-button) {
+  min-width: 68px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.difficulty-filter {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.difficulty-filter > span {
+  flex-shrink: 0;
+}
+
+.difficulty-options {
+  gap: 6px;
+}
+
+.difficulty-options :deep(.el-radio-button__inner) {
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
 }
 
 :deep(.el-table__header .cell) {

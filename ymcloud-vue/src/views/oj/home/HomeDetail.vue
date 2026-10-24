@@ -1,6 +1,6 @@
 <template>
   <div class="container home-columns">
-    <n-flex class="home-main" vertical :size="20">
+    <x-flex class="home-main" vertical :size="20">
       <el-card v-if="bannerList.length" :body-style="{ padding: '0' }">
         <el-carousel class="home-banner" trigger="click" arrow="hover" height="100%">
           <el-carousel-item v-for="item in bannerList" :key="item">
@@ -9,12 +9,12 @@
         </el-carousel>
       </el-card>
       <AnnouncementFeed />
-    </n-flex>
-    <n-flex class="home-side" vertical :size="20">
+    </x-flex>
+    <x-flex class="home-side" vertical :size="20">
       <!-- 最近一周AC排名 -->
       <el-card>
         <template #header>
-          <n-flex align="center" :size="16">
+          <x-flex align="center" :size="16">
             <el-icon color="#ffc107" :size="24">
               <Coin />
             </el-icon>
@@ -24,7 +24,7 @@
                 <WarningFilled />
               </el-icon>
             </el-tooltip>
-          </n-flex>
+          </x-flex>
         </template>
         <el-skeleton v-if="rankLoading" :rows="10" animated />
         <div v-else>
@@ -35,24 +35,27 @@
           >
             <el-table-column label="排名" align="center" width="64">
               <template #default="{ $index }">
-                <n-icon
+                <el-icon
                   v-if="$index === 0"
-                  :size="24"
                   color="#ffc107"
-                  :component="Ribbon"
-                />
-                <n-icon
+                  :size="24"
+                >
+                  <component :is="Ribbon" />
+                </el-icon>
+                <el-icon
                   v-else-if="$index === 1"
-                  :size="24"
                   color="#c0c4cc"
-                  :component="Ribbon"
-                />
-                <n-icon
-                  v-else-if="$index === 2"
                   :size="24"
+                >
+                  <component :is="Ribbon" />
+                </el-icon>
+                <el-icon
+                  v-else-if="$index === 2"
                   color="#cd7f32"
-                  :component="Ribbon"
-                />
+                  :size="24"
+                >
+                  <component :is="Ribbon" />
+                </el-icon>
                 <span v-else>{{ $index + 1 }}</span>
               </template>
             </el-table-column>
@@ -63,7 +66,7 @@
               align="left"
             >
               <template #default="{ row }">
-                <n-flex align="center" :size="8" :wrap="false">
+                <x-flex align="center" :size="8" :wrap="false">
                   <Avatar
                     :src="row.avatar"
                     :text="row.username"
@@ -89,7 +92,7 @@
                   >
                     {{ row.nickname }}
                   </el-tag>
-                </n-flex>
+                </x-flex>
               </template>
             </el-table-column>
             <el-table-column prop="count" label="AC 数" align="center" width="84">
@@ -108,16 +111,16 @@
       <!-- 近期比赛 -->
       <el-card>
         <template #header>
-          <n-flex align="center" :size="16">
+          <x-flex align="center" :size="16">
             <el-icon color="#52c41a" :size="24">
               <Calendar />
             </el-icon>
             <h2 class="section-title">近期比赛</h2>
-          </n-flex>
+          </x-flex>
         </template>
         <el-skeleton v-if="contestLoading" :rows="10" animated />
         <div v-else>
-          <n-flex vertical :size="16">
+          <x-flex vertical :size="16">
             <el-card
               v-for="contest in competitions"
               :key="contest.id"
@@ -131,7 +134,7 @@
               }"
             >
               <!-- 比赛名称和进行状态 -->
-              <n-flex justify="space-between" align="center" :size="8">
+              <x-flex justify="space-between" align="center" :size="8">
                 <el-link
                   class="contest-title"
                   underline="never"
@@ -139,7 +142,7 @@
                 >
                   {{ contest.title }}
                 </el-link>
-                <n-flex align="center" :size="8">
+                <x-flex align="center" :size="8">
                   <el-tooltip
                     effect="light"
                     content="需要密码才能加入比赛"
@@ -157,10 +160,10 @@
                   >
                     {{ contest.status }}
                   </el-tag>
-                </n-flex>
-              </n-flex>
+                </x-flex>
+              </x-flex>
 
-              <n-flex class="contest-tags" :size="8">
+              <x-flex class="contest-tags" :size="8">
                 <el-tag disable-transitions effect="dark" color="#ffc171">
                   {{ formatContestMode(contest.mode) }}
                 </el-tag>
@@ -173,28 +176,28 @@
                 <el-tag v-if="contest.rated" disable-transitions effect="dark" color="#fe8053">
                   Rated
                 </el-tag>
-              </n-flex>
+              </x-flex>
               <el-divider />
-              <n-flex justify="space-between" align="center">
-                <n-flex align="center" :size="6">
+              <x-flex justify="space-between" align="center">
+                <x-flex align="center" :size="6">
                   <el-icon><Clock /></el-icon>
                   <el-text size="small">{{ formatContestDuration(contest.duration) }}</el-text>
-                </n-flex>
-                <n-flex align="center" :size="6">
+                </x-flex>
+                <x-flex align="center" :size="6">
                   <el-icon><UserFilled /></el-icon>
                   <el-text size="small">{{ contest.participantCount }} 人</el-text>
-                </n-flex>
-              </n-flex>
+                </x-flex>
+              </x-flex>
             </el-card>
             <el-empty
               v-if="!competitions.length"
               description="暂无比赛"
               :image-size="80"
             />
-          </n-flex>
+          </x-flex>
         </div>
       </el-card>
-    </n-flex>
+    </x-flex>
   </div>
   <SiteFiling />
 </template>
@@ -256,8 +259,8 @@ async function handleLoadCarousel() {
       const config = response.data.data;
       bannerList.value = config.configured ? config.images.map(image => image.url) : defaultBanners;
     }
-  } catch {
-    // 请求层提示失败；不回退图片，以免覆盖管理员明确隐藏轮播的决定。
+  } catch(e) {
+    console.log(e);
   }
 }
 

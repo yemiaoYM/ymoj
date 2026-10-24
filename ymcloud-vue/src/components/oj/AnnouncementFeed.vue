@@ -2,10 +2,10 @@
   <section ref="sectionRef" class="announcement-section" aria-labelledby="announcement-heading" :aria-busy="loading">
     <el-card shadow="always">
       <template #header>
-        <n-flex align="center" :size="16">
+        <x-flex align="center" :size="16">
           <el-icon color="#ffc107" :size="24"><Bell /></el-icon>
           <h2 id="announcement-heading" class="section-title">公告</h2>
-        </n-flex>
+        </x-flex>
       </template>
       <!-- 骨架屏和错误提示-->
       <el-skeleton v-if="loading && !loaded" animated :rows="6" />
@@ -31,7 +31,7 @@
       </div>
 
       <template v-if="total > pageSize" #footer>
-        <n-flex justify="center">
+        <x-flex justify="center">
           <el-pagination
             layout="prev, pager, next"
             size="small"
@@ -44,7 +44,7 @@
             :disabled="loading"
             @current-change="onPageChange"
           />
-        </n-flex>
+        </x-flex>
       </template>
     </el-card>
   </section>

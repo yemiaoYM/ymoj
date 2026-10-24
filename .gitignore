@@ -35,6 +35,13 @@ coverage/
 # 测试相关
 /cypress/videos/
 /cypress/screenshots/
+# 前端测试仅保留本地，避免测试数据进入提交。
+/ymcloud-vue/src/test/
+/ymcloud-vue/test/
+/ymcloud-vue/tests/
+/ymcloud-vue/**/__tests__/
+/ymcloud-vue/**/*.test.*
+/ymcloud-vue/**/*.spec.*
 
 ### 开发环境 ###
 # IDE 配置
