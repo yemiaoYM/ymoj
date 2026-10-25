@@ -17,12 +17,6 @@ import org.apache.ibatis.annotations.Param;
 public interface ProblemMapper extends BaseMapper<Problem> {
 
     /**
-     * 查询并锁定当前最大的本地题目展示id
-     * @return 本地题目展示id
-     */
-    String selectLatestLocalProblemIdForUpdate();
-
-    /**
      * 题单列表分页查询
      * @param page   分页
      * @param keyword  题目/题号 支持模糊查询

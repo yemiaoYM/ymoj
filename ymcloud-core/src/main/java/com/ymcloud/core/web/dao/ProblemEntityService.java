@@ -14,12 +14,6 @@ import com.ymcloud.pojo.vo.oj.ProblemTableVO;
  */
 public interface ProblemEntityService extends IService<Problem> {
     /**
-     * 查询并锁定当前最大的本地题目展示id
-     * @return 本地题目展示id
-     */
-    String selectLatestLocalProblemIdForUpdate();
-
-    /**
      * 题单列表分页查询
      * @param page   分页
      * @param keyword  题目/题号 支持模糊查询

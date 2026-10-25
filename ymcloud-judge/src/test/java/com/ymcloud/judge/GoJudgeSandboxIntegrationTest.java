@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -26,7 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 使用独立的真实 go-judge 验证四语言入口；不会管理 Docker 或使用业务服务。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-14
+ * @Description: 使用独立的真实 go-judge 验证四语言入口；不会管理 Docker 或使用业务服务。
  */
 @EnabledIfEnvironmentVariable(named = "YMCLOUD_RUN_GO_JUDGE_TESTS", matches = "true")
 class GoJudgeSandboxIntegrationTest {
@@ -41,12 +44,12 @@ class GoJudgeSandboxIntegrationTest {
         properties.setBaseUrl(System.getenv().getOrDefault("YMCLOUD_GO_JUDGE_URL", "http://127.0.0.1:5050"));
         properties.setToken(System.getenv("YMCLOUD_GO_JUDGE_TOKEN"));
         client = new GoJudgeClient(properties, new WorkerAmqpConfig().workerObjectMapper());
-        executor = new GoJudgeExecutor(client, properties, new WorkerProperties());
+        executor = createGoJudgeExecutor(client, properties, new WorkerProperties());
     }
 
     @Test
     void deployedServicePassesMandatoryStartupChecks() throws Exception {
-        new GoJudgeStartupCheck(client, properties, new WorkerProperties()).verify();
+        createGoJudgeStartupCheck(client, properties, new WorkerProperties()).verify();
     }
 
     @AfterEach
@@ -273,5 +276,41 @@ class GoJudgeSandboxIntegrationTest {
 
     private String javaBody(String body) {
         return "public class Main { public static void main(String[] args) throws Exception { " + body + " } }";
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param client 隔离或真实沙箱客户端
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param worker 本测试使用的 Worker 资源配置
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static GoJudgeExecutor createGoJudgeExecutor(
+            GoJudgeClient client,
+            GoJudgeProperties properties,
+            WorkerProperties worker) {
+        GoJudgeExecutor component = new GoJudgeExecutor();
+        ReflectionTestUtils.setField(component, "client", client);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "worker", worker);
+        return component;
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param client 隔离或真实沙箱客户端
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param workerProperties 本测试使用的 Worker 资源配置
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static GoJudgeStartupCheck createGoJudgeStartupCheck(
+            GoJudgeClient client,
+            GoJudgeProperties properties,
+            WorkerProperties workerProperties) {
+        GoJudgeStartupCheck component = new GoJudgeStartupCheck();
+        ReflectionTestUtils.setField(component, "client", client);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "workerProperties", workerProperties);
+        return component;
     }
 }

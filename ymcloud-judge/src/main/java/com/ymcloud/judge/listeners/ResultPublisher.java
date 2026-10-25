@@ -11,6 +11,7 @@ import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -18,28 +19,33 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 持久化 JSON 消息必须同时取得 publisher confirm 且未被退回。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 持久化 JSON 消息必须同时取得 publisher confirm 且未被退回。
  */
 @Component
 @Slf4j
 public class ResultPublisher {
 
-    private final RabbitTemplate rabbit;
-    private final ObjectMapper mapper;
-    private final WorkerProperties properties;
-    private final String exchange;
-    private final String resultRoute;
+    @Autowired
+    private RabbitTemplate rabbit;
 
-    public ResultPublisher(RabbitTemplate rabbit, ObjectMapper mapper, WorkerProperties properties,
-                           @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}") String exchange,
-                           @Value("${ymcloud.judge.result-routing-key:judge.result}") String resultRoute) {
-        this.rabbit = rabbit;
-        this.mapper = mapper;
-        this.properties = properties;
-        this.exchange = exchange;
-        this.resultRoute = resultRoute;
-    }
+    @Autowired
+    private ObjectMapper mapper;
 
+    @Autowired
+    private WorkerProperties properties;
+
+    @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}")
+    private String exchange;
+
+    @Value("${ymcloud.judge.result-routing-key:judge.result}")
+    private String resultRoute;
+
+    /**
+     * 发布进度或终态，要求 Broker ACK 且未退回后才报告成功。
+     * @param result 当前执行的结果
+     */
     public void publish(JudgeResult result) {
         try {
             long elapsed = send(result, resultRoute);
@@ -60,6 +66,10 @@ public class ResultPublisher {
         }
     }
 
+    /**
+     * 发布有界延时重试消息，确认失败继续向调用方抛出。
+     * @param task 保持原身份和数据快照的任务
+     */
     public void retry(JudgeTask task) {
         try {
             long elapsed = send(task, JudgeProtocol.RETRY_ROUTE);
@@ -72,6 +82,12 @@ public class ResultPublisher {
         }
     }
 
+    /**
+     * 发送持久 JSON 并等待关联确认，恢复线程中断信号。
+     * @param payload 任务或结果契约对象
+     * @param route 固定消息路由
+     * @return 确认耗时，毫秒
+     */
     private long send(Object payload, String route) {
         long started = System.nanoTime();
         try {
@@ -96,6 +112,11 @@ public class ResultPublisher {
         }
     }
 
+    /**
+     * 仅提取安全异常类型，避免日志带入消息私有正文。
+     * @param exception 发布异常
+     * @return 直接原因或异常本身的类型名称
+     */
     private String failureType(RuntimeException exception) {
         Throwable cause = exception.getCause();
         return cause == null ? exception.getClass().getSimpleName() : cause.getClass().getSimpleName();

@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.nio.ByteBuffer;
@@ -12,20 +13,26 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 
-/** 显式读取 UTF-8 JSON，不接受消息类型头指定任意 Java 类。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 显式读取 UTF-8 JSON，不接受消息类型头指定任意 Java 类。
+ */
 @Slf4j
 @Component
 public class JudgeResultListener {
 
     private static final int MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
-    private final JudgeMessageCodec codec;
-    private final JudgeResultService results;
+    @Autowired
+    private JudgeMessageCodec codec;
 
-    public JudgeResultListener(JudgeMessageCodec codec, JudgeResultService results) {
-        this.codec = codec;
-        this.results = results;
-    }
+    @Autowired
+    private JudgeResultService results;
 
+    /**
+     * 校验消息容量及 UTF-8 后调用结果事务，毒消息拒绝且不重新入队。
+     * @param message 原始判题结果消息
+     */
     @RabbitListener(queues = "${ymcloud.judge.result-queue:" + JudgeProtocol.RESULT_QUEUE + "}",
             containerFactory = "judgeResultListenerContainerFactory")
     public void receive(Message message) {

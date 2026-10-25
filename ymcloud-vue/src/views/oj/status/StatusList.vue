@@ -236,9 +236,8 @@ const init = () => {
     contestId.value = 0;
   }
   const queryParams = route.query;
-  isMine.value = queryParams.isMine === "true" ? true : false;
-  status.value =
-    queryParams.status !== undefined ? Number(queryParams.status) : null;
+  isMine.value = queryParams.isMine === "true";
+  status.value = queryParams.status !== undefined ? Number(queryParams.status) : null;
   problemKey.value = (queryParams.problemKey as string) || null;
   username.value = (queryParams.username as string) || null;
   pageNo.value = Number(queryParams.pageNo) || 1;
@@ -358,7 +357,7 @@ const reset = () => {
   problemKey.value = null;
   username.value = null;
   pageNo.value = 1;
-  pageSize.value = 10;
+  pageSize.value = 15;
   router.push({ name: routeName.value });
 };
 //监听路由变化

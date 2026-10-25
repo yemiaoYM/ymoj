@@ -19,6 +19,7 @@ import com.ymcloud.pojo.entity.UserAcproblem;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.oj.JudgeResultVO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -33,7 +34,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-12
  * @Description: 任务、提交、测试点和 AC 记录在同一事务完成；行锁与执行标识阻止重复及过期结果。
  */
@@ -49,29 +50,34 @@ public class JudgeResultService {
             JudgeVerdict.STATUS_SYSTEM_ERROR, JudgeVerdict.STATUS_PARTIAL_ACCEPTED);
     private static final int MAX_CASES = 10_000;
 
-    private final JudgeDispatchEntityService dispatches;
-    private final JudgeEntityService judges;
-    private final JudgeCaseEntityService cases;
-    private final UserEntityService users;
-    private final UserAcproblemEntityService accepted;
-    private final JudgeMessageCodec codec;
-    private final JudgeStatusCache cache;
-    private final JudgeDispatchProperties properties;
+    @Autowired
+    private JudgeDispatchEntityService dispatches;
 
-    public JudgeResultService(JudgeDispatchEntityService dispatches, JudgeEntityService judges,
-                              JudgeCaseEntityService cases, UserEntityService users,
-                              UserAcproblemEntityService accepted, JudgeMessageCodec codec,
-                              JudgeStatusCache cache, JudgeDispatchProperties properties) {
-        this.dispatches = dispatches;
-        this.judges = judges;
-        this.cases = cases;
-        this.users = users;
-        this.accepted = accepted;
-        this.codec = codec;
-        this.cache = cache;
-        this.properties = properties;
-    }
+    @Autowired
+    private JudgeEntityService judges;
 
+    @Autowired
+    private JudgeCaseEntityService cases;
+
+    @Autowired
+    private UserEntityService users;
+
+    @Autowired
+    private UserAcproblemEntityService accepted;
+
+    @Autowired
+    private JudgeMessageCodec codec;
+
+    @Autowired
+    private JudgeStatusCache cache;
+
+    @Autowired
+    private JudgeDispatchProperties properties;
+
+    /**
+     * 在事务中锁定任务并接收递增序号结果，重复和旧执行无操作返回。
+     * @param result 待校验的结果契约
+     */
     @Transactional(rollbackFor = Exception.class)
     public void receive(JudgeResult result) {
         validate(result);
@@ -85,7 +91,12 @@ public class JudgeResultService {
         apply(dispatch, result);
     }
 
-    /** 发布预算耗尽只终止尚未发布的任务，已经收到 Worker 进度的任务继续等待结果。 */
+    /**
+     * 发布预算耗尽只终止尚未发布的任务，已经收到 Worker 进度的任务继续等待结果。
+     * @param submissionId 提交或自测 ID
+     * @param executionId 当前执行标识
+     * @param reason 可向用户展示的安全原因
+     */
     @Transactional(rollbackFor = Exception.class)
     public void failPublishing(Long submissionId, String executionId, String reason) {
         JudgeDispatch dispatch = lock(submissionId);
@@ -115,7 +126,11 @@ public class JudgeResultService {
         apply(dispatch, systemError(dispatch, reason));
     }
 
-    /** 总预算结束后产生最终系统错误，晚到的结果不会覆盖它。 */
+    /**
+     * 总预算结束后产生最终系统错误，晚到的结果不会覆盖它。
+     * @param submissionId 提交或自测 ID
+     * @param executionId 需要收敛的执行标识
+     */
     @Transactional(rollbackFor = Exception.class)
     public void expire(Long submissionId, String executionId) {
         JudgeDispatch dispatch = lock(submissionId);
@@ -129,6 +144,11 @@ public class JudgeResultService {
         apply(dispatch, systemError(dispatch, "评测超时，有限恢复后仍未收到结果，请稍后重新提交"));
     }
 
+    /**
+     * 在当前事务内按提交 ID 锁定任务行。
+     * @param submissionId 提交或自测 ID
+     * @return 被锁定记录；不存在时为 null
+     */
     private JudgeDispatch lock(Long submissionId) {
         return dispatches.lambdaQuery()
                 .eq(JudgeDispatch::getSubmissionId, submissionId)
@@ -136,6 +156,12 @@ public class JudgeResultService {
                 .one();
     }
 
+    /**
+     * 核对未终态、执行身份和递增序号，拒绝重复或旧结果。
+     * @param dispatch 当前任务记录，可为 null
+     * @param result 已通过结构校验的结果
+     * @return 是否允许应用本次结果
+     */
     private boolean matches(JudgeDispatch dispatch, JudgeResult result) {
         return dispatch != null
                 && !Objects.equals(dispatch.getDispatchState(), JudgeDispatchState.COMPLETED)
@@ -143,6 +169,12 @@ public class JudgeResultService {
                 && result.getSequence() > dispatch.getLastResultSequence();
     }
 
+    /**
+     * 逐项核对提交、执行、题目、数据版本及策略。
+     * @param dispatch 当前任务记录
+     * @param result 待核对结果
+     * @return 是否属于同一固定任务快照
+     */
     private boolean sameExecution(JudgeDispatch dispatch, JudgeResult result) {
         return Objects.equals(dispatch.getSubmissionId(), result.getSubmissionId())
                 && Objects.equals(dispatch.getExecutionId(), result.getExecutionId())
@@ -151,6 +183,11 @@ public class JudgeResultService {
                 && Objects.equals(dispatch.getStrategy(), result.getStrategy());
     }
 
+    /**
+     * 在同一事务更新任务、提交和测试点，提交后更新缓存及日志。
+     * @param dispatch 已锁定且允许更新的任务
+     * @param result 已验证身份和状态的结果
+     */
     private void apply(JudgeDispatch dispatch, JudgeResult result) {
         Judge judge = null;
         if (Objects.equals(dispatch.getStrategy(), JudgeDispatchState.FORMAL)) {
@@ -184,7 +221,11 @@ public class JudgeResultService {
         logResultAfterCommit(dispatch, result);
     }
 
-    /** 终态日志只在提交、测试点和 AC 记录全部提交后输出，不记录源码、输入输出或错误正文。 */
+    /**
+     * 终态日志只在提交、测试点和 AC 记录全部提交后输出，不记录源码、输入输出或错误正文。
+     * @param dispatch 更新后的任务记录
+     * @param result 本次结果
+     */
     private void logResultAfterCommit(JudgeDispatch dispatch, JudgeResult result) {
         Runnable record = () -> {
             if (result.isTerminal()) {
@@ -198,6 +239,9 @@ public class JudgeResultService {
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                /**
+                 * 提交成功后执行当前结果日志回调。
+                 */
                 @Override
                 public void afterCommit() {
                     record.run();
@@ -208,6 +252,15 @@ public class JudgeResultService {
         }
     }
 
+    /**
+     * 通过执行标识和递增序号条件更新任务，不覆盖已完成任务。
+     * @param dispatch 已锁定任务
+     * @param result 待保存结果
+     * @param status 提交判题状态
+     * @param state 任务箱状态
+     * @param payload 已序列化的结果快照
+     * @return 是否更新了匹配记录
+     */
     private boolean saveDispatch(JudgeDispatch dispatch, JudgeResult result,
                                  JudgeStatus status, int state, String payload) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
@@ -231,6 +284,12 @@ public class JudgeResultService {
                 .update();
     }
 
+    /**
+     * 保存正式提交终态和测试点，比赛排名不在此更新。
+     * @param judge 当前执行的正式提交
+     * @param result 待保存结果
+     * @param status 提交判题状态
+     */
     private void saveSubmission(Judge judge, JudgeResult result, JudgeStatus status) {
         boolean saved = judges.lambdaUpdate()
                 .eq(Judge::getId, judge.getId())
@@ -256,6 +315,8 @@ public class JudgeResultService {
     /**
      * 每个新提交绑定一次执行，终态与测试点原子提交；重复结果由任务行锁和终态检查拒绝。
      * 不先删除空的索引范围，避免不同提交在 REPEATABLE READ 下取得重叠间隙锁后互相阻塞插入。
+     * @param submissionId 正式提交 ID
+     * @param results 测试点列表，可空或空列表
      */
     private void saveCases(Long submissionId, List<TestCaseResult> results) {
         if (results == null || results.isEmpty()) {
@@ -279,7 +340,10 @@ public class JudgeResultService {
         }
     }
 
-    /** 同一用户不同提交同时 AC 时由用户行锁串行判断，不重复产生业务记录。 */
+    /**
+     * 同一用户不同提交同时 AC 时由用户行锁串行判断，不重复产生业务记录。
+     * @param judge 已通过的普通练习提交
+     */
     private void saveAccepted(Judge judge) {
         User user = users.lambdaQuery()
                 .eq(User::getId, judge.getUserId())
@@ -306,6 +370,11 @@ public class JudgeResultService {
         }
     }
 
+    /**
+     * 校验持久结果后生成查询视图，损坏快照不暴露正文。
+     * @param dispatch 当前任务记录
+     * @return 状态查询视图，正式提交不含隐藏测试数据
+     */
     public JudgeResultVO toView(JudgeDispatch dispatch) {
         JudgeResult result = null;
         if (dispatch.getResultPayload() != null) {
@@ -323,6 +392,12 @@ public class JudgeResultService {
         return toView(dispatch, result);
     }
 
+    /**
+     * 按正式提交与自测边界组装查询视图，不暴露正式测试输入答案。
+     * @param dispatch 当前任务记录
+     * @param result 合法结果，可为 null
+     * @return 状态与允许展示的自测字段
+     */
     private JudgeResultVO toView(JudgeDispatch dispatch, JudgeResult result) {
         JudgeResultVO view = JudgeResultVO.builder()
                 .status(dispatch.getStatus())
@@ -354,6 +429,12 @@ public class JudgeResultService {
         return view;
     }
 
+    /**
+     * 构造当前执行的安全系统错误终态，固定终态序号。
+     * @param dispatch 当前任务记录
+     * @param reason 可向用户展示的原因
+     * @return 不含隐藏数据的系统错误结果
+     */
     private JudgeResult systemError(JudgeDispatch dispatch, String reason) {
         JudgeResult result = new JudgeResult();
         result.setSchemaVersion(JudgeProtocol.SCHEMA_VERSION);
@@ -371,6 +452,10 @@ public class JudgeResultService {
         return result;
     }
 
+    /**
+     * 验证结果身份、状态、资源统计及测试点约束。
+     * @param result 待验证结果
+     */
     private void validate(JudgeResult result) {
         validateIdentity(result);
         validateState(result);
@@ -397,6 +482,10 @@ public class JudgeResultService {
         }
     }
 
+    /**
+     * 验证编译、运行进度和终态各自允许的序号及状态。
+     * @param result 已验证身份的结果
+     */
     private void validateState(JudgeResult result) {
         boolean progress = !result.isTerminal()
                 && ((result.getSequence() == 1 && result.getStatus() == JudgeVerdict.STATUS_COMPILING)
@@ -407,6 +496,10 @@ public class JudgeResultService {
         }
     }
 
+    /**
+     * 验证测试点数量、唯一正数编号、终态和资源范围。
+     * @param testCases 可空测试点列表；系统错误可不含测试点
+     */
     private void validateCases(List<TestCaseResult> testCases) {
         if (testCases == null) {
             return;
@@ -427,12 +520,20 @@ public class JudgeResultService {
         }
     }
 
+    /**
+     * 限制已产生的分数为 0～100，允许无分数。
+     * @param score 可空得分
+     */
     private void validateScore(Integer score) {
         if (score != null && (score < 0 || score > 100)) {
             throw new IllegalArgumentException("评测结果得分无效");
         }
     }
 
+    /**
+     * 限制持久结果的诊断和测试点预览，自测与正式提交使用不同上限。
+     * @param result 待持久化结果，原地截取展示字段
+     */
     private void limitPreviews(JudgeResult result) {
         result.setErrorMessage(truncate(result.getErrorMessage(), 16_384));
         if (result.getTestCaseResults() != null) {
@@ -444,12 +545,21 @@ public class JudgeResultService {
         }
     }
 
+    /**
+     * 拒绝负数统计，未产生的资源值允许为空。
+     * @param value 可空耗时或内存统计
+     */
     private void nonNegative(Long value) {
         if (value != null && value < 0) {
             throw new IllegalArgumentException("评测资源统计不得为负数");
         }
     }
 
+    /**
+     * 按显式状态码映射接口判题枚举，不依赖枚举排列顺序。
+     * @param verdict 消息协议判定
+     * @return 对应 提交判题状态
+     */
     private JudgeStatus status(JudgeVerdict verdict) {
         for (JudgeStatus status : JudgeStatus.values()) {
             if (status.getCode() == verdict.getCode()) {
@@ -459,6 +569,12 @@ public class JudgeResultService {
         throw new IllegalArgumentException("未知的评测状态");
     }
 
+    /**
+     * 按 UTF-16 字符数限制展示文本，保留 null 语义。
+     * @param value 可空原文
+     * @param limit 最多允许的字符数
+     * @return 原文或受限前缀，null 仍为 null
+     */
     private String truncate(String value, int limit) {
         return value == null || value.length() <= limit ? value : value.substring(0, limit);
     }

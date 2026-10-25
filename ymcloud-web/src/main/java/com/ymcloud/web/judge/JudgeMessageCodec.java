@@ -3,6 +3,7 @@ package com.ymcloud.web.judge;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
@@ -11,7 +12,7 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-12
  * @Description: 仅解析明确的消息契约，忽略 AMQP 的 Java 类型头，也不启用任意类型反序列化。
  */
@@ -23,11 +24,15 @@ public class JudgeMessageCodec {
     private final ObjectMapper objectMapper;
 
     /**
-     * 复用项目 JSON 映射配置，消息解析约束由独立 reader 设置。
+     * 构造时建立独立的严格映射器，保留构造器注入，避免改变项目全局 JSON 配置。
      * @param objectMapper 项目 JSON 映射器，不修改其全局解析选项
      */
     public JudgeMessageCodec(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+        this.objectMapper = objectMapper.copy();
+        this.objectMapper.setConfig(this.objectMapper.getDeserializationConfig()
+                .without(MapperFeature.ALLOW_COERCION_OF_SCALARS)
+                .without(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+                .with(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES));
     }
 
     /**

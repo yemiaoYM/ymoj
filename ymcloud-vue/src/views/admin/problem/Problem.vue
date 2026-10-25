@@ -4,39 +4,38 @@
       <!-- 标题和操作按钮 -->
       <template #header>
         <span style="font-size: 22px; font-weight: 600; color: #409eff">
-          {{ mode ==='edit' ? '编辑题目' : '增加题目' }}
+          {{ mode === 'edit' ? '编辑题目' : '新增题目' }}
         </span>
       </template>
       <x-flex vertical :size="[12, 12]" style="width: 100%; padding: 15px">
+        <el-skeleton v-if="loading" animated :rows="8" />
+        <el-alert v-else-if="loadFailed" title="题目加载失败，请重试" type="error" :closable="false">
+          <el-button text type="primary" @click="handleLoadProblem">重新加载</el-button>
+        </el-alert>
         <!-- 基础信息 -->
         <el-form
+          v-else
           ref="formRef"
+          style="width: 100%"
+          label-width="auto"
+          scroll-to-error
+          :label-position="isNarrow ? 'top' : 'right'"
           :model="problem"
           :rules="rules"
-          label-width="auto"
-          style="width: 100%"
+          :disabled="saving"
         >
-          <el-form-item label="题目来源" prop="source">
-            <el-input
-              placeholder="可选，例如：此题来源于洛谷 P1000"
-              clearable
-              maxlength="255"
-              show-word-limit
-              v-model="problem.source"
-            />
-          </el-form-item>
-          <el-form-item label="评测方式">
-            <el-text type="info">统一使用本站判题，需在测试用例管理中上传评测数据。</el-text>
-          </el-form-item>
-          <el-form-item label="题目展示id" prop="problemId">
+          <el-form-item label="题目展示ID" prop="problemId">
             <el-input
               v-model="problem.problemId"
-              disabled
-              placeholder="新增后由系统自动生成"
+              placeholder="1～15位英文字母、数字或下划线，例如 P1000"
+              clearable
+              :maxlength="mode === 'add' ? 15 : undefined"
+              :show-word-limit="mode === 'add'"
+              :disabled="mode === 'edit'"
             />
           </el-form-item>
           <el-form-item label="标题" prop="title">
-            <el-input v-model="problem.title" placeholder="请输入题目标题" />
+            <el-input v-model="problem.title" placeholder="请输入题目标题" maxlength="50" show-word-limit />
           </el-form-item>
           <el-form-item label="时间限制(ms)" prop="timeLimit">
             <el-input-number
@@ -71,13 +70,6 @@
               />
             </el-select>
           </el-form-item>
-          <el-form-item label="判题方式" prop="judgeMode">
-            <el-select v-model="problem.judgeMode" style="width: 200px">
-              <el-option value="default" label="普通判题" />
-              <el-option value="spj" label="特殊判题（暂未支持）" disabled />
-              <el-option value="interactive" label="交互判题（暂未支持）" disabled />
-            </el-select>
-          </el-form-item>
           <el-form-item label="是否公开测试用例" prop="openCaseResult">
             <el-switch v-model="problem.openCaseResult" />
           </el-form-item>
@@ -90,7 +82,7 @@
               placeholder="请选择标签"
               clearable
               filterable
-              style="width: 450px"
+              style="width: 100%; max-width: 450px"
             >
               <el-option
                 v-for="item in tagList"
@@ -103,6 +95,7 @@
                 </el-tag>
               </el-option>
             </el-select>
+            <el-button v-if="tagsFailed" text type="primary" @click="handleLoadTags">标签加载失败，点击重试</el-button>
           </el-form-item>
           <!-- 题目描述 -->
           <el-form-item
@@ -111,7 +104,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-model:content="problem.content" :key="`content-${mode}-${problemId}`" />
+            <MarkdownEidt :key="`content-${mode}-${problemId}`" v-model:content="problem.content" />
           </el-form-item>
           <!-- 输入描述（Markdown） -->
           <el-form-item
@@ -120,7 +113,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-model:content="problem.input" :key="`input-${mode}-${problemId}`" />
+            <MarkdownEidt :key="`input-${mode}-${problemId}`" v-model:content="problem.input" />
           </el-form-item>
           <!-- 输出描述（Markdown） -->
           <el-form-item
@@ -129,7 +122,7 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-model:content="problem.output" :key="`output-${mode}-${problemId}`" />
+            <MarkdownEidt :key="`output-${mode}-${problemId}`" v-model:content="problem.output" />
           </el-form-item>
           <!-- 测试用例 -->
           <el-form-item
@@ -139,53 +132,75 @@
             style="width: 100%"
           >
             <el-button
-              effect="dark"
-              type="primary"
-              @click="addCase"
-              size="large"
               style="margin-bottom: 15px"
+              type="primary"
+              :disabled="problem.problemCaseList.length >= 3"
+              @click="onAddCase"
             >
               <el-icon size="15" style="margin-right: 5px"><Plus /></el-icon>
-              新增用例
+              新增用例（最多3组）
             </el-button>
             <el-table
               :data="problem.problemCaseList"
               border
+              empty-text="暂无题面样例"
               style="width: 100%"
             >
-              <el-table-column label="输入">
+              <el-table-column label="输入" min-width="160">
                 <template #default="{ row }">
                   <el-input
                     v-model="row.input"
                     type="textarea"
-                    autosize
                     placeholder="输入"
+                    maxlength="200"
+                    :autosize="{ minRows: 2, maxRows: 6 }"
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="输出">
+              <el-table-column label="输出" min-width="160">
                 <template #default="{ row }">
                   <el-input
                     v-model="row.output"
                     type="textarea"
-                    autosize
                     placeholder="输出"
+                    maxlength="200"
+                    :autosize="{ minRows: 2, maxRows: 6 }"
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="备注">
+              <el-table-column label="备注" min-width="160">
                 <template #default="{ row }">
-                  <el-input v-model="row.note" placeholder="备注（可选）" />
+                  <el-input v-model="row.note" placeholder="备注（可选）" maxlength="200" />
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="100" align="center">
                 <template #default="{ $index }">
-                  <el-button type="danger" text @click="removeCase($index)"
-                    >删除</el-button
-                  >
+                  <el-button type="danger" text @click="onRemoveCase($index)">删除</el-button>
                 </template>
               </el-table-column>
             </el-table>
+          </el-form-item>
+          <el-form-item label="题目来源" prop="source">
+            <el-input
+              v-model="problem.source"
+              placeholder="可选，例如：此题来源于洛谷 P1000"
+              clearable
+              maxlength="255"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="判题方式" prop="judgeMode">
+            <el-radio-group v-model="problem.judgeMode" aria-label="判题方式">
+              <el-tooltip content="按测试数据运行程序，并比对输出结果。" placement="top">
+                <el-radio-button value="default">普通判题</el-radio-button>
+              </el-tooltip>
+              <el-tooltip content="使用专用校验程序判断答案，适合多解等情况。暂未支持。" placement="top">
+                <el-radio-button value="spj" disabled>特殊判题</el-radio-button>
+              </el-tooltip>
+              <el-tooltip content="用户程序与交互程序交换输入输出。暂未支持。" placement="top">
+                <el-radio-button value="interactive" disabled>交互判题</el-radio-button>
+              </el-tooltip>
+            </el-radio-group>
           </el-form-item>
         </el-form>
       </x-flex>
@@ -194,42 +209,52 @@
           v-permission="mode === 'edit' ? ['problem:problem:edit'] : ['problem:problem:add']"
           size="large"
           type="primary"
-          :loading="loading"
-          @click="handleSubmitProblem"
+          :loading="saving"
+          :disabled="loading || loadFailed"
+          @click="onSubmitProblem"
         >
-          {{ mode ==='edit' ? '更新' : '保存' }}
+          {{ mode === 'edit' ? '更新' : '保存' }}
         </el-button>
+        <el-text v-if="saveFailed" type="danger">保存失败，内容已保留，请调整后重试。</el-text>
       </template>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-//import
-import { ref, defineAsyncComponent, watch } from "vue";
+import { computed, ref, defineAsyncComponent, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { ElMessage } from "element-plus";
+import type { FormInstance, FormRules } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/api/api";
-import type { Tag } from "@/type/types";
+import type { Tag, ProblemDTO } from "@/type/types";
 import { PROBLEM_DIFFICULTIES } from "@/constants/problem";
-//异步导入markdown
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/MarkdownEidt.vue")
 );
 
-//data
+type ProblemForm = Omit<ProblemDTO, "examples" | "source"> & { source: string; tagList: number[] };
+
 const route = useRoute();
 const router = useRouter();
+const media = window.matchMedia('(max-width: 767px)');
+const isNarrow = ref(media.matches);
 const loading = ref(false);
-const formRef = ref();
+const saving = ref(false);
+const loadFailed = ref(false);
+const saveFailed = ref(false);
+const tagsFailed = ref(false);
+const formRef = ref<FormInstance>();
 const mode = ref('add');
 const problemId = ref<number | null>(null);
-const tagList = ref<Tag[]>([] as Tag[]);
+const tagList = ref<Tag[]>([]);
+const problem = ref<ProblemForm>(handleCreateForm());
+let revision = 0;
 
 //验证测试用例
-const validateTestCases = (rule: any, value: any[], callback: any) => {
-  if (value && value.length > 5) {
-    callback(new Error("最多设置5个测试样例"));
+const validateTestCases = (_rule: unknown, value: ProblemForm['problemCaseList'], callback: (error?: Error) => void) => {
+  if (value.length > 3) {
+    callback(new Error("最多设置3组题面样例"));
   } else {
     // 验证每个测试用例的内容长度
     for (let i = 0; i < value.length; i++) {
@@ -250,16 +275,12 @@ const validateTestCases = (rule: any, value: any[], callback: any) => {
     callback();
   }
 };
-//验证标签列表
-const validateTagList = (rule: any, value: any[], callback: any) => {
-  if (value && value.length > 5) {
-    callback(new Error("最多设置5个标签"));
-  } else {
-    callback();
-  }
-};
 //表单验证规则
-const rules = {
+const rules = computed<FormRules<ProblemForm>>(() => ({
+  problemId: mode.value === 'add' ? [
+    { required: true, message: "请输入题目展示ID", trigger: "blur" },
+    { pattern: /^[A-Za-z0-9_]{1,15}$/, message: "仅支持1～15位英文字母、数字或下划线", trigger: "blur" },
+  ] : [],
   title: [
     { required: true, message: "题目标题不能为空", trigger: "blur" },
     { max: 50, message: "题目标题长度不能超过50个字符", trigger: "blur" },
@@ -328,111 +349,73 @@ const rules = {
     },
   ],
   problemCaseList: [{ validator: validateTestCases, trigger: "blur" }],
-  tagList: [{ validator: validateTagList, trigger: "blur" }],
-};
+  tagList: [{ type: "array", max: 5, message: "最多设置5个标签", trigger: "change" }],
+}));
 
-const problem = ref({
-  id: null,
-  problemId: "",
-  title: "",
-  content: "请输入题干",
-  input: "请输入输入描述",
-  output: "请输入输出描述",
-  source: "",
-  difficulty: 1,
-  judgeMode: "default",
-  visibility: 1,
-  openCaseResult: false,
-  timeLimit: 1000,
-  memoryLimit: 256,
-  problemCaseList: [
-    {
-      input: "测试用例1输入(记得删掉)",
-      output: "测试用例1输出",
-      note: "测试用例1备注",
-    },
-  ],
-  tagList: [], // 标签列表
-});
-
-//methods
 //添加题面测试用例
-const addCase = () => {
-  if (problem.value.problemCaseList.length >= 5) {
-    ElMessage.error("最多只能添加5个测试用例");
+const onAddCase = () => {
+  if (problem.value.problemCaseList.length >= 3) {
+    ElMessage.error("最多设置3组题面样例");
     return;
   }
   problem.value.problemCaseList.push({ input: "", output: "", note: "" });
 };
 //删除题面测试用例
-const removeCase = (index: number) => {
+const onRemoveCase = (index: number) => {
   problem.value.problemCaseList.splice(index, 1);
 };
 //提交题目（新增或编辑）
-const handleSubmitProblem = () => {
-  if (!formRef.value) return;
-  formRef.value.validate((valid: boolean) => {
-    if (valid) {
-      loading.value = true;
-      
-      //构造符合后端DTO的数据结构
-      const submitData = {
-        problemId: problem.value.problemId,
-        title: problem.value.title,
-        content: problem.value.content,
-        input: problem.value.input,
-        output: problem.value.output,
-        source: problem.value.source.trim() || null,
-        difficulty: problem.value.difficulty,
-        judgeMode: problem.value.judgeMode,
-        visibility: problem.value.visibility,
-        openCaseResult: problem.value.openCaseResult,
-        timeLimit: problem.value.timeLimit,
-        memoryLimit: problem.value.memoryLimit,
-        problemCaseList: problem.value.problemCaseList,
-        tagList: problem.value.tagList || []
-      };
-      
-      const api = mode.value ==='edit' && problem.value.id
-        ? updateProblem(problem.value.id, submitData)
-        : addProblem(submitData);
-      
-      api.then((res) => {
-          ElMessage.success(res.data.msg);
-          if (mode.value ==='edit') {
-            router.push('/admin/problem/list');
-          } else {
-            //新增模式成功后重置表单
-            resetForm();
-            problem.value.problemId = res.data.data;
-          }
-        }).catch((e) => {
-          console.error(e);
-        }).finally(() => {
-          loading.value = false;
-        });
+const onSubmitProblem = async () => {
+  if (!formRef.value || saving.value || loading.value || loadFailed.value) return;
+  const current = revision;
+  saving.value = true;
+  saveFailed.value = false;
+  try {
+    const valid = await formRef.value.validate((valid) => {
+      if (!valid) ElMessage.warning("请检查表单输入");
+    });
+    if (!valid || current !== revision) return;
+    const { id, ...values } = problem.value;
+    const submitData = { ...values, source: values.source.trim() || null };
+    const res = mode.value === 'edit' && id
+      ? await updateProblem(id, submitData)
+      : await addProblem(submitData);
+    if (current !== revision) return;
+    ElMessage.success(res.data.msg);
+    if (mode.value === 'edit') {
+      await router.push('/admin/problem/list');
     } else {
-      ElMessage.warning("请检查表单输入");
+      problem.value = handleCreateForm();
+      await nextTick();
+      formRef.value?.clearValidate();
     }
-  });
+  } catch {
+    // 请求层统一提示原因；保留当前输入，允许修正后重试。
+    if (current === revision) saveFailed.value = true;
+  } finally {
+    if (current === revision) saving.value = false;
+  }
 };
-//加载标签列表
-const loadTagList = () => {
-  getTagsList().then(res => {
+
+const handleLoadTags = async () => {
+  tagsFailed.value = false;
+  try {
+    const res = await getTagsList();
     tagList.value = res.data.data;
-  }).catch(e => {
-    console.log(e);
-  });
+  } catch {
+    tagsFailed.value = true;
+  }
 };
-//重置表单
-const resetForm = () => {
-  problem.value= {
+
+// 每次新增使用独立的空表单，提示文字不作为实际正文或样例提交。
+function handleCreateForm(): ProblemForm {
+  return {
     id: null,
     problemId: "",
     title: "",
-    content: "请输入题干",
-    input: "请输入输入描述",
-    output: "请输入输出描述",
+    content: "",
+    input: "",
+    output: "",
     source: "",
     difficulty: 1,
     judgeMode: "default",
@@ -440,29 +423,25 @@ const resetForm = () => {
     openCaseResult: false,
     timeLimit: 1000,
     memoryLimit: 256,
-    problemCaseList: [
-      {
-        input: "测试用例1输入(记得删掉)",
-        output: "测试用例1输出",
-        note: "测试用例1备注",
-      },
-    ],
+    problemCaseList: [],
     tagList: [],
   };
-  if (formRef.value) {
-    formRef.value.resetFields();
+}
+
+const handleLoadProblem = async () => {
+  const id = problemId.value;
+  if (!id || !Number.isSafeInteger(id) || id < 1) {
+    loadFailed.value = true;
+    return;
   }
-};
-//加载题目数据
-const loadProblemData = async () => {
-  if (!problemId.value) return;
+  const current = ++revision;
+  loading.value = true;
+  loadFailed.value = false;
   try {
-    loading.value = true;
-    const res = await getAdminProblemById(problemId.value);
+    const res = await getAdminProblemById(id);
+    if (current !== revision) return;
     const data = res.data.data;
-    
-    //获取到的数据赋值给表单
-    Object.assign(problem.value, {
+    problem.value = {
       id: data.id,
       problemId: data.problemId,
       title: data.title,
@@ -475,29 +454,46 @@ const loadProblemData = async () => {
       judgeMode: data.judgeMode,
       openCaseResult: data.openCaseResult,
       timeLimit: data.timeLimit,
-      memoryLimit: Math.round(data.memoryLimit / 1024), // 后端KB转换为前端MB
-      problemCaseList: data.problemCaseList || [],
-      tagList: data.tagList || [],
-    });
-  } catch (e) {
-    console.log(e);
+      memoryLimit: Math.round(data.memoryLimit / 1024), // 后端KiB转换为表单MiB
+      problemCaseList: data.problemCaseList ?? [],
+      tagList: data.tagList ?? [],
+    };
+  } catch {
+    if (current === revision) loadFailed.value = true;
   } finally {
-    loading.value = false;
+    if (current === revision) loading.value = false;
   }
 };
 
-//监听路由参数变化
-watch(() => route.name, () => {
-  if (route.name === 'AdminProblemEdit' && route.params.id) {
-    mode.value = 'edit';
-    problemId.value = Number(route.params.id);
-    loadProblemData();
+// 切换题目或回到新增页时，使旧请求失效，避免覆盖正在编辑的表单。
+watch(() => [route.name, route.params.id], () => {
+  revision++;
+  mode.value = route.name === 'AdminProblemEdit' ? 'edit' : 'add';
+  problemId.value = mode.value === 'edit' ? Number(route.params.id) : null;
+  loading.value = false;
+  loadFailed.value = false;
+  saving.value = false;
+  saveFailed.value = false;
+  problem.value = handleCreateForm();
+  if (mode.value === 'edit') {
+    handleLoadProblem();
   } else {
-    mode.value = 'add';
-    resetForm();
+    nextTick(() => formRef.value?.clearValidate());
   }
-  loadTagList();
 }, { immediate: true });
+
+const onScreenChange = (event: MediaQueryListEvent) => {
+  isNarrow.value = event.matches;
+};
+
+onMounted(() => {
+  handleLoadTags();
+  media.addEventListener('change', onScreenChange);
+});
+onBeforeUnmount(() => {
+  revision++;
+  media.removeEventListener('change', onScreenChange);
+});
 </script>
 
 <style scoped>

@@ -21,7 +21,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Redis 原子租约和任务指纹，只有当前租约持有者可以提交最终结果。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: Redis 原子租约和任务指纹，只有当前租约持有者可以提交最终结果。
  */
 @Component
 @Slf4j
@@ -68,6 +70,12 @@ public class WorkerExecutionStore {
     private final ScheduledThreadPoolExecutor heartbeat;
     private final ScheduledThreadPoolExecutor deadlines;
 
+    /**
+     * 构造时建立独立续租和截止调度器，保留构造器注入。
+     * @param redis Worker Redis 连接
+     * @param mapper 判题专用映射器
+     * @param properties 并发、租约及恢复配置
+     */
     public WorkerExecutionStore(StringRedisTemplate redis, ObjectMapper mapper, WorkerProperties properties) {
         this.redis = redis;
         this.mapper = mapper;
@@ -86,6 +94,12 @@ public class WorkerExecutionStore {
         this.deadlines.setRemoveOnCancelPolicy(true);
     }
 
+    /**
+     * 原子领取执行租约，重复任务返回忙碌或已完成分支。
+     * @param task 已通过入口校验的任务
+     * @return 领取结果及原任务摘要
+     * @throws Exception 任务摘要计算、存储或调度失败
+     */
     public Claim claim(JudgeTask task) throws Exception {
         String digest = digest(task);
         String state = key(task.getExecutionId(), "state");
@@ -119,6 +133,11 @@ public class WorkerExecutionStore {
         return new Claim(new Lease(task, state, lock, owner, (int) (status - 10)), null, false, digest);
     }
 
+    /**
+     * 解析有界恢复记录，损坏时返回待入口修复的空结果。
+     * @param json 持久结果 JSON
+     * @return 恢复结果或表示损坏的空结果对象
+     */
     private JudgeResult readCompleted(String json) {
         if (json.length() > MAX_COMPLETED_JSON_CHARACTERS) {
             return new JudgeResult();
@@ -132,6 +151,12 @@ public class WorkerExecutionStore {
         }
     }
 
+    /**
+     * 计算固定任务快照的 SHA-256，用于重复投递核对。
+     * @param task 完整任务快照
+     * @return 小写 SHA-256
+     * @throws Exception 任务序列化或摘要计算失败
+     */
     public String digest(JudgeTask task) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                 .digest(mapper.writeValueAsBytes(task)));
@@ -139,6 +164,9 @@ public class WorkerExecutionStore {
 
     /**
      * 已完成恢复记录的身份损坏时，只在指纹仍匹配原任务的条件下替换为正确身份的系统错误。
+     * @param task 原任务快照
+     * @param result 正确身份的系统错误终态
+     * @throws Exception 序列化或存储失败
      */
     public void repairCompleted(JudgeTask task, JudgeResult result) throws Exception {
         Long repaired = redis.execute(REPAIR,
@@ -151,19 +179,27 @@ public class WorkerExecutionStore {
         }
     }
 
+    /**
+     * 停止续租与截止回调线程。
+     */
     @PreDestroy
     public void stop() {
         heartbeat.shutdownNow();
         deadlines.shutdownNow();
     }
 
+    /**
+     * 为同一执行生成位于相同 Redis Cluster 槽的键。
+     * @param executionId 执行标识
+     * @param suffix 内部固定状态后缀
+     * @return 包含执行 hash tag 的完整键
+     */
     private String key(String executionId, String suffix) {
         // 同一执行的 key 使用 Redis Cluster hash tag，可在同一个脚本内操作。
         return properties.getRedisPrefix() + "{" + executionId + "}:" + suffix;
     }
 
-    public record Claim(Lease lease, JudgeResult completed, boolean busy, String digest) {
-    }
+    public record Claim(Lease lease, JudgeResult completed, boolean busy, String digest) {}
 
     public final class Lease implements AutoCloseable {
 
@@ -180,6 +216,14 @@ public class WorkerExecutionStore {
         private final ScheduledFuture<?> deadline;
         private boolean closed;
 
+        /**
+         * 绑定当前执行线程并启动续租和总截止回调。
+         * @param task 固定任务快照
+         * @param state 状态记录键
+         * @param lock 租约键
+         * @param owner 本次租约唯一令牌
+         * @param attempt 从 1 开始的执行次数
+         */
         private Lease(JudgeTask task, String state, String lock, String owner, int attempt) {
             this.state = state;
             this.lock = lock;
@@ -223,10 +267,17 @@ public class WorkerExecutionStore {
             }, Math.max(0, task.getDeadlineEpochMs() - System.currentTimeMillis()), TimeUnit.MILLISECONDS);
         }
 
+        /**
+         * 读取本次成功领取对应的执行次数。
+         * @return 从 1 开始的执行次数
+         */
         public int attempt() {
             return attempt;
         }
 
+        /**
+         * 续期并确认租约仍属于当前执行，否则禁止写终态。
+         */
         public void requireOwned() {
             if (lost.get() || !Long.valueOf(1).equals(redis.execute(RENEW, List.of(lock), owner,
                     String.valueOf(properties.getLeaseMillis())))) {
@@ -234,6 +285,11 @@ public class WorkerExecutionStore {
             }
         }
 
+        /**
+         * 确认租约后原子保存终态并释放占用。
+         * @param result 合法终态结果
+         * @throws Exception 序列化或存储失败
+         */
         public void complete(JudgeResult result) throws Exception {
             requireOwned();
             stopRenewal();
@@ -243,6 +299,9 @@ public class WorkerExecutionStore {
             }
         }
 
+        /**
+         * 停止回调并条件释放自身租约，失败等待自然到期。
+         */
         @Override
         public void close() {
             stopRenewal();
@@ -255,6 +314,9 @@ public class WorkerExecutionStore {
             }
         }
 
+        /**
+         * 取消回调并标记关闭，防止中断线程复用后的下一任务。
+         */
         private void stopRenewal() {
             synchronized (lifecycle) {
                 closed = true;

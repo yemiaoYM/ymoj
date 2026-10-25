@@ -11,6 +11,7 @@ import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
 import com.ymcloud.pojo.contract.judge.TestCaseResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
@@ -23,22 +24,30 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Worker 执行边界：使用固定数据快照并产生结果，不访问业务数据库。
+ * @Author: Yemiao
+ * @CreateTime: 2025-08-06
+ * @Description: Worker 执行边界：使用固定数据快照并产生结果，不访问业务数据库。
  */
 @Slf4j
 @Component
 public class JudgeRun {
 
-    private final GoJudgeExecutor executor;
-    private final TestDataCache cache;
-    private final WorkerProperties properties;
+    @Autowired
+    private GoJudgeExecutor executor;
 
-    public JudgeRun(GoJudgeExecutor executor, TestDataCache cache, WorkerProperties properties) {
-        this.executor = executor;
-        this.cache = cache;
-        this.properties = properties;
-    }
+    @Autowired
+    private TestDataCache cache;
 
+    @Autowired
+    private WorkerProperties properties;
+
+    /**
+     * 执行固定数据版本，发布进度并生成终态；释放会话和数据租约。
+     * @param task 已通过入口校验的任务
+     * @param progress 进度发布回调，失败应向上传播
+     * @return 本次执行的终态结果
+     * @throws IOException 传输、数据或资源清理失败，交任务边界有限恢复
+     */
     public JudgeResult execute(JudgeTask task, Consumer<JudgeResult> progress) throws IOException {
         long started = System.nanoTime();
         log.info("开始执行判题 execution={} submission={} problem={} version={} strategy={} language={}",
@@ -154,6 +163,12 @@ public class JudgeRun {
         return result;
     }
 
+    /**
+     * 按当前任务身份生成安全系统错误终态，不复用其他执行的结果。
+     * @param task 当前任务快照
+     * @param message 可向用户展示的安全提示
+     * @return 得分为零的系统错误终态
+     */
     public JudgeResult systemFailure(JudgeTask task, String message) {
         JudgeResult result = result(task, JudgeVerdict.STATUS_SYSTEM_ERROR, true);
         result.setScore(0);
@@ -161,6 +176,13 @@ public class JudgeRun {
         return result;
     }
 
+    /**
+     * 生成带固定身份的结果骨架，进度与终态使用约定序号。
+     * @param task 当前任务快照
+     * @param status 业务判题状态
+     * @param terminal 是否为终态
+     * @return 包含执行身份和 Worker 标识的结果
+     */
     public JudgeResult result(JudgeTask task, JudgeVerdict status, boolean terminal) {
         JudgeResult result = new JudgeResult();
         result.setExecutionId(task.getExecutionId());
@@ -182,6 +204,11 @@ public class JudgeRun {
         return result;
     }
 
+    /**
+     * 按既有 ACM 或测试点计分规则汇总结果，不改变 OI/IOI 暂共用语义。
+     * @param result 包含非空测试点列表的结果，原地更新状态和分数
+     * @param mode 评分协议，0=ACM，1=测试点计分
+     */
     static void score(JudgeResult result, int mode) {
         List<TestCaseResult> cases = result.getTestCaseResults();
         long accepted = cases.stream().filter(testCase -> testCase.getStatus() == JudgeVerdict.STATUS_ACCEPTED).count();
@@ -207,6 +234,15 @@ public class JudgeRun {
         }
     }
 
+    /**
+     * 执行单个测试点并流式比对答案，结果仅保留受限输出预览。
+     * @param task 当前任务快照
+     * @param source 当前测试点输入和答案来源
+     * @param session 当前沙箱会话
+     * @param program 已编译程序
+     * @return 测试点判定、分数及资源统计
+     * @throws IOException 输入、执行或答案完整性校验失败
+     */
     private TestCaseResult executeCase(JudgeTask task, CaseSource source, GoJudgeTaskSession session,
                                        GoJudgeExecutor.PreparedProgram program) throws IOException {
         long started = System.nanoTime();
@@ -229,30 +265,54 @@ public class JudgeRun {
         }
         result.setScore(result.getStatus() == JudgeVerdict.STATUS_ACCEPTED ? 100 : 0);
         log.debug("测试点执行完成 execution={} version={} case={} status={} timeMs={} memoryKiB={} elapsedMs={}",
-                task.getExecutionId(), task.getTestDataVersionId(), source.id(), result.getStatus(), result.getTime(),
-                result.getMemory(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+                task.getExecutionId(),
+                task.getTestDataVersionId(),
+                source.id(),
+                result.getStatus(),
+                result.getTime(),
+                result.getMemory(),
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
         return result;
     }
 
+    /**
+     * 将有界自测文本转换为 UTF-8 流。
+     * @param value 自测文本，null 按空串处理
+     * @return 由调用方关闭的内存流
+     */
     private static InputStream inline(String value) {
         return new ByteArrayInputStream((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * 限制测试点输出预览长度，完整输出不进入结果消息。
+     * @param value 受沙箱输出限额约束的非 null 文本
+     * @return 最多 300 个原文字符及截断标记
+     */
     private static String preview(String value) {
         return value.length() <= 300 ? value : value.substring(0, 300) + "\n... (output truncated)";
     }
 
+    /**
+     * 在阶段边界检查任务截止和租约中断。
+     * @param task 当前任务快照
+     * @throws IOException 任务到期或线程被中断
+     */
     private static void checkDeadline(JudgeTask task) throws IOException {
         if (task.getDeadlineEpochMs() <= System.currentTimeMillis() || Thread.currentThread().isInterrupted()) {
             throw new IOException("任务超过总截止时间或失去执行租约");
         }
     }
 
-    private record CaseSource(int id, StreamSource input, StreamSource output) {
-    }
+    private record CaseSource(int id, StreamSource input, StreamSource output) {}
 
     @FunctionalInterface
     private interface StreamSource {
+        /**
+         * 按需打开当前测试点数据，调用方负责关闭。
+         * @return 输入或答案流
+         * @throws IOException 数据无法打开或验证失败
+         */
         InputStream open() throws IOException;
     }
 }

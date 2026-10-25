@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.groups.Default;
 import lombok.Data;
 
 import java.util.List;
@@ -20,9 +21,16 @@ import java.util.List;
 public class ProblemDTO {
 
     /**
-     * 题目展示id
+     * 新增题目的校验组，包含通用约束；编辑保留已有展示 ID。
      */
-    @Size(max = 20, message = "题目展示id长度不能超过20个字符")
+    public interface Create extends Default {}
+
+    /**
+     * 新增时自定义展示 ID：1～15 位英文字母、数字或下划线；编辑不修改原 ID。
+     */
+    @NotBlank(message = "题目展示ID不能为空", groups = Create.class)
+    @Size(max = 15, message = "题目展示ID不能超过15个字符", groups = Create.class)
+    @Pattern(regexp = "[A-Za-z0-9_]+", message = "题目展示ID只能包含英文字母、数字和下划线", groups = Create.class)
     private String problemId;
 
     /**
@@ -53,7 +61,7 @@ public class ProblemDTO {
     private String output;
 
     /**
-     * 题目来源说明，最多255字符，可为空；不参与判题和题号生成
+     * 题目来源说明，最多255字符，可为空；不决定判题方式或展示 ID
      */
     @Size(max = 255, message = "题目来源长度不能超过255个字符")
     private String source;
@@ -106,7 +114,7 @@ public class ProblemDTO {
     /**
      * 题面样例
      */
-    @Size(max = 5,message = "最多设置5个测试样例")
+    @Size(max = 3, message = "最多设置3组题面样例")
     private List<ProblemCaseVO> problemCaseList;
 
     /**

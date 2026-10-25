@@ -9,6 +9,7 @@ import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -33,6 +34,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-14
+ * @Description: 验证沙箱命令、结构化判定、资源边界及文件回收。
+ */
 class GoJudgeExecutorTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -45,7 +51,7 @@ class GoJudgeExecutorTest {
     void setup() {
         client = mock(GoJudgeClient.class);
         worker = new WorkerProperties();
-        executor = new GoJudgeExecutor(client, new GoJudgeProperties(), worker);
+        executor = createGoJudgeExecutor(client, new GoJudgeProperties(), worker);
         JudgeLanguage language = new JudgeLanguage();
         language.setName("Java");
         language.setCompileCmd("untrusted legacy command");
@@ -244,7 +250,7 @@ class GoJudgeExecutorTest {
     void cpuProtectionCoversParallelExecutionWhileBusinessWallBoundaryRemainsExact() throws Exception {
         GoJudgeProperties properties = new GoJudgeProperties();
         properties.setCpuRateLimit(4000);
-        GoJudgeExecutor parallel = new GoJudgeExecutor(client, properties, worker);
+        GoJudgeExecutor parallel = createGoJudgeExecutor(client, properties, worker);
         when(client.upload(any(InputStream.class), anyString(), anyLong())).thenReturn("input-id");
         when(client.execute(any(), anyLong())).thenAnswer(invocation -> {
             Map<?, ?> request = invocation.getArgument(0);
@@ -352,5 +358,23 @@ class GoJudgeExecutorTest {
 
     private InputStream stream(String value) {
         return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param client 隔离或真实沙箱客户端
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param worker 本测试使用的 Worker 资源配置
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static GoJudgeExecutor createGoJudgeExecutor(
+            GoJudgeClient client,
+            GoJudgeProperties properties,
+            WorkerProperties worker) {
+        GoJudgeExecutor component = new GoJudgeExecutor();
+        ReflectionTestUtils.setField(component, "client", client);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "worker", worker);
+        return component;
     }
 }

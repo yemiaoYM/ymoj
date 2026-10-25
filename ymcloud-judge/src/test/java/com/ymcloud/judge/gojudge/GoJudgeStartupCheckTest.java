@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ymcloud.judge.config.WorkerProperties;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -23,7 +24,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 启动门禁不允许版本偏离、无鉴权、cgroup 回退或不完整的工具链继续消费任务。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-14
+ * @Description: 启动门禁不允许版本偏离、无鉴权、cgroup 回退或不完整的工具链继续消费任务。
  */
 class GoJudgeStartupCheckTest {
 
@@ -103,13 +106,13 @@ class GoJudgeStartupCheckTest {
         assertThrows(IllegalArgumentException.class, properties::validate);
         properties.setServiceMemoryBytes(2L * 1024 * 1024 * 1024);
         assertDoesNotThrow(properties::validate);
-        GoJudgeStartupCheck check = new GoJudgeStartupCheck(mock(GoJudgeClient.class), properties,
+        GoJudgeStartupCheck check = createGoJudgeStartupCheck(mock(GoJudgeClient.class), properties,
                 new WorkerProperties());
         assertThrows(GoJudgeException.class, check::verify);
     }
 
     private static GoJudgeStartupCheck check(GoJudgeClient client) {
-        return new GoJudgeStartupCheck(client, new GoJudgeProperties(), new WorkerProperties());
+        return createGoJudgeStartupCheck(client, new GoJudgeProperties(), new WorkerProperties());
     }
 
     private static GoJudgeClient readyClient() throws Exception {
@@ -139,5 +142,23 @@ class GoJudgeStartupCheckTest {
     private static JsonNode response(String output) {
         return MAPPER.valueToTree(Map.of("status", "Accepted", "exitStatus", 0,
                 "files", Map.of("stdout", output, "stderr", "", "launcher", "")));
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param client 隔离或真实沙箱客户端
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param workerProperties 本测试使用的 Worker 资源配置
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static GoJudgeStartupCheck createGoJudgeStartupCheck(
+            GoJudgeClient client,
+            GoJudgeProperties properties,
+            WorkerProperties workerProperties) {
+        GoJudgeStartupCheck component = new GoJudgeStartupCheck();
+        ReflectionTestUtils.setField(component, "client", client);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "workerProperties", workerProperties);
+        return component;
     }
 }

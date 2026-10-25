@@ -14,11 +14,13 @@ import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
 import com.ymcloud.pojo.contract.judge.TestCaseResult;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +36,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 验证任务租约、恢复、结果发布与 ACK 顺序。
+ */
 class WorkerMessageLifecycleTest {
 
     ObjectMapper mapper;
@@ -62,7 +69,7 @@ class WorkerMessageLifecycleTest {
         result = JudgeResult.builder().executionId(task.getExecutionId()).submissionId(task.getSubmissionId())
                 .problemId(task.getProblemId()).testDataVersionId(task.getTestDataVersionId())
                 .strategy(task.getStrategy()).terminal(true).sequence(3).status(JudgeVerdict.STATUS_ACCEPTED).build();
-        listener = new JudgeListener(mapper, new WorkerTaskValidator(), store, journal,
+        listener = createJudgeListener(mapper, new WorkerTaskValidator(), store, journal,
                 publisher, runner, properties, new SimpleMeterRegistry());
     }
 
@@ -336,5 +343,38 @@ class WorkerMessageLifecycleTest {
         MessageProperties properties = new MessageProperties();
         properties.setDeliveryTag(7L);
         return new Message(mapper.writeValueAsBytes(task), properties);
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param mapper 判题专用 JSON 映射器
+     * @param validator 真实任务入口校验器
+     * @param store 可控制租约状态的执行存储
+     * @param journal 本地终态恢复边界
+     * @param publisher 可控制确认结果的消息发布器
+     * @param runner 当前任务的执行入口
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param metrics 隔离的测试指标注册表
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeListener createJudgeListener(
+            ObjectMapper mapper,
+            WorkerTaskValidator validator,
+            WorkerExecutionStore store,
+            ResultJournal journal,
+            ResultPublisher publisher,
+            JudgeRun runner,
+            WorkerProperties properties,
+            MeterRegistry metrics) {
+        JudgeListener component = new JudgeListener();
+        ReflectionTestUtils.setField(component, "mapper", mapper);
+        ReflectionTestUtils.setField(component, "validator", validator);
+        ReflectionTestUtils.setField(component, "store", store);
+        ReflectionTestUtils.setField(component, "journal", journal);
+        ReflectionTestUtils.setField(component, "publisher", publisher);
+        ReflectionTestUtils.setField(component, "runner", runner);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "metrics", metrics);
+        return component;
     }
 }

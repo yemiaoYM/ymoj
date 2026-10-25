@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -23,6 +24,11 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-14
+ * @Description: 验证消费者就绪与健康标记生命周期。
+ */
 class WorkerHealthProbeTest {
 
     @TempDir
@@ -40,7 +46,7 @@ class WorkerHealthProbeTest {
         WorkerProperties properties = new WorkerProperties();
         properties.setWorkDir(directory);
         properties.setConcurrency(2);
-        probe = new WorkerHealthProbe(registry, properties);
+        probe = createProbe(properties);
         health = directory.resolve("health");
         when(registry.getListenerContainers()).thenReturn(List.of(container));
     }
@@ -116,7 +122,7 @@ class WorkerHealthProbeTest {
         Path file = Files.writeString(directory.resolve("not-a-directory"), "preserve", StandardCharsets.UTF_8);
         WorkerProperties properties = new WorkerProperties();
         properties.setWorkDir(file);
-        WorkerHealthProbe invalid = new WorkerHealthProbe(registry, properties);
+        WorkerHealthProbe invalid = createProbe(properties);
         when(container.isRunning()).thenReturn(true);
         when(container.getActiveConsumerCount()).thenReturn(2);
         assertDoesNotThrow(invalid::applicationReady);
@@ -136,5 +142,17 @@ class WorkerHealthProbeTest {
         assertDoesNotThrow(probe::applicationReady);
         assertFalse(Files.exists(health));
         assertEquals("preserve", Files.readString(external, StandardCharsets.UTF_8));
+    }
+    /**
+     * 装配探针并执行真实初始化，避免测试绕过字段注入后的生命周期。
+     * @param properties 临时工作目录及并发配置
+     * @return 已完成初始化的探针
+     */
+    private WorkerHealthProbe createProbe(WorkerProperties properties) {
+        WorkerHealthProbe component = new WorkerHealthProbe();
+        ReflectionTestUtils.setField(component, "registry", registry);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        component.initialize();
+        return component;
     }
 }

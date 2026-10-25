@@ -7,7 +7,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * Web 数据接口的服务身份与超时。密钥不参与 toString，也不复用用户 JWT。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: Web 数据接口的服务身份与超时。密钥不参与 toString，也不复用用户 JWT。
  */
 @Getter
 @Setter

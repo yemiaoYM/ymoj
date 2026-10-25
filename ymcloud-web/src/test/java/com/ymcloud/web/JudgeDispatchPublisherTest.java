@@ -26,13 +26,14 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -40,7 +41,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-/** 发布只有确认且成功路由后才完成，租约失败、退回、nack 和超时都保留补偿任务。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 发布只有确认且成功路由后才完成，租约失败、退回、nack 和超时都保留补偿任务。
+ */
 class JudgeDispatchPublisherTest {
 
     JudgeDispatchEntityService dispatches;
@@ -61,7 +66,7 @@ class JudgeDispatchPublisherTest {
         properties = new JudgeDispatchProperties();
         properties.setConfirmTimeout(Duration.ofMillis(5));
         codec = new JudgeMessageCodec(new ObjectMapper());
-        publisher = new JudgeDispatchPublisher(dispatches, results, rabbit, codec, properties,
+        publisher = createJudgeDispatchPublisher(dispatches, results, rabbit, codec, properties,
                 JudgeProtocol.EXCHANGE, JudgeProtocol.TASK_ROUTE);
         updates = new ArrayList<>();
         doAnswer(invocation -> update()).when(dispatches).lambdaUpdate();
@@ -238,5 +243,35 @@ class JudgeDispatchPublisherTest {
             return update;
         }).when(update).set(any(), nullable(Object.class));
         return update;
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param dispatches 任务箱实体服务
+     * @param results 结果落库入口
+     * @param rabbitTemplate 可控制确认和退回的消息模板
+     * @param codec 严格判题消息编解码器
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param exchange 测试交换机名
+     * @param routingKey 测试任务路由
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeDispatchPublisher createJudgeDispatchPublisher(
+            JudgeDispatchEntityService dispatches,
+            JudgeResultService results,
+            RabbitTemplate rabbitTemplate,
+            JudgeMessageCodec codec,
+            JudgeDispatchProperties properties,
+            String exchange,
+            String routingKey) {
+        JudgeDispatchPublisher component = new JudgeDispatchPublisher();
+        ReflectionTestUtils.setField(component, "dispatches", dispatches);
+        ReflectionTestUtils.setField(component, "results", results);
+        ReflectionTestUtils.setField(component, "rabbitTemplate", rabbitTemplate);
+        ReflectionTestUtils.setField(component, "codec", codec);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "exchange", exchange);
+        ReflectionTestUtils.setField(component, "routingKey", routingKey);
+        return component;
     }
 }

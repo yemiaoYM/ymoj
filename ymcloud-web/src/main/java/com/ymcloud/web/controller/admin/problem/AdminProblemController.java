@@ -22,8 +22,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.web.controller.admin.problem
- * @ClassName: AdminProblemController
  * @Author: Yemiao
  * @CreateTime: 2025-09-21  21:26
  * @Description: 管理端题目控制器
@@ -66,14 +64,14 @@ public class AdminProblemController {
     }
 
     /**
-     * 新增题目
-     * @param problemDTO 题目信息
-     * @return 新增题目的展示id
+     * 校验自定义展示 ID 及题目信息后新增题目。
+     * @param problemDTO 题目信息，展示 ID 为1～15位字母、数字或下划线
+     * @return 新增题目的展示 ID
      */
     @PreAuthorize("@ss.hasPermi('problem:problem:add')")
     @PostMapping
-    public Result<String> addProblem(@RequestBody @Validated ProblemDTO problemDTO) {
-        log.info("新增题目:{}", problemDTO);
+    public Result<String> addProblem(@RequestBody @Validated(ProblemDTO.Create.class) ProblemDTO problemDTO) {
+        log.info("新增题目，展示ID：{}", problemDTO.getProblemId());
         String problemId = adminProblemService.addProblem(problemDTO);
         return Result.ok(problemId);
     }
@@ -87,7 +85,7 @@ public class AdminProblemController {
     @PreAuthorize("@ss.hasPermi('problem:problem:edit')")
     @PutMapping("/{id}")
     public Result<Void> updateProblem(@PathVariable("id") Long id, @Validated @RequestBody ProblemDTO problemDTO) {
-        log.info("修改题目:{}, 数据:{}", id, problemDTO);
+        log.info("修改题目，题目ID：{}", id);
         adminProblemService.updateProblem(id, problemDTO);
         return Result.ok();
     }

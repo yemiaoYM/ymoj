@@ -6,6 +6,7 @@ import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeDispatch;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -18,7 +19,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-12
  * @Description: 正式提交和自测使用数据库统一序号，保持现有前端 number 的精确范围。
  */
@@ -30,23 +31,14 @@ public class JudgeDispatchIdAllocator {
     private static final String COUNTER_SQL = "SELECT AUTO_INCREMENT FROM information_schema.tables "
             + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='judge_dispatch'";
 
-    private final JudgeDispatchEntityService dispatches;
-    private final JudgeEntityService judges;
-    private final JdbcTemplate jdbc;
+    @Autowired
+    private JudgeDispatchEntityService dispatches;
 
-    /**
-     * 初始化数据库序号分配器；元数据读取与会话设置必须使用同一个连接。
-     * @param dispatches 任务箱数据服务
-     * @param judges 正式提交数据服务
-     * @param jdbc MySQL 元数据访问入口
-     */
-    public JudgeDispatchIdAllocator(JudgeDispatchEntityService dispatches,
-                                    JudgeEntityService judges,
-                                    JdbcTemplate jdbc) {
-        this.dispatches = dispatches;
-        this.judges = judges;
-        this.jdbc = jdbc;
-    }
+    @Autowired
+    private JudgeEntityService judges;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     /**
      * 启动时核对自增定义和前端可精确表示的序号范围，不在运行时修改表结构。

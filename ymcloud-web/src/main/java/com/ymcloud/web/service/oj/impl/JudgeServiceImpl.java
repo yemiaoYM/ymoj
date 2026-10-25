@@ -48,6 +48,7 @@ import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.service.oj.JudgeService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -73,45 +74,53 @@ public class JudgeServiceImpl implements JudgeService {
     private static final int MAX_SELF_TEST_LENGTH = 1024 * 1024;
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("Java", "C", "C++", "Python");
 
-    private final JudgeEntityService judges;
-    private final JudgeDispatchEntityService dispatches;
-    private final ProblemEntityService problems;
-    private final LanguageEntityService languages;
-    private final ContestEntityService contests;
-    private final ContestProblemEntityService contestProblems;
-    private final ContestUserEntityService contestUsers;
-    private final TestDataService testData;
-    private final TestDataVersionEntityService versions;
-    private final JudgeDispatchProperties properties;
-    private final JudgeMessageCodec codec;
-    private final JudgeStatusCache cache;
-    private final JudgeResultService results;
-    private final JudgeDispatchIdAllocator allocator;
+    @Autowired
+    private JudgeEntityService judges;
 
-    public JudgeServiceImpl(JudgeEntityService judges, JudgeDispatchEntityService dispatches,
-                            ProblemEntityService problems, LanguageEntityService languages,
-                            ContestEntityService contests, ContestProblemEntityService contestProblems,
-                            ContestUserEntityService contestUsers, TestDataService testData,
-                            TestDataVersionEntityService versions, JudgeDispatchProperties properties,
-                            JudgeMessageCodec codec, JudgeStatusCache cache, JudgeResultService results,
-                            JudgeDispatchIdAllocator allocator) {
-        this.judges = judges;
-        this.dispatches = dispatches;
-        this.problems = problems;
-        this.languages = languages;
-        this.contests = contests;
-        this.contestProblems = contestProblems;
-        this.contestUsers = contestUsers;
-        this.testData = testData;
-        this.versions = versions;
-        this.properties = properties;
-        this.codec = codec;
-        this.cache = cache;
-        this.results = results;
-        this.allocator = allocator;
-    }
+    @Autowired
+    private JudgeDispatchEntityService dispatches;
 
-    /** 版本读取持有题目行锁，提交记录和固定任务快照在同一事务提交。 */
+    @Autowired
+    private ProblemEntityService problems;
+
+    @Autowired
+    private LanguageEntityService languages;
+
+    @Autowired
+    private ContestEntityService contests;
+
+    @Autowired
+    private ContestProblemEntityService contestProblems;
+
+    @Autowired
+    private ContestUserEntityService contestUsers;
+
+    @Autowired
+    private TestDataService testData;
+
+    @Autowired
+    private TestDataVersionEntityService versions;
+
+    @Autowired
+    private JudgeDispatchProperties properties;
+
+    @Autowired
+    private JudgeMessageCodec codec;
+
+    @Autowired
+    private JudgeStatusCache cache;
+
+    @Autowired
+    private JudgeResultService results;
+
+    @Autowired
+    private JudgeDispatchIdAllocator allocator;
+
+    /**
+     * 版本读取持有题目行锁，提交记录和固定任务快照在同一事务提交。
+     * @param request 经过结构校验的提交请求
+     * @return 本次正式提交 ID
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long submitJudge(JudgeDTO request) {
@@ -135,6 +144,11 @@ public class JudgeServiceImpl implements JudgeService {
         return createSubmission(request, user, problem, null, null);
     }
 
+    /**
+     * 检查比赛时段、参赛资格和比赛题目映射后创建提交。
+     * @param request 经过结构校验的比赛提交请求
+     * @return 本次比赛提交 ID
+     */
     private Long submitContest(JudgeDTO request) {
         if (request.getContestId() == null) {
             throw new ContestNotExistException();
@@ -301,6 +315,13 @@ public class JudgeServiceImpl implements JudgeService {
         return language;
     }
 
+    /**
+     * 校验源码和语言后固定任务身份与总截止时间。
+     * @param executionId 本次新执行标识
+     * @param language 已启用的本站语言
+     * @param code 用户源码，非空且有容量上限
+     * @return 尚未分配提交 ID 的任务骨架
+     */
     private JudgeTask newTask(String executionId, Language language, String code) {
         if (code == null || code.isBlank() || code.length() > MAX_CODE_LENGTH) {
             throw new JudgeException("代码为空或超过允许的大小");
@@ -317,6 +338,10 @@ public class JudgeServiceImpl implements JudgeService {
         return task;
     }
 
+    /**
+     * 限制支持语言、固定文件名和编译类型，历史命令不参与实际执行。
+     * @param language 已启用的本站语言配置
+     */
     private void validateLanguage(Language language) {
         boolean supported = language.getName() != null
                 && SUPPORTED_LANGUAGES.contains(language.getName());
@@ -330,6 +355,11 @@ public class JudgeServiceImpl implements JudgeService {
         // image、env 和命令只保留在提交快照中，实际执行由 Worker 的固定语言入口决定。
     }
 
+    /**
+     * 复制必要语言元数据到任务契约，不传持久实体。
+     * @param language 已验证的本站语言配置
+     * @return 不可随后续配置修改而改变的语言快照
+     */
     private JudgeLanguage languageSnapshot(Language language) {
         JudgeLanguage snapshot = new JudgeLanguage();
         snapshot.setName(language.getName());
@@ -345,6 +375,11 @@ public class JudgeServiceImpl implements JudgeService {
         return snapshot;
     }
 
+    /**
+     * 在提交事务中分配 ID 并保存完整任务快照，提交后再更新缓存。
+     * @param task 已验证的任务，回填提交 ID
+     * @param userId 从安全上下文取得的操作者 ID
+     */
     private void enqueue(JudgeTask task, Long userId) {
         if (!Objects.equals(task.getMode(), JudgeConstants.ACM)
                 && !Objects.equals(task.getMode(), JudgeConstants.OI)) {
@@ -388,13 +423,20 @@ public class JudgeServiceImpl implements JudgeService {
         logSubmissionAfterCommit(task, userId);
     }
 
-    /** 仅在业务事务提交成功后记录创建成功，避免回滚任务出现在开发日志中。 */
+    /**
+     * 仅在业务事务提交成功后记录创建成功，避免回滚任务出现在开发日志中。
+     * @param task 已持久化任务
+     * @param userId 可信操作者 ID
+     */
     private void logSubmissionAfterCommit(JudgeTask task, Long userId) {
         Runnable record = () -> log.info("创建判题任务成功，提交编号：{}，执行编号：{}，用户编号：{}，题目编号：{}，数据版本：{}，策略：{}，语言：{}",
                 task.getSubmissionId(), task.getExecutionId(), userId, task.getProblemId(),
                 task.getTestDataVersionId(), task.getStrategy(), task.getLanguageConfig().getName());
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                /**
+                 * 提交成功后执行任务创建日志回调。
+                 */
                 @Override
                 public void afterCommit() {
                     record.run();
@@ -405,6 +447,11 @@ public class JudgeServiceImpl implements JudgeService {
         }
     }
 
+    /**
+     * 先检查归属再查状态缓存，缓存缺失从持久数据恢复。
+     * @param submissionId 提交或自测 ID
+     * @return 当前用户有权访问的判题状态
+     */
     @Override
     public JudgeResultVO getStatus(Long submissionId) {
         Long userId = SecurityUtils.getUserId();
@@ -455,6 +502,12 @@ public class JudgeServiceImpl implements JudgeService {
         return current;
     }
 
+    /**
+     * 读取任务箱拆分前的提交状态，同样验证查看权限。
+     * @param submissionId 历史正式提交 ID
+     * @param userId 从安全上下文取得的当前用户 ID
+     * @return 允许当前用户查看的历史状态
+     */
     private JudgeResultVO historicalStatus(Long submissionId, Long userId) {
         Judge historical = judges.lambdaQuery()
                 .select(Judge::getUserId, Judge::getStatus, Judge::getTime,
@@ -473,12 +526,22 @@ public class JudgeServiceImpl implements JudgeService {
                 .build();
     }
 
+    /**
+     * 只允许所属用户或已确认的超级管理员读取私有状态。
+     * @param currentUser 从安全上下文取得的当前用户 ID
+     * @param owner 任务所属用户 ID
+     */
     private void requireOwner(Long currentUser, Long owner) {
         if (!Objects.equals(currentUser, owner) && !SecurityUtils.isSuperAdmin(currentUser)) {
             throw new JudgeException("无权查看他人的评测状态", HttpStatus.FORBIDDEN);
         }
     }
 
+    /**
+     * 检查题目时间和内存范围，非法配置不进入消息队列。
+     * @param time 时间上限，1～60000 毫秒
+     * @param memory 内存上限，1024～2097152 KiB
+     */
     private void validateResources(Long time, Long memory) {
         if (time == null || time < 1 || time > 60_000
                 || memory == null || memory < 1024 || memory > 2 * 1024 * 1024L) {

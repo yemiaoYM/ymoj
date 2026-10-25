@@ -53,12 +53,13 @@ import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -115,8 +116,8 @@ class JudgeWebWorkflowTest {
         redis = mock(RedisCache.class);
         properties = new JudgeDispatchProperties();
         codec = new JudgeMessageCodec(new ObjectMapper());
-        cache = new JudgeStatusCache(redis);
-        results = new JudgeResultService(dispatches, judges, cases, users, accepted, codec, cache, properties);
+        cache = createJudgeStatusCache(redis);
+        results = createJudgeResultService(dispatches, judges, cases, users, accepted, codec, cache, properties);
         AtomicLong sequence = new AtomicLong(100L);
         when(dispatches.save(any())).thenAnswer(invocation -> {
             JudgeDispatch dispatch = invocation.getArgument(0);
@@ -124,9 +125,9 @@ class JudgeWebWorkflowTest {
             return true;
         });
         doReturn(update()).when(dispatches).lambdaUpdate();
-        service = new JudgeServiceImpl(judges, dispatches, problems, languages, contests, contestProblems,
+        service = createJudgeServiceImpl(judges, dispatches, problems, languages, contests, contestProblems,
                 contestUsers, testData, versions, properties, codec, cache, results,
-                new JudgeDispatchIdAllocator(dispatches, judges, mock(JdbcTemplate.class)));
+                createJudgeDispatchIdAllocator(dispatches, judges, mock(JdbcTemplate.class)));
     }
 
     @Test
@@ -712,5 +713,118 @@ class JudgeWebWorkflowTest {
         when(update.set(any(), nullable(Object.class))).thenReturn(update);
         when(update.update()).thenReturn(true);
         return update;
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param dispatches 任务箱实体服务
+     * @param judges 提交实体服务
+     * @param jdbc 测试数据库连接或隔离桩
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeDispatchIdAllocator createJudgeDispatchIdAllocator(
+            JudgeDispatchEntityService dispatches,
+            JudgeEntityService judges,
+            JdbcTemplate jdbc) {
+        JudgeDispatchIdAllocator component = new JudgeDispatchIdAllocator();
+        ReflectionTestUtils.setField(component, "dispatches", dispatches);
+        ReflectionTestUtils.setField(component, "judges", judges);
+        ReflectionTestUtils.setField(component, "jdbc", jdbc);
+        return component;
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param dispatches 任务箱实体服务
+     * @param judges 提交实体服务
+     * @param cases 测试点实体服务
+     * @param users 用户实体服务
+     * @param accepted 用户 AC 记录实体服务
+     * @param codec 严格判题消息编解码器
+     * @param cache 本测试的版本或状态缓存
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeResultService createJudgeResultService(
+            JudgeDispatchEntityService dispatches,
+            JudgeEntityService judges,
+            JudgeCaseEntityService cases,
+            UserEntityService users,
+            UserAcproblemEntityService accepted,
+            JudgeMessageCodec codec,
+            JudgeStatusCache cache,
+            JudgeDispatchProperties properties) {
+        JudgeResultService component = new JudgeResultService();
+        ReflectionTestUtils.setField(component, "dispatches", dispatches);
+        ReflectionTestUtils.setField(component, "judges", judges);
+        ReflectionTestUtils.setField(component, "cases", cases);
+        ReflectionTestUtils.setField(component, "users", users);
+        ReflectionTestUtils.setField(component, "accepted", accepted);
+        ReflectionTestUtils.setField(component, "codec", codec);
+        ReflectionTestUtils.setField(component, "cache", cache);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        return component;
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param judges 提交实体服务
+     * @param dispatches 任务箱实体服务
+     * @param problems 题目实体服务
+     * @param languages 语言实体服务
+     * @param contests 比赛实体服务
+     * @param contestProblems 比赛题目实体服务
+     * @param contestUsers 参赛记录实体服务
+     * @param testData 固定测试版本访问服务
+     * @param versions 测试版本实体服务
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param codec 严格判题消息编解码器
+     * @param cache 本测试的版本或状态缓存
+     * @param results 结果落库入口
+     * @param allocator 提交序号分配器
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeServiceImpl createJudgeServiceImpl(
+            JudgeEntityService judges,
+            JudgeDispatchEntityService dispatches,
+            ProblemEntityService problems,
+            LanguageEntityService languages,
+            ContestEntityService contests,
+            ContestProblemEntityService contestProblems,
+            ContestUserEntityService contestUsers,
+            TestDataService testData,
+            TestDataVersionEntityService versions,
+            JudgeDispatchProperties properties,
+            JudgeMessageCodec codec,
+            JudgeStatusCache cache,
+            JudgeResultService results,
+            JudgeDispatchIdAllocator allocator) {
+        JudgeServiceImpl component = new JudgeServiceImpl();
+        ReflectionTestUtils.setField(component, "judges", judges);
+        ReflectionTestUtils.setField(component, "dispatches", dispatches);
+        ReflectionTestUtils.setField(component, "problems", problems);
+        ReflectionTestUtils.setField(component, "languages", languages);
+        ReflectionTestUtils.setField(component, "contests", contests);
+        ReflectionTestUtils.setField(component, "contestProblems", contestProblems);
+        ReflectionTestUtils.setField(component, "contestUsers", contestUsers);
+        ReflectionTestUtils.setField(component, "testData", testData);
+        ReflectionTestUtils.setField(component, "versions", versions);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "codec", codec);
+        ReflectionTestUtils.setField(component, "cache", cache);
+        ReflectionTestUtils.setField(component, "results", results);
+        ReflectionTestUtils.setField(component, "allocator", allocator);
+        return component;
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param redisCache 隔离的缓存边界
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeStatusCache createJudgeStatusCache(RedisCache redisCache) {
+        JudgeStatusCache component = new JudgeStatusCache();
+        ReflectionTestUtils.setField(component, "redisCache", redisCache);
+        return component;
     }
 }

@@ -4,15 +4,73 @@ import com.ymcloud.judge.strategy.OutputComparator;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 验证空白兼容性、大文件比对及完整性校验边界。
+ */
 class OutputComparatorTest {
+
+    /**
+     * 固定期望值独立验证空行、跨缓冲区 CRLF 和行内空白，避免自比较掩盖语义回归。
+     * @throws Exception 文件比对失败
+     */
+    @Test
+    void normalizationKeepsLeadingAndInternalWhitespaceAcrossChunks() throws Exception {
+        assertEquals("\n a\n\nb c", OutputComparator.normalize("\r\n a \r\n \t\r\nb c\t\n \n"));
+        String prefix = "x".repeat(8191);
+        assertTrue(OutputComparator.matches(stream(prefix + "\r\nnext \r\n"), prefix + "\nnext"));
+        assertFalse(OutputComparator.matches(stream("a b"), "ab"));
+        assertEquals("", OutputComparator.normalize(" \r\n".repeat(300000)));
+    }
+
+    /**
+     * 生成 32 MiB 标准答案尾部空白，验证大文件按小块读取而不是整份加载。
+     * @throws Exception 标准答案读取或比对失败
+     */
+    @Test
+    void largeExpectedFileUsesBoundedReadsAndCanBeInterrupted() throws Exception {
+        InputStream spaces = new InputStream() {
+            private long remaining = 32L * 1024 * 1024;
+
+            @Override
+            public int read() {
+                return remaining-- > 0 ? ' ' : -1;
+            }
+
+            @Override
+            public int read(byte[] buffer, int offset, int length) {
+                assertTrue(length <= 8192, "标准答案不能使用与文件等大的读取缓冲");
+                if (remaining == 0) {
+                    return -1;
+                }
+                int count = (int) Math.min(length, remaining);
+                Arrays.fill(buffer, offset, offset + count, (byte) ' ');
+                remaining -= count;
+                return count;
+            }
+        };
+        assertTrue(OutputComparator.matches(new SequenceInputStream(stream("answer"), spaces), "answer\n"));
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(IOException.class, () -> OutputComparator.matches(stream("answer"), "answer"));
+            assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
 
     @Test
     void streamingComparisonMatchesEstablishedRulesIncludingLeadingWhitespaceAndEmptyLines() throws Exception {

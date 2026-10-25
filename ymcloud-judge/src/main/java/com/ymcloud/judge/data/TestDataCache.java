@@ -3,6 +3,7 @@ package com.ymcloud.judge.data;
 import com.ymcloud.judge.data.TestDataManifestReader.CaseSpec;
 import com.ymcloud.judge.data.TestDataManifestReader.FileSpec;
 import com.ymcloud.judge.data.TestDataManifestReader.VerifiedManifest;
+import com.ymcloud.judge.io.WorkerPaths;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * 按题目与不可变版本缓存原始文件。下载校验完成后原子发布，使用中的版本不会被容量清理。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 按题目与不可变版本缓存原始文件。下载校验完成后原子发布，使用中的版本不会被容量清理。
  */
 @Slf4j
 @Component
@@ -70,18 +73,24 @@ public class TestDataCache implements AutoCloseable {
     private long reservedBytes;
     private boolean closed;
 
+    /**
+     * 构造时取得目录独占锁并恢复缓存，因此保留构造器注入。
+     * @param source 版本数据下载边界
+     * @param properties 缓存目录及容量限制
+     * @throws IOException 目录不安全、占用冲突或恢复失败
+     */
     public TestDataCache(TestDataSource source, TestDataCacheProperties properties) throws IOException {
         this.source = Objects.requireNonNull(source);
         this.properties = properties;
         validateProperties(properties);
         this.manifestReader = new TestDataManifestReader(properties);
         this.root = Path.of(properties.getDirectory()).toAbsolutePath().normalize();
-        rejectSymbolicLinks(root);
+        WorkerPaths.rejectSymbolicLinks(root);
         Files.createDirectories(root);
-        rejectSymbolicLinks(root);
+        WorkerPaths.rejectSymbolicLinks(root);
         privatePermissions(root, true);
         Path lockPath = root.resolve(".worker.lock");
-        rejectSymbolicLinks(lockPath);
+        WorkerPaths.rejectSymbolicLinks(lockPath);
         this.lockChannel = FileChannel.open(lockPath, StandardOpenOption.CREATE,
                 StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
         try {
@@ -106,6 +115,11 @@ public class TestDataCache implements AutoCloseable {
 
     /**
      * 任务固定的清单哈希参与校验，不能以题目当前版本或缓存自身的哈希替代。
+     * @param problemId 正数题目 ID
+     * @param versionId 正数不可变版本 ID
+     * @param manifestSha256 任务固定的小写 SHA-256
+     * @return 由调用方关闭的版本引用
+     * @throws IOException 下载、完整性或容量检查失败，或任务中断
      */
     public Lease acquire(Long problemId, Long versionId, String manifestSha256) throws IOException {
         requireId(problemId);
@@ -182,6 +196,10 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 读取缓存命中、失败及磁盘预算快照。
+     * @return 当前累计计数与字节容量
+     */
     public Statistics statistics() {
         synchronized (state) {
             return new Statistics(hits.get(), misses.get(), downloadFailures.get(),
@@ -189,6 +207,10 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 停止接收新请求，所有下载和引用释放后再关闭目录锁。
+     * @throws IOException 目录锁或锁通道释放失败
+     */
     @PreDestroy
     @Override
     public void close() throws IOException {
@@ -199,6 +221,13 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 在临时目录下载并验证版本，完成后原子发布。
+     * @param key 固定题目和版本
+     * @param expectedHash 任务清单哈希
+     * @return 持有已发布版本的引用
+     * @throws IOException 下载、容量或校验失败
+     */
     private Lease download(Key key, String expectedHash) throws IOException {
         long started = System.nanoTime();
         log.info("开始下载测试数据 problem={} version={}", key.problemId, key.versionId);
@@ -276,6 +305,10 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 恢复完整版本并清理中断下载及无效版本。
+     * @throws IOException 扫描或清理缓存目录失败
+     */
     private void recover() throws IOException {
         try (Stream<Path> paths = Files.list(root)) {
             for (Path path : paths.sorted().toList()) {
@@ -308,6 +341,15 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 校验原始清单并建立版本元数据。
+     * @param key 固定题目和版本
+     * @param raw 有界原始清单
+     * @param expectedHash 任务清单哈希
+     * @param directory 当前版本目录
+     * @return 已验证版本描述
+     * @throws IOException 清单与任务不匹配或字段非法
+     */
     private CachedVersion parseVersion(Key key, byte[] raw, String expectedHash, Path directory) throws IOException {
         try {
             VerifiedManifest manifest = manifestReader.read(key.problemId, key.versionId, raw, expectedHash);
@@ -318,8 +360,14 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 核对清单及全部文件完整性，拒绝额外文件。
+     * @param version 待核验缓存版本
+     * @param expectedHash 任务清单哈希
+     * @throws IOException 文件缺失、校验失败或中断
+     */
     private void validateFiles(CachedVersion version, String expectedHash) throws IOException {
-        rejectSymbolicLinks(version.directory);
+        WorkerPaths.rejectSymbolicLinks(version.directory);
         if (!Files.isDirectory(version.directory, LinkOption.NOFOLLOW_LINKS)) {
             throw new IOException("缓存版本目录不存在或路径无效");
         }
@@ -354,8 +402,14 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 有界读取本地清单，拒绝链接及非普通文件。
+     * @param path 清单绝对路径
+     * @return 原始清单字节
+     * @throws IOException 路径非法、文件超限或读取失败
+     */
     private byte[] readManifest(Path path) throws IOException {
-        rejectSymbolicLinks(path);
+        WorkerPaths.rejectSymbolicLinks(path);
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
                 || Files.size(path) > properties.getMaxManifestBytes()) {
             throw new IOException("缓存清单文件无效或过大");
@@ -370,9 +424,15 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 读取固定长度的清单摘要标记。
+     * @param directory 版本目录
+     * @return 小写 SHA-256
+     * @throws IOException 标记缺失、非法或读取失败
+     */
     private String readManifestHash(Path directory) throws IOException {
         Path path = directory.resolve(MANIFEST_HASH);
-        rejectSymbolicLinks(path);
+        WorkerPaths.rejectSymbolicLinks(path);
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != 64) {
             throw new IOException("缓存清单的固定哈希标记无效");
         }
@@ -386,6 +446,13 @@ public class TestDataCache implements AutoCloseable {
         return hash;
     }
 
+    /**
+     * 写入并刷盘原始清单和固定摘要。
+     * @param staged 当前下载临时目录
+     * @param raw 原始清单字节
+     * @param expectedHash 任务清单摘要
+     * @throws IOException 写入、权限或刷盘失败
+     */
     private void writeManifest(Path staged, byte[] raw, String expectedHash) throws IOException {
         Path path = staged.resolve(MANIFEST);
         Files.write(path, raw, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
@@ -397,6 +464,13 @@ public class TestDataCache implements AutoCloseable {
         forceFile(marker);
     }
 
+    /**
+     * 按流写入单个数据文件，复核字节数和 SHA-256。
+     * @param target 新文件路径
+     * @param input 由上层关闭的数据流
+     * @param file 清单文件描述
+     * @throws IOException 容量、完整性或写入失败
+     */
     private void writeVerified(Path target, InputStream input, FileSpec file) throws IOException {
         MessageDigest digest = digest();
         long count = 0;
@@ -423,6 +497,11 @@ public class TestDataCache implements AutoCloseable {
         forceFile(target);
     }
 
+    /**
+     * 仅淘汰无引用的最久未使用版本，调用方持有状态锁。
+     * @param incoming 新版本占用字节数
+     * @throws IOException 没有可安全腾出的空间
+     */
     private void ensureCapacity(long incoming) throws IOException {
         if (incoming > properties.getMaxBytes()) {
             throw new IOException("测试数据版本超过 Worker 总缓存容量");
@@ -436,6 +515,11 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 删除无引用版本并扣减容量，调用方持有状态锁。
+     * @param version 待淘汰版本
+     * @throws IOException 版本仍在使用或删除失败
+     */
     private void removeVersion(CachedVersion version) throws IOException {
         if (version.references != 0) {
             throw new IOException("不能删除运行中的测试数据缓存");
@@ -448,6 +532,11 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 仅删除缓存根目录内符合自有命名的目录，不跟随链接。
+     * @param directory 候选目录
+     * @throws IOException 路径越界或清理失败
+     */
     private void deleteOwnedDirectory(Path directory) throws IOException {
         Path normalized = directory.toAbsolutePath().normalize();
         String name = normalized.getFileName().toString();
@@ -466,10 +555,20 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 由可信 ID 构造固定版本路径。
+     * @param key 固定题目和版本
+     * @return 缓存根目录内的版本路径
+     */
     private Path directory(Key key) {
         return root.resolve("p" + key.problemId + "-v" + key.versionId);
     }
 
+    /**
+     * 释放一个引用并更新访问时间，关闭期间检查目录锁。
+     * @param version 当前引用的版本
+     * @throws IOException 目录锁释放失败
+     */
     private void release(CachedVersion version) throws IOException {
         synchronized (state) {
             version.references--;
@@ -478,6 +577,10 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 停止后等待下载及引用全部释放，再解除目录占用。
+     * @throws IOException 释放文件锁或通道失败
+     */
     private void releaseProcessLockIfUnused() throws IOException {
         if (closed && downloads.isEmpty() && reservedBytes == 0
                 && versions.values().stream().noneMatch(version -> version.references != 0)
@@ -487,12 +590,20 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 拒绝已停止缓存接收新的数据准备。
+     * @throws IOException 缓存已经停止
+     */
     private void requireOpen() throws IOException {
         if (closed) {
             throw new IOException("测试数据缓存已经关闭");
         }
     }
 
+    /**
+     * 校验缓存目录、容量及测试点数量。
+     * @param properties 缓存配置
+     */
     private static void validateProperties(TestDataCacheProperties properties) {
         if (properties == null || properties.getDirectory() == null || properties.getDirectory().isBlank()
                 || properties.getMaxBytes() <= 0 || properties.getMaxVersionBytes() <= 0
@@ -503,33 +614,34 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 要求题目、版本和文件标识为正数。
+     * @param id 待检查 ID
+     * @throws IOException 标识为空或非正数
+     */
     private static void requireId(Long id) throws IOException {
         if (id == null || id <= 0) {
             throw new IOException("测试数据题目、版本或文件 ID 无效");
         }
     }
 
+    /**
+     * 要求摘要为 64 位小写十六进制。
+     * @param hash 任务或缓存清单摘要
+     * @throws IOException 格式不合法
+     */
     private static void requireHash(String hash) throws IOException {
         if (hash == null || !hash.matches("[0-9a-f]{64}")) {
             throw new IOException("测试数据 SHA-256 无效");
         }
     }
 
-    private static void rejectSymbolicLinks(Path path) throws IOException {
-        Path absolute = path.toAbsolutePath().normalize();
-        Path current = absolute.getRoot();
-        for (Path part : absolute) {
-            current = current.resolve(part);
-            if (Files.isSymbolicLink(current)) {
-                throw new IOException("测试数据缓存路径不允许符号链接");
-            }
-            if (Files.exists(current, LinkOption.NOFOLLOW_LINKS)
-                    && !current.toRealPath().equals(current.toRealPath(LinkOption.NOFOLLOW_LINKS))) {
-                throw new IOException("测试数据缓存路径不允许链接或目录联接");
-            }
-        }
-    }
-
+    /**
+     * 限制缓存文件仅由当前所有者访问，非 POSIX 平台保留系统权限。
+     * @param path 缓存路径
+     * @param directory 是否为目录
+     * @throws IOException 权限更新失败
+     */
     private static void privatePermissions(Path path, boolean directory) throws IOException {
         if (path.getFileSystem().supportedFileAttributeViews().contains("posix")) {
             String permissions = directory ? "rwx------" : "rw-------";
@@ -537,18 +649,31 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 将已写文件刷盘后再参与版本发布。
+     * @param path 已写入的普通文件
+     * @throws IOException 刷盘失败
+     */
     private static void forceFile(Path path) throws IOException {
         try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
             channel.force(true);
         }
     }
 
+    /**
+     * 在文件处理边界响应任务中断。
+     * @throws IOException 当前线程已中断
+     */
     private static void checkInterrupted() throws IOException {
         if (Thread.currentThread().isInterrupted()) {
             throw new IOException("测试数据准备被中断");
         }
     }
 
+    /**
+     * 创建独立的 SHA-256 摘要状态。
+     * @return 本次校验的摘要实例
+     */
     private static MessageDigest digest() {
         try {
             return MessageDigest.getInstance("SHA-256");
@@ -557,12 +682,24 @@ public class TestDataCache implements AutoCloseable {
         }
     }
 
+    /**
+     * 计算有界清单正文的 SHA-256。
+     * @param value 原始清单字节
+     * @return 小写十六进制摘要
+     */
     private static String hash(byte[] value) {
         return HexFormat.of().formatHex(digest().digest(value));
     }
 
+    /**
+     * 打开受限本地文件，EOF 和提前关闭都检查完整性。
+     * @param path 缓存文件路径
+     * @param file 固定文件元数据
+     * @return 调用方负责关闭的校验流
+     * @throws IOException 路径、大小或打开失败
+     */
     private static InputStream verifiedStream(Path path, FileSpec file) throws IOException {
-        rejectSymbolicLinks(path);
+        WorkerPaths.rejectSymbolicLinks(path);
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != file.size()) {
             throw new IOException("缓存文件不存在或大小不一致");
         }
@@ -577,6 +714,10 @@ public class TestDataCache implements AutoCloseable {
         private final AtomicBoolean released = new AtomicBoolean();
         private final List<CachedCase> entries;
 
+        /**
+         * 为已领取版本建立测试点视图。
+         * @param version 已经增加引用计数的版本
+         */
         private Lease(CachedVersion version) {
             this.version = version;
             this.entries = version.cases.stream()
@@ -584,17 +725,32 @@ public class TestDataCache implements AutoCloseable {
                     .toList();
         }
 
+        /**
+         * 读取仍持有引用的测试点列表。
+         * @return 不可变测试点列表
+         * @throws IOException 引用已释放
+         */
         public List<CachedCase> entries() throws IOException {
             requireActive();
             return entries;
         }
 
+        /**
+         * 阻止已释放版本引用继续打开文件。
+         * @throws IOException 引用已经释放
+         */
         private void requireActive() throws IOException {
             if (released.get()) {
                 throw new IOException("测试数据缓存引用已经释放");
             }
         }
 
+        /**
+         * 打开文件时增加独立引用，流关闭后再释放。
+         * @param file 固定清单文件描述
+         * @return 调用方负责关闭的完整性校验流
+         * @throws IOException 版本已释放或文件无效
+         */
         private InputStream openFile(FileSpec file) throws IOException {
             synchronized (state) {
                 requireActive();
@@ -611,6 +767,10 @@ public class TestDataCache implements AutoCloseable {
 
                 private final AtomicBoolean streamReleased = new AtomicBoolean();
 
+                /**
+                 * 关闭校验流并释放其独立引用，重复关闭无操作。
+                 * @throws IOException 数据完整性、流关闭或目录锁释放失败
+                 */
                 @Override
                 public void close() throws IOException {
                     if (streamReleased.compareAndSet(false, true)) {
@@ -624,6 +784,10 @@ public class TestDataCache implements AutoCloseable {
             };
         }
 
+        /**
+         * 释放版本引用，重复关闭无操作；在用文件仍持有各自引用。
+         * @throws IOException 目录锁或锁通道释放失败
+         */
         @Override
         public void close() throws IOException {
             if (released.compareAndSet(false, true)) {
@@ -637,38 +801,63 @@ public class TestDataCache implements AutoCloseable {
         private final Lease lease;
         private final CaseSpec testCase;
 
+        /**
+         * 将测试点绑定到当前版本租约。
+         * @param lease 有效版本引用
+         * @param testCase 固定测试点描述
+         */
         private CachedCase(Lease lease, CaseSpec testCase) {
             this.lease = lease;
             this.testCase = testCase;
         }
 
+        /**
+         * 读取清单中的测试点编号。
+         * @return 从 1 开始的测试点编号
+         */
         public int id() {
             return testCase.id();
         }
 
+        /**
+         * 定位当前测试点输入，仅供受控内部使用。
+         * @return 缓存输入路径
+         */
         public Path inputPath() {
             return lease.version.directory.resolve(testCase.input().filename());
         }
 
+        /**
+         * 定位标准答案，禁止挂载给用户程序。
+         * @return 缓存答案路径
+         */
         public Path outputPath() {
             return lease.version.directory.resolve(testCase.output().filename());
         }
 
+        /**
+         * 打开当前测试点的输入流。
+         * @return 调用方负责关闭的校验流
+         * @throws IOException 引用已释放或文件非法
+         */
         public InputStream openInput() throws IOException {
             return lease.openFile(testCase.input());
         }
 
+        /**
+         * 打开当前测试点的标准答案流。
+         * @return 调用方负责关闭的校验流
+         * @throws IOException 引用已释放或文件非法
+         */
         public InputStream openOutput() throws IOException {
             return lease.openFile(testCase.output());
         }
     }
 
     public record Statistics(long hits, long misses, long downloadFailures, long verificationFailures,
-                             long readyBytes, long reservedBytes, int versions) {
-    }
+                             long readyBytes, long reservedBytes, int versions) {}
 
-    private record Key(Long problemId, Long versionId) {
-    }
+    private record Key(Long problemId, Long versionId) {}
 
     private static final class KeyLock {
 
@@ -687,6 +876,15 @@ public class TestDataCache implements AutoCloseable {
         private int references;
         private long lastAccess = System.nanoTime();
 
+        /**
+         * 保存已验证版本的索引和磁盘占用。
+         * @param key 固定版本键
+         * @param directory 版本目录
+         * @param manifestHash 清单摘要
+         * @param bytes 总占用字节数
+         * @param files 不可变文件索引
+         * @param cases 不可变测试点列表
+         */
         private CachedVersion(Key key, Path directory, String manifestHash, long bytes,
                               Map<Long, FileSpec> files, List<CaseSpec> cases) {
             this.key = key;
@@ -697,5 +895,4 @@ public class TestDataCache implements AutoCloseable {
             this.cases = cases;
         }
     }
-
 }

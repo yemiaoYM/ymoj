@@ -12,6 +12,7 @@ import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
 import com.ymcloud.pojo.contract.judge.JudgeLanguage;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -25,13 +26,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 独立 main 入口，用真实 JDK 17 验证 HTTP 客户端；不参与默认 JUnit 测试发现。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-14
+ * @Description: 独立 main 入口，用真实 JDK 17 验证 HTTP 客户端；不参与默认 JUnit 测试发现。
  * 通过 YMCLOUD_GO_JUDGE_URL 和 YMCLOUD_GO_JUDGE_TOKEN 连接独立的单并发测试服务。
  */
 public final class GoJudgeJdk17Smoke {
 
-    private GoJudgeJdk17Smoke() {
-    }
+    private GoJudgeJdk17Smoke() {}
 
     public static void main(String[] arguments) {
         try {
@@ -51,8 +53,8 @@ public final class GoJudgeJdk17Smoke {
         properties.setToken(System.getenv("YMCLOUD_GO_JUDGE_TOKEN"));
         WorkerProperties worker = new WorkerProperties();
         try (ObservedClient client = new ObservedClient(properties)) {
-            new GoJudgeStartupCheck(client, properties, worker).verify();
-            GoJudgeExecutor executor = new GoJudgeExecutor(client, properties, worker);
+            createGoJudgeStartupCheck(client, properties, worker).verify();
+            GoJudgeExecutor executor = createGoJudgeExecutor(client, properties, worker);
             for (String language : List.of("Java", "C", "C++", "Python")) {
                 JudgeTask task = task(language, echo(language));
                 try (GoJudgeTaskSession session = executor.openTask(task)) {
@@ -163,5 +165,41 @@ public final class GoJudgeJdk17Smoke {
             }
             return super.execute(command, deadlineEpochMillis);
         }
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param client 隔离或真实沙箱客户端
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param worker 本测试使用的 Worker 资源配置
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static GoJudgeExecutor createGoJudgeExecutor(
+            GoJudgeClient client,
+            GoJudgeProperties properties,
+            WorkerProperties worker) {
+        GoJudgeExecutor component = new GoJudgeExecutor();
+        ReflectionTestUtils.setField(component, "client", client);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "worker", worker);
+        return component;
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param client 隔离或真实沙箱客户端
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param workerProperties 本测试使用的 Worker 资源配置
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static GoJudgeStartupCheck createGoJudgeStartupCheck(
+            GoJudgeClient client,
+            GoJudgeProperties properties,
+            WorkerProperties workerProperties) {
+        GoJudgeStartupCheck component = new GoJudgeStartupCheck();
+        ReflectionTestUtils.setField(component, "client", client);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "workerProperties", workerProperties);
+        return component;
     }
 }

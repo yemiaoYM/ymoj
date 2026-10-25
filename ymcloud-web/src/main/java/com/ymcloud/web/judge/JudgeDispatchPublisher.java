@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,36 +21,42 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-/** 数据库任务箱补偿发布，使用短租约、mandatory 返回和关联确认，恢复次数有界。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 数据库任务箱补偿发布，使用短租约、mandatory 返回和关联确认，恢复次数有界。
+ */
 @Slf4j
 @Component
 public class JudgeDispatchPublisher {
 
-    private final JudgeDispatchEntityService dispatches;
-    private final JudgeResultService results;
-    private final RabbitTemplate rabbitTemplate;
-    private final JudgeMessageCodec codec;
-    private final JudgeDispatchProperties properties;
-    private final String exchange;
-    private final String routingKey;
+    @Autowired
+    private JudgeDispatchEntityService dispatches;
+
+    @Autowired
+    private JudgeResultService results;
+
+    @Autowired
+    @Qualifier("judgeRabbitTemplate")
+    private RabbitTemplate rabbitTemplate;
+
+    @Autowired
+    private JudgeMessageCodec codec;
+
+    @Autowired
+    private JudgeDispatchProperties properties;
+
+    @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}")
+    private String exchange;
+
+    @Value("${ymcloud.judge.task-routing-key:" + JudgeProtocol.TASK_ROUTE + "}")
+    private String routingKey;
 
     private boolean unavailable;
 
-    public JudgeDispatchPublisher(JudgeDispatchEntityService dispatches, JudgeResultService results,
-                                  @Qualifier("judgeRabbitTemplate") RabbitTemplate rabbitTemplate,
-                                  JudgeMessageCodec codec, JudgeDispatchProperties properties,
-                                  @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}") String exchange,
-                                  @Value("${ymcloud.judge.task-routing-key:" + JudgeProtocol.TASK_ROUTE + "}")
-                                  String routingKey) {
-        this.dispatches = dispatches;
-        this.results = results;
-        this.rabbitTemplate = rabbitTemplate;
-        this.codec = codec;
-        this.properties = properties;
-        this.exchange = exchange;
-        this.routingKey = routingKey;
-    }
-
+    /**
+     * 按批次处理到期、恢复和待发布任务，数据库故障保留任务等待恢复。
+     */
     @Scheduled(fixedDelayString = "${ymcloud.judge.dispatch.poll-interval-ms:1000}")
     public void tick() {
         try {
@@ -80,7 +87,10 @@ public class JudgeDispatchPublisher {
         }
     }
 
-    /** 此方法不在业务提交事务中执行，只读取已经提交的任务。 */
+    /**
+     * 此方法不在业务提交事务中执行，只读取已经提交的任务。
+     * @param dispatch 已持久化的任务快照
+     */
     public void publish(JudgeDispatch dispatch) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         if (!dispatch.getDeadlineTime().isAfter(now)) {
@@ -117,6 +127,13 @@ public class JudgeDispatchPublisher {
         }
     }
 
+    /**
+     * 通过状态、尝试次数和时间条件原子领取发布租约。
+     * @param dispatch 待发布任务快照
+     * @param lease 本次发布租约令牌
+     * @param now 当前 UTC 时间
+     * @return 是否成功领取且增加发布次数
+     */
     private boolean claim(JudgeDispatch dispatch, String lease, LocalDateTime now) {
         return dispatches.lambdaUpdate()
                 .eq(JudgeDispatch::getId, dispatch.getId())
@@ -133,6 +150,11 @@ public class JudgeDispatchPublisher {
                 .update();
     }
 
+    /**
+     * 解析持久任务并核对执行身份，拒绝错配快照。
+     * @param dispatch 包含持久 JSON 的任务记录
+     * @return 与记录身份一致的任务
+     */
     private JudgeTask readTask(JudgeDispatch dispatch) {
         JudgeTask task = codec.task(dispatch.getTaskPayload());
         if (task.getSchemaVersion() != JudgeProtocol.SCHEMA_VERSION
@@ -147,6 +169,13 @@ public class JudgeDispatchPublisher {
         return task;
     }
 
+    /**
+     * 发布持久消息并将剩余任务时间写入消息 TTL。
+     * @param dispatch 任务箱记录
+     * @param task 已验证的任务快照
+     * @param lease 当前发布租约令牌
+     * @return 用于等待 ACK 和检查退回的关联对象
+     */
     private CorrelationData send(JudgeDispatch dispatch, JudgeTask task, String lease) {
         CorrelationData correlation = new CorrelationData(dispatch.getExecutionId() + ":" + lease);
         rabbitTemplate.convertAndSend(exchange, routingKey, dispatch.getTaskPayload(), message -> {
@@ -161,6 +190,11 @@ public class JudgeDispatchPublisher {
         return correlation;
     }
 
+    /**
+     * 确认后条件更新等待结果状态，不能覆盖已经到达的结果。
+     * @param dispatch 当前任务快照
+     * @param lease 当前发布租约令牌
+     */
     private void markWaiting(JudgeDispatch dispatch, String lease) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         boolean waiting = dispatches.lambdaUpdate()
@@ -183,6 +217,12 @@ public class JudgeDispatchPublisher {
         }
     }
 
+    /**
+     * 仅持有当前租约时释放发布占用并安排有限重试。
+     * @param dispatch 当前任务快照
+     * @param lease 当前发布租约令牌
+     * @param reason 已脱敏的失败原因
+     */
     private void retry(JudgeDispatch dispatch, String lease, String reason) {
         LocalDateTime nextAttempt = LocalDateTime.now(ZoneOffset.UTC).plus(properties.getRetryInterval());
         boolean reset = dispatches.lambdaUpdate()
@@ -204,6 +244,9 @@ public class JudgeDispatchPublisher {
         }
     }
 
+    /**
+     * 按批次收敛超过总截止的任务，通过结果事务生成安全终态。
+     */
     private void expireTasks() {
         List<JudgeDispatch> expired = dispatches.lambdaQuery()
                 .ne(JudgeDispatch::getDispatchState, JudgeDispatchState.COMPLETED)
@@ -216,6 +259,9 @@ public class JudgeDispatchPublisher {
         }
     }
 
+    /**
+     * 恢复等待超时的执行，保留快照并限制恢复次数。
+     */
     private void recoverTasks() {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         List<JudgeDispatch> waiting = dispatches.lambdaQuery()

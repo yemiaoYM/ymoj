@@ -14,6 +14,7 @@ import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -24,7 +25,9 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 原任务仅在最终结果确认后 ACK；消息重复投递复用租约或已保存结果。
+ * @Author: Yemiao
+ * @CreateTime: 2025-07-30
+ * @Description: 终态或延时重试消息确认后 ACK；重复投递复用租约或已保存结果。
  */
 @Slf4j
 @Component
@@ -45,33 +48,36 @@ public class JudgeListener {
             JudgeVerdict.STATUS_SYSTEM_ERROR,
             JudgeVerdict.STATUS_PARTIAL_ACCEPTED);
 
-    private final ObjectMapper mapper;
-    private final WorkerTaskValidator validator;
-    private final WorkerExecutionStore store;
-    private final ResultJournal journal;
-    private final ResultPublisher publisher;
-    private final JudgeRun runner;
-    private final WorkerProperties properties;
-    private final MeterRegistry metrics;
+    @Autowired
+    private ObjectMapper mapper;
 
-    public JudgeListener(ObjectMapper mapper,
-                         WorkerTaskValidator validator,
-                         WorkerExecutionStore store,
-                         ResultJournal journal,
-                         ResultPublisher publisher,
-                         JudgeRun runner,
-                         WorkerProperties properties,
-                         MeterRegistry metrics) {
-        this.mapper = mapper;
-        this.validator = validator;
-        this.store = store;
-        this.journal = journal;
-        this.publisher = publisher;
-        this.runner = runner;
-        this.properties = properties;
-        this.metrics = metrics;
-    }
+    @Autowired
+    private WorkerTaskValidator validator;
 
+    @Autowired
+    private WorkerExecutionStore store;
+
+    @Autowired
+    private ResultJournal journal;
+
+    @Autowired
+    private ResultPublisher publisher;
+
+    @Autowired
+    private JudgeRun runner;
+
+    @Autowired
+    private WorkerProperties properties;
+
+    @Autowired
+    private MeterRegistry metrics;
+
+    /**
+     * 独立验证任务消息，按租约和恢复分支处理；确认后才 ACK。
+     * @param message 原始任务消息，不信任类型头
+     * @param channel 当前投递的 RabbitMQ 通道
+     * @throws IOException 通道确认、拒绝或到期恢复失败
+     */
     @RabbitListener(queues = "${ymcloud.judge.task-queue:" + JudgeProtocol.TASK_QUEUE + "}",
             containerFactory = "workerListenerFactory")
     public void listenJudge(Message message, Channel channel) throws IOException {
@@ -143,6 +149,14 @@ public class JudgeListener {
         }
     }
 
+    /**
+     * 区分租约忙碌、已完成及新执行，重复任务不重复运行。
+     * @param task 已验证任务
+     * @param claim 原子领取结果
+     * @param channel 当前消息通道
+     * @param delivery 投递标识，只用于当前通道
+     * @throws Exception 恢复、结果发布或消息确认失败
+     */
     private void processClaim(JudgeTask task,
                               WorkerExecutionStore.Claim claim,
                               Channel channel,
@@ -178,6 +192,14 @@ public class JudgeListener {
         processLease(task, claim, channel, delivery);
     }
 
+    /**
+     * 持有租约执行或恢复终态，按保存、发布、完成、ACK 顺序收敛。
+     * @param task 已验证任务
+     * @param claim 包含当前租约的领取结果
+     * @param channel 当前消息通道
+     * @param delivery 投递标识，只用于当前通道
+     * @throws Exception 租约丢失、执行或终态保存发布失败
+     */
     private void processLease(JudgeTask task,
                               WorkerExecutionStore.Claim claim,
                               Channel channel,
@@ -251,6 +273,14 @@ public class JudgeListener {
         }
     }
 
+    /**
+     * 读取同一执行的本地终态，损坏记录转换并保存为安全系统错误。
+     * @param task 当前任务快照
+     * @param digest 固定任务指纹
+     * @param lease 当前持有的执行租约
+     * @return 已验证终态；没有记录时为 null
+     * @throws IOException 恢复记录读取或修复保存失败
+     */
     private JudgeResult readJournal(JudgeTask task,
                                     String digest,
                                     WorkerExecutionStore.Lease lease)
@@ -281,12 +311,21 @@ public class JudgeListener {
         return validated;
     }
 
+    /**
+     * 判断当前任务是否达到总截止时间。
+     * @param task 当前任务快照
+     * @return 是否已经到期
+     */
     private boolean expired(JudgeTask task) {
         return System.currentTimeMillis() >= task.getDeadlineEpochMs();
     }
 
     /**
      * 总截止时间后不依赖 Redis 恢复租约，有限发送终态或进入死信，避免无限延时重投。
+     * @param task 当前任务快照
+     * @param channel 当前消息通道
+     * @param delivery 投递标识，只用于当前通道
+     * @throws IOException 通道确认或拒绝失败
      */
     private void finishExpired(JudgeTask task, Channel channel, long delivery) throws IOException {
         log.warn("Worker 恢复过期任务终态 submission={} execution={} version={}",
@@ -337,6 +376,12 @@ public class JudgeListener {
         }
     }
 
+    /**
+     * 校验恢复结果身份和协议，损坏结果转换为当前执行的系统错误。
+     * @param task 当前任务快照
+     * @param result 非 null 的待恢复结果
+     * @return 合法原结果或安全系统错误
+     */
     private JudgeResult recovered(JudgeTask task, JudgeResult result) {
         boolean valid = result.getSchemaVersion() == JudgeProtocol.SCHEMA_VERSION
                 && result.isTerminal() && result.getSequence() == 3 && result.getStatus() != null
@@ -359,6 +404,8 @@ public class JudgeListener {
 
     /**
      * 恢复记录必须仍能通过 Web 的结果协议校验，防止已 ACK 的损坏结果反复被 Web 拒绝。
+     * @param result 待恢复的结果
+     * @return 是否满足 Web 消费边界
      */
     private boolean validRecoveredPayload(JudgeResult result) {
         if (!nonNegative(result.getTime()) || !nonNegative(result.getMemory())
@@ -396,14 +443,29 @@ public class JudgeListener {
         return true;
     }
 
+    /**
+     * 允许未产生的统计为空，已产生值不得为负。
+     * @param value 可空的统计或时间值
+     * @return 是否为空或非负
+     */
     private boolean nonNegative(Long value) {
         return value == null || value >= 0;
     }
 
+    /**
+     * 允许未产生的得分为空，已产生值限制在 0～100。
+     * @param score 可空得分
+     * @return 是否在允许范围内
+     */
     private boolean validScore(Integer score) {
         return score == null || (score >= 0 && score <= 100);
     }
 
+    /**
+     * 计算可空预览文本的字符数。
+     * @param value 可空文本
+     * @return null 为 0，否则为 UTF-16 字符数
+     */
     private int length(String value) {
         return value == null ? 0 : value.length();
     }

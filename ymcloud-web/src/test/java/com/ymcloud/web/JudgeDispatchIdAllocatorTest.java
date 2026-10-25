@@ -10,8 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -19,6 +19,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,7 +27,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-16
  * @Description: 模拟 InnoDB 冷表统计，验证启动检查真实打开任务表后才读取自增序号。
  */
@@ -82,7 +83,7 @@ class JudgeDispatchIdAllocatorTest {
         latest = new Judge();
         latest.setId(7L);
         when(query.one()).thenReturn(latest);
-        allocator = new JudgeDispatchIdAllocator(mock(JudgeDispatchEntityService.class), judges,
+        allocator = createJudgeDispatchIdAllocator(mock(JudgeDispatchEntityService.class), judges,
                 new JdbcTemplate(dataSource));
     }
 
@@ -240,5 +241,23 @@ class JudgeDispatchIdAllocatorTest {
                 < statements.indexOf(COUNTER_SQL) || !statements.contains(COUNTER_SQL));
         verify(statement).close();
         verify(connection).close();
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param dispatches 任务箱实体服务
+     * @param judges 提交实体服务
+     * @param jdbc 测试数据库连接或隔离桩
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeDispatchIdAllocator createJudgeDispatchIdAllocator(
+            JudgeDispatchEntityService dispatches,
+            JudgeEntityService judges,
+            JdbcTemplate jdbc) {
+        JudgeDispatchIdAllocator component = new JudgeDispatchIdAllocator();
+        ReflectionTestUtils.setField(component, "dispatches", dispatches);
+        ReflectionTestUtils.setField(component, "judges", judges);
+        ReflectionTestUtils.setField(component, "jdbc", jdbc);
+        return component;
     }
 }

@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * go-judge 的服务身份、传输边界和部署容量。令牌不参与 toString。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-14
+ * @Description: go-judge 的服务身份、传输边界和部署容量。令牌不参与 toString。
  */
 @Getter
 @Setter
@@ -33,6 +35,9 @@ public class GoJudgeProperties {
     private long serviceMemoryBytes = 1024 * 1024 * 1024;
     private int cpuRateLimit = 1000;
 
+    /**
+     * 启动时校验令牌及沙箱容量，并检查内存、并发和超时是否配套。
+     */
     @PostConstruct
     public void validate() {
         if (token == null || token.length() < 32 || token.length() > 512
@@ -63,6 +68,12 @@ public class GoJudgeProperties {
         }
     }
 
+    /**
+     * 检查非空超时是否落在一毫秒至指定秒数之间。
+     * @param value 待检查时长
+     * @param maxSeconds 允许的秒数上限
+     * @return 是否在允许范围内
+     */
     private static boolean validTimeout(Duration value, int maxSeconds) {
         return value != null && value.toMillis() >= 1 && value.compareTo(Duration.ofSeconds(maxSeconds)) <= 0;
     }

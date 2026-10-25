@@ -5,7 +5,9 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 每个 Worker 使用独立的私有缓存目录，容量包含尚未完成的下载。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 每个 Worker 使用独立的私有缓存目录，容量包含尚未完成的下载。
  */
 @Getter
 @Setter

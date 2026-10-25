@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.BindingBuilder;
@@ -22,22 +24,43 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.DependsOn;
 
 /**
- * 普通持久化 Topic 拓扑，使用 TTL 重试队列，无 delayed 插件依赖。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 配置严格消息解析和持久化 Topic 拓扑，使用 TTL 队列重试。
  */
 @Configuration
 public class WorkerAmqpConfig {
 
+    /**
+     * 创建 Worker 专用映射器，拒绝重复字段、尾随 JSON 和数值隐式转换。
+     * @return 仅用于固定消息及沙箱协议的映射器，不启用任意类型解析
+     */
     @Bean
     public ObjectMapper workerObjectMapper() {
-        return new ObjectMapper(JsonFactory.builder()
+        return JsonMapper.builder(JsonFactory.builder()
                 .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
                 .streamReadConstraints(StreamReadConstraints.builder()
                         .maxNestingDepth(32)
                         .maxStringLength(2 * 1024 * 1024)
                         .build())
-                .build()).enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+                .build())
+                .disable(MapperFeature.ALLOW_COERCION_OF_SCALARS)
+                .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+                .build();
     }
 
+    /**
+     * 声明与 Web 一致的任务、结果、延时重试及死信队列。
+     * @param exchangeName 持久化 Topic 交换机名
+     * @param taskName 任务队列名
+     * @param resultName 结果队列名
+     * @param taskRoute 任务路由
+     * @param resultRoute 结果路由
+     * @return 可由 Spring AMQP 声明的完整拓扑
+     */
     @Bean
     public Declarables workerTopology(
             @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}") String exchangeName,
@@ -64,6 +87,11 @@ public class WorkerAmqpConfig {
                 BindingBuilder.bind(dead).to(exchange).with(JudgeProtocol.DEAD_ROUTE));
     }
 
+    /**
+     * 开启关联确认和 mandatory 返回，消息发送成功不能只依赖本地调用返回。
+     * @param connectionFactory 消息连接工厂
+     * @return 专用于判题消息的发送模板
+     */
     @Bean
     public RabbitTemplate workerRabbitTemplate(ConnectionFactory connectionFactory) {
         if (connectionFactory instanceof CachingConnectionFactory caching) {
@@ -75,6 +103,12 @@ public class WorkerAmqpConfig {
         return template;
     }
 
+    /**
+     * 沙箱启动检查通过后才启动受控并发消费者，消息使用手动确认。
+     * @param connectionFactory 消息连接工厂
+     * @param properties 已验证的 Worker 并发配置
+     * @return prefetch 为 1 的消费容器工厂
+     */
     @Bean
     @DependsOn("goJudgeStartupCheck")
     public SimpleRabbitListenerContainerFactory workerListenerFactory(ConnectionFactory connectionFactory,

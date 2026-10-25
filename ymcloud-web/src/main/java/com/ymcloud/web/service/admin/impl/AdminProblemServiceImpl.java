@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -106,21 +107,22 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 添加题目
-     * @param problemDTO 题目信息
+     * 使用已校验的自定义展示 ID 添加题目，唯一索引防止并发重复。
+     * @param problemDTO 通过新增校验的题目信息
      * @return 题目展示 ID
+     * @throws ProblemException 展示 ID 已占用、判题方式未支持或保存失败
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String addProblem(ProblemDTO problemDTO) {
         validateJudgeMode(problemDTO.getJudgeMode());
-        String problemId = generateLocalProblemId();
-        //题目展示id需保证唯一
+        String problemId = problemDTO.getProblemId();
+        // 展示 ID 按数据库唯一索引规则判重。
         boolean exists = problemEntityService.lambdaQuery()
                 .eq(Problem::getProblemId, problemId)
                 .exists();
         if (exists) {
-            throw new ProblemException("该题目展示id已被使用");
+            throw new ProblemException("该题目展示ID已被使用", HttpStatus.CONFLICT);
         }
         //构造实体
         Problem problem = BeanUtil.copyProperties(problemDTO, Problem.class);
@@ -142,9 +144,14 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         if (problem.getVisibility() == null) {
             problem.setVisibility(2);
         }
-        boolean save = problemEntityService.save(problem);
-        if (!save) {
-            throw new ProblemException("添加题目失败，请稍后再试");
+        try {
+            if (!problemEntityService.save(problem)) {
+                throw new ProblemException("添加题目失败，请稍后再试");
+            }
+        } catch (DuplicateKeyException cause) {
+            ProblemException conflict = new ProblemException("该题目展示ID已被使用", HttpStatus.CONFLICT);
+            conflict.initCause(cause);
+            throw conflict;
         }
         //题目标签
         List<Long> tagList = problemDTO.getTagList();
@@ -162,7 +169,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 修改题目
+     * 修改题目，保留展示 ID 和作者；空样例列表会清除旧样例。
      * @param id 题目ID
      * @param problemDTO 题目信息
      */
@@ -187,10 +194,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         problem.setAuthorUsername(existProblem.getAuthorUsername());
         //题目测试用例
         List<ProblemCaseVO> problemCaseList = problemDTO.getProblemCaseList();
-        if (CollUtil.isNotEmpty(problemCaseList)) {
-            String examples = JSON.toJSONString(problemCaseList);
-            problem.setExamples(examples);
-        }
+        problem.setExamples(JSON.toJSONString(problemCaseList == null ? List.of() : problemCaseList));
         boolean update = problemEntityService.updateById(problem);
         if (!update) {
             throw new ProblemException("修改题目失败，请稍后再试");
@@ -212,19 +216,6 @@ public class AdminProblemServiceImpl implements AdminProblemService {
                     }).toList();
             problemTagEntityService.saveBatch(problemTags);
         }
-    }
-
-    /**
-     * 生成下一个本地题目展示id
-     * @return 本地题目展示id
-     */
-    private String generateLocalProblemId() {
-        String latestProblemId = problemEntityService.selectLatestLocalProblemIdForUpdate();
-        long nextNumber = ProblemConstants.INITIAL_LOCAL_PROBLEM_NUMBER;
-        if (StrUtil.isNotBlank(latestProblemId)) {
-            nextNumber = Long.parseLong(latestProblemId.substring(ProblemConstants.LOCAL_PROBLEM_ID_PREFIX.length())) + 1;
-        }
-        return ProblemConstants.LOCAL_PROBLEM_ID_PREFIX + nextNumber;
     }
 
     /**

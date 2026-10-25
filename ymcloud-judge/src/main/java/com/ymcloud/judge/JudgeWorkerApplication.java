@@ -14,7 +14,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import java.nio.file.Path;
 
 /**
- * 独立判题进程，仅扫描 Worker，不加载 Web、ORM 或用户认证配置。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 独立判题进程，仅扫描 Worker，不加载 Web、ORM 或用户认证配置。
  */
 @Slf4j
 @SpringBootApplication(scanBasePackages = "com.ymcloud.judge")
@@ -22,6 +24,10 @@ import java.nio.file.Path;
 @EnableScheduling
 public class JudgeWorkerApplication {
 
+    /**
+     * 启动独立判题 Worker，由启动检查决定是否开放消费。
+     * @param args Spring Boot 启动参数
+     */
     public static void main(String[] args) {
         SpringApplication application = new SpringApplication(JudgeWorkerApplication.class);
         application.setWebApplicationType(WebApplicationType.NONE);

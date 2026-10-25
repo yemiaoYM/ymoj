@@ -7,7 +7,11 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-/** 发布失败与结果超时有独立的有限预算，数据库任务不会无限重试。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 发布失败与结果超时有独立的有限预算，数据库任务不会无限重试。
+ */
 @Data
 @Component
 @ConfigurationProperties(prefix = "ymcloud.judge.dispatch")
@@ -22,6 +26,9 @@ public class JudgeDispatchProperties {
     private Duration resultWait = Duration.ofMinutes(5);
     private Duration totalTimeout = Duration.ofMinutes(20);
 
+    /**
+     * 启动时验证发布、恢复、租约和截止预算，拒绝无限重试配置。
+     */
     @PostConstruct
     public void validate() {
         if (batchSize < 1 || batchSize > 100 || maxPublishAttempts < 1 || maxPublishAttempts > 20

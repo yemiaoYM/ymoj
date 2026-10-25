@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -40,7 +41,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * 验证固定版本租约、逐点流式读取、原有评分及 go-judge 的资源和故障边界。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 验证固定版本租约、逐点流式读取、原有评分及 go-judge 的资源和故障边界。
  */
 @ExtendWith(MockitoExtension.class)
 class JudgeRunVersionedDataTest {
@@ -58,7 +61,7 @@ class JudgeRunVersionedDataTest {
 
     @BeforeEach
     void setup() {
-        runner = new JudgeRun(executor, cache, new WorkerProperties());
+        runner = createJudgeRun(executor, cache, new WorkerProperties());
         progress = new ArrayList<>();
     }
 
@@ -197,5 +200,20 @@ class JudgeRunVersionedDataTest {
 
     private InputStream stream(String value) {
         return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param executor 受控沙箱执行边界
+     * @param cache 本测试的版本或状态缓存
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeRun createJudgeRun(GoJudgeExecutor executor, TestDataCache cache, WorkerProperties properties) {
+        JudgeRun component = new JudgeRun();
+        ReflectionTestUtils.setField(component, "executor", executor);
+        ReflectionTestUtils.setField(component, "cache", cache);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        return component;
     }
 }

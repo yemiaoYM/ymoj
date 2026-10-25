@@ -10,8 +10,10 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,6 +23,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 本地真实 HTTP 覆盖鉴权、文件接口、结构化状态、完整传输边界和中断后的断连。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-14
+ * @Description: 以真实本地 HTTP 验证鉴权、流式文件传输、响应边界和取消。
  */
 class GoJudgeClientTest {
 
@@ -331,17 +336,181 @@ class GoJudgeClientTest {
         }
     }
 
+    /**
+     * 上传超限时取消传输，不能把截短文件当成功；非法路由不发起请求。
+     */
     @Test
-    void oversizedUploadAndUnsafeParametersNeverReachServer() {
+    void oversizedUploadIsCancelledAndUnsafeParametersNeverReachServer() {
         properties.setMaxFileBytes(1024);
+        handler.set(exchange -> {
+            try (exchange) {
+                exchange.getRequestBody().transferTo(java.io.OutputStream.nullOutputStream());
+                respond(exchange, 200, "\"unexpected-file\"");
+            } catch (IOException ignored) {
+                // 超限客户端会取消尚未结束的 multipart 请求。
+            }
+        });
         try (GoJudgeClient client = client()) {
-            assertThrows(GoJudgeCapacityException.class,
-                    () -> client.upload(new ByteArrayInputStream(new byte[1025]), "stdin", deadline()));
             assertThrows(GoJudgeException.class, () -> client.delete("../escape", deadline()));
             assertThrows(GoJudgeException.class, () -> client.execute(command(), 0));
+            assertEquals(0, requests.get());
+            assertThrows(GoJudgeCapacityException.class,
+                    () -> client.upload(new ByteArrayInputStream(new byte[1025]), "stdin", deadline()));
             client.close();
             assertThrows(GoJudgeException.class, () -> client.execute(command(), deadline()));
-            assertEquals(0, requests.get());
+        }
+    }
+
+    /**
+     * 以生成流上传 20 MiB，确认首批字节在输入读完前已抵达服务端。
+     * @throws Exception 本地 HTTP 传输失败
+     */
+    @Test
+    void largeUploadStreamsBeforeSourceReachesEof() throws Exception {
+        long size = 20L * 1024 * 1024;
+        properties.setMaxFileBytes(32L * 1024 * 1024);
+        properties.setMaxRequestBytes(40 * 1024 * 1024);
+        CountDownLatch receiving = new CountDownLatch(1);
+        AtomicLong received = new AtomicLong();
+        handler.set(exchange -> {
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = exchange.getRequestBody().read(buffer)) != -1) {
+                received.addAndGet(count);
+                receiving.countDown();
+            }
+            respond(exchange, 200, "\"large-file\"");
+        });
+        try (GoJudgeClient client = client(); InputStream input = new InputStream() {
+            private long remaining = size;
+
+            @Override
+            public int read() throws IOException {
+                byte[] single = new byte[1];
+                return read(single, 0, 1) < 0 ? -1 : single[0];
+            }
+
+            @Override
+            public int read(byte[] buffer, int offset, int length) throws IOException {
+                // 允许 HTTP 发布器预读少量缓冲，整份预读仍会在这里被阻止。
+                if (remaining <= size - 256 * 1024) {
+                    try {
+                        if (!receiving.await(2, TimeUnit.SECONDS)) {
+                            throw new IOException("上传不应先缓冲整份输入");
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException(e);
+                    }
+                }
+                if (remaining == 0) {
+                    return -1;
+                }
+                int count = (int) Math.min(length, remaining);
+                Arrays.fill(buffer, offset, offset + count, (byte) 'x');
+                remaining -= count;
+                return count;
+            }
+        }) {
+            assertEquals("large-file", client.upload(input, "stdin", System.currentTimeMillis() + 15000));
+            assertTrue(received.get() > size, "服务端应收到完整正文和 multipart 边界");
+            assertTrue(received.get() < size + 1024, "multipart 仅有固定大小的头尾开销");
+        }
+    }
+
+    /**
+     * 输入校验中途失败必须终止上传，关闭源且不传播私有异常正文。
+     */
+    @Test
+    void failedInputCannotBecomeASuccessfulUpload() {
+        AtomicInteger closed = new AtomicInteger();
+        handler.set(exchange -> {
+            try (exchange) {
+                exchange.getRequestBody().transferTo(java.io.OutputStream.nullOutputStream());
+                respond(exchange, 200, "\"unexpected-file\"");
+            } catch (IOException ignored) {
+                // 输入损坏后客户端取消 multipart，不再产生可用文件。
+            }
+        });
+        InputStream input = new InputStream() {
+            @Override
+            public int read() throws IOException {
+                throw new IOException("private-test-data");
+            }
+
+            @Override
+            public void close() {
+                closed.incrementAndGet();
+            }
+        };
+        try (GoJudgeClient client = client()) {
+            GoJudgeException failure = assertThrows(GoJudgeException.class,
+                    () -> client.upload(input, "stdin", deadline()));
+            assertFalse(failure.toString().contains("private-test-data"));
+            assertEquals(1, closed.get(), "发布器与调用方清理应只关闭一次输入源");
+        }
+    }
+
+    /**
+     * 上传源阻塞时，任务中断仍应关闭输入并退出，不能遗留读取任务。
+     * @throws Exception 本地 HTTP 服务或测试线程未按时退出
+     */
+    @Test
+    void interruptedUploadClosesBlockedInput() throws Exception {
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch released = new CountDownLatch(1);
+        AtomicInteger closed = new AtomicInteger();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        AtomicReference<Boolean> interrupted = new AtomicReference<>();
+        handler.set(exchange -> {
+            try (exchange) {
+                exchange.getRequestBody().transferTo(java.io.OutputStream.nullOutputStream());
+                respond(exchange, 200, "\"unexpected-file\"");
+            } catch (IOException ignored) {
+                // 任务中断应使尚未读完的请求断开。
+            }
+        });
+        InputStream input = new InputStream() {
+            @Override
+            public int read() throws IOException {
+                reading.countDown();
+                try {
+                    released.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                throw new IOException("输入已关闭");
+            }
+
+            @Override
+            public void close() {
+                closed.incrementAndGet();
+                released.countDown();
+            }
+        };
+        try (GoJudgeClient client = client()) {
+            Thread worker = new Thread(() -> {
+                try {
+                    client.upload(input, "stdin", deadline());
+                } catch (Throwable error) {
+                    failure.set(error);
+                    interrupted.set(Thread.currentThread().isInterrupted());
+                }
+            }, "test-cancel-upload");
+            worker.start();
+            try {
+                assertTrue(reading.await(3, TimeUnit.SECONDS));
+                worker.interrupt();
+                worker.join(1500);
+                assertFalse(worker.isAlive());
+                assertTrue(failure.get() instanceof GoJudgeException);
+                assertEquals(Boolean.TRUE, interrupted.get());
+                assertEquals(1, closed.get());
+            } finally {
+                released.countDown();
+                worker.interrupt();
+                worker.join(3000);
+            }
         }
     }
 

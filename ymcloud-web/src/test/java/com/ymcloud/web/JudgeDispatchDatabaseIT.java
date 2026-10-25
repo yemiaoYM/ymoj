@@ -71,12 +71,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.yaml.snakeyaml.Yaml;
 
-import javax.sql.DataSource;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -95,6 +95,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -175,7 +176,11 @@ class JudgeDispatchDatabaseIT {
         codec = context.getBean(JudgeMessageCodec.class);
     }
 
-    /** 创建与业务库隔离的普通判题数据，每个测试从同一状态开始。 */
+    /**
+
+     * 创建与业务库隔离的普通判题数据，每个测试从同一状态开始。
+
+     */
     @BeforeEach
     void clear() {
         assertEquals(schema, jdbc.queryForObject("SELECT DATABASE()", String.class));
@@ -212,7 +217,11 @@ class JudgeDispatchDatabaseIT {
         }
     }
 
-    /** 验证实体映射可清空来源，且数据库拒绝非法难度和判题方式。 */
+    /**
+
+     * 验证实体映射可清空来源，且数据库拒绝非法难度和判题方式。
+
+     */
     @Test
     void problemMetadataMappingAndConstraintsAreEffective() {
         ProblemEntityService problems = context.getBean(ProblemEntityService.class);
@@ -405,7 +414,7 @@ class JudgeDispatchDatabaseIT {
     @Test
     void freshEmptyOutboxHasAValidInitialSubmissionCounter() {
         jdbc.execute("ALTER TABLE judge_dispatch AUTO_INCREMENT=1");
-        JudgeDispatchIdAllocator allocator = new JudgeDispatchIdAllocator(dispatches, judges, jdbc);
+        JudgeDispatchIdAllocator allocator = createJudgeDispatchIdAllocator(dispatches, judges, jdbc);
         assertDoesNotThrow(allocator::verifyCounter);
     }
 
@@ -418,7 +427,7 @@ class JudgeDispatchDatabaseIT {
                     String.class);
             assertNotNull(extra);
             assertFalse(extra.contains("auto_increment"));
-            JudgeDispatchIdAllocator allocator = new JudgeDispatchIdAllocator(dispatches, judges, jdbc);
+            JudgeDispatchIdAllocator allocator = createJudgeDispatchIdAllocator(dispatches, judges, jdbc);
             assertThrows(IllegalStateException.class, allocator::verifyCounter);
         } finally {
             jdbc.execute("ALTER TABLE judge_dispatch MODIFY id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT");
@@ -491,7 +500,7 @@ class JudgeDispatchDatabaseIT {
             return null;
         }).when(rabbit).convertAndSend(anyString(), anyString(), any(),
                 any(MessagePostProcessor.class), any(CorrelationData.class));
-        JudgeDispatchPublisher publisher = new JudgeDispatchPublisher(dispatches, results, rabbit, codec,
+        JudgeDispatchPublisher publisher = createJudgeDispatchPublisher(dispatches, results, rabbit, codec,
                 context.getBean(JudgeDispatchProperties.class), "isolated.exchange", "judge");
         publisher.tick();
         assertEquals(JudgeDispatchState.WAITING, dispatches.getById(dispatch.getId()).getDispatchState());
@@ -591,7 +600,7 @@ class JudgeDispatchDatabaseIT {
     void startupGuardDetectsMissingLegacyIdSeedAndAcceptsCorrectUpgrade() {
         long legacy = 1_000_000_000_000L;
         formal(legacy);
-        JudgeDispatchIdAllocator allocator = new JudgeDispatchIdAllocator(dispatches, judges, jdbc);
+        JudgeDispatchIdAllocator allocator = createJudgeDispatchIdAllocator(dispatches, judges, jdbc);
         assertThrows(IllegalStateException.class, allocator::verifyCounter);
         jdbc.execute("ALTER TABLE judge_dispatch AUTO_INCREMENT=" + (legacy + 1));
         assertDoesNotThrow(allocator::verifyCounter);
@@ -770,5 +779,53 @@ class JudgeDispatchDatabaseIT {
         TestDataService testData() {
             return mock(TestDataService.class);
         }
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param dispatches 任务箱实体服务
+     * @param judges 提交实体服务
+     * @param jdbc 测试数据库连接或隔离桩
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeDispatchIdAllocator createJudgeDispatchIdAllocator(
+            JudgeDispatchEntityService dispatches,
+            JudgeEntityService judges,
+            JdbcTemplate jdbc) {
+        JudgeDispatchIdAllocator component = new JudgeDispatchIdAllocator();
+        ReflectionTestUtils.setField(component, "dispatches", dispatches);
+        ReflectionTestUtils.setField(component, "judges", judges);
+        ReflectionTestUtils.setField(component, "jdbc", jdbc);
+        return component;
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param dispatches 任务箱实体服务
+     * @param results 结果落库入口
+     * @param rabbitTemplate 可控制确认和退回的消息模板
+     * @param codec 严格判题消息编解码器
+     * @param properties 本测试使用的容量、截止或发布配置
+     * @param exchange 测试交换机名
+     * @param routingKey 测试任务路由
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeDispatchPublisher createJudgeDispatchPublisher(
+            JudgeDispatchEntityService dispatches,
+            JudgeResultService results,
+            RabbitTemplate rabbitTemplate,
+            JudgeMessageCodec codec,
+            JudgeDispatchProperties properties,
+            String exchange,
+            String routingKey) {
+        JudgeDispatchPublisher component = new JudgeDispatchPublisher();
+        ReflectionTestUtils.setField(component, "dispatches", dispatches);
+        ReflectionTestUtils.setField(component, "results", results);
+        ReflectionTestUtils.setField(component, "rabbitTemplate", rabbitTemplate);
+        ReflectionTestUtils.setField(component, "codec", codec);
+        ReflectionTestUtils.setField(component, "properties", properties);
+        ReflectionTestUtils.setField(component, "exchange", exchange);
+        ReflectionTestUtils.setField(component, "routingKey", routingKey);
+        return component;
     }
 }

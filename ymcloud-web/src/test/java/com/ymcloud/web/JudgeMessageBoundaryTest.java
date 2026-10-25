@@ -16,6 +16,7 @@ import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.Queue;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -24,13 +25,32 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-12
  * @Description: 协议只使用数字状态与明确 DTO，非法 UTF-8 和任意类型头不能穿透消息边界。
  */
 class JudgeMessageBoundaryTest {
 
-    /** 拒绝消息尾部的第二份 JSON，避免静默忽略额外的协议数据。 */
+    /**
+     * 严格拒绝任务身份、结果状态和布尔值的隐式转换，且不改变全局映射器。
+     * @throws Exception 全局映射器校验失败
+     */
+    @Test
+    void numericAndBooleanCoercionIsRejectedOnlyAtJudgeBoundary() throws Exception {
+        ObjectMapper applicationMapper = new ObjectMapper();
+        JudgeMessageCodec codec = new JudgeMessageCodec(applicationMapper);
+        assertThrows(IllegalArgumentException.class, () -> codec.task("{\"submissionId\":1.9}"));
+        assertThrows(IllegalArgumentException.class, () -> codec.task("{\"submissionId\":\"1\"}"));
+        assertThrows(IllegalArgumentException.class, () -> codec.task("{\"schemaVersion\":null}"));
+        assertThrows(IllegalArgumentException.class, () -> codec.result("{\"status\":0.9}"));
+        assertThrows(IllegalArgumentException.class, () -> codec.result("{\"status\":\"0\"}"));
+        assertThrows(IllegalArgumentException.class, () -> codec.result("{\"terminal\":\"true\"}"));
+        assertEquals(1L, applicationMapper.readValue("{\"submissionId\":\"1\"}", JudgeTask.class).getSubmissionId());
+    }
+
+    /**
+     * 拒绝消息尾部的第二份 JSON，避免静默忽略额外的协议数据。
+     */
     @Test
     void trailingJsonIsRejectedForTasksAndResults() {
         JudgeMessageCodec codec = new JudgeMessageCodec(new ObjectMapper());
@@ -38,14 +58,16 @@ class JudgeMessageBoundaryTest {
         assertThrows(IllegalArgumentException.class, () -> codec.result("{} []"));
     }
 
-    /** 重复身份字段不得以后值覆盖前值，也不能交给结果服务。 */
+    /**
+     * 重复身份字段不得以后值覆盖前值，也不能交给结果服务。
+     */
     @Test
     void duplicateIdentityFieldsAreRejectedBeforeConsumerInvocation() {
         JudgeMessageCodec codec = new JudgeMessageCodec(new ObjectMapper());
         String payload = "{\"submissionId\":1,\"submissionId\":2}";
         assertThrows(IllegalArgumentException.class, () -> codec.task(payload));
         JudgeResultService results = mock(JudgeResultService.class);
-        JudgeResultListener listener = new JudgeResultListener(codec, results);
+        JudgeResultListener listener = createJudgeResultListener(codec, results);
         Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), new MessageProperties());
         assertThrows(AmqpRejectAndDontRequeueException.class, () -> listener.receive(message));
         verifyNoInteractions(results);
@@ -96,7 +118,7 @@ class JudgeMessageBoundaryTest {
         properties.setHeader("__TypeId__", "java.lang.ProcessBuilder");
         JudgeResultService results = mock(JudgeResultService.class);
         Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), properties);
-        new JudgeResultListener(codec, results).receive(message);
+        createJudgeResultListener(codec, results).receive(message);
         ArgumentCaptor<JudgeResult> parsed = ArgumentCaptor.forClass(JudgeResult.class);
         verify(results).receive(parsed.capture());
         assertEquals(result.getExecutionId(), parsed.getValue().getExecutionId());
@@ -106,7 +128,7 @@ class JudgeMessageBoundaryTest {
     void malformedUtf8AndUnknownStatusAreRejectedWithoutConsumerInvocation() {
         JudgeMessageCodec codec = new JudgeMessageCodec(new ObjectMapper());
         JudgeResultService results = mock(JudgeResultService.class);
-        JudgeResultListener listener = new JudgeResultListener(codec, results);
+        JudgeResultListener listener = createJudgeResultListener(codec, results);
         assertThrows(AmqpRejectAndDontRequeueException.class,
                 () -> listener.receive(new Message(new byte[]{(byte) 0xc3, 0x28}, new MessageProperties())));
         Message unknownStatus = new Message("{\"status\":999}".getBytes(StandardCharsets.UTF_8),
@@ -119,7 +141,7 @@ class JudgeMessageBoundaryTest {
     void jsonNullIsRejectedBeforeResultConsumerAndUnsupportedObjectsCannotBeSerialized() {
         JudgeMessageCodec codec = new JudgeMessageCodec(new ObjectMapper());
         JudgeResultService results = mock(JudgeResultService.class);
-        JudgeResultListener listener = new JudgeResultListener(codec, results);
+        JudgeResultListener listener = createJudgeResultListener(codec, results);
         Message message = new Message("null".getBytes(StandardCharsets.UTF_8), new MessageProperties());
         assertThrows(AmqpRejectAndDontRequeueException.class, () -> listener.receive(message));
         assertThrows(IllegalArgumentException.class, () -> codec.task("null"));
@@ -128,7 +150,9 @@ class JudgeMessageBoundaryTest {
         verifyNoInteractions(results);
     }
 
-    /** 实体诊断只输出明确允许的字段，源码、任务正文和结果正文均不可见。 */
+    /**
+     * 实体诊断只输出明确允许的字段，源码、任务正文和结果正文均不可见。
+     */
     @Test
     void entityLoggingNeverIncludesCodePrivateTaskOutput() {
         Judge judge = new Judge();
@@ -157,5 +181,18 @@ class JudgeMessageBoundaryTest {
         assertEquals("test.judge", retry.getArguments().get("x-dead-letter-routing-key"));
         assertTrue(config.resultQueue("test.result").getArguments().isEmpty());
         assertFalse(config.exchange("test.exchange").isDelayed());
+    }
+
+    /**
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * @param codec 严格判题消息编解码器
+     * @param results 结果落库入口
+     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     */
+    private static JudgeResultListener createJudgeResultListener(JudgeMessageCodec codec, JudgeResultService results) {
+        JudgeResultListener component = new JudgeResultListener();
+        ReflectionTestUtils.setField(component, "codec", codec);
+        ReflectionTestUtils.setField(component, "results", results);
+        return component;
     }
 }

@@ -18,15 +18,6 @@ import org.springframework.stereotype.Service;
 public class ProblemEntityServiceImpl extends ServiceImpl<ProblemMapper, Problem> implements ProblemEntityService {
 
     /**
-     * 查询并锁定当前最大的本地题目展示id
-     * @return 本地题目展示id
-     */
-    @Override
-    public String selectLatestLocalProblemIdForUpdate() {
-        return getBaseMapper().selectLatestLocalProblemIdForUpdate();
-    }
-
-    /**
      * 题单列表分页查询
      * @param page   分页
      * @param keyword  题目/题号 支持模糊查询

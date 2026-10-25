@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.ymcloud.judge.config.WorkerProperties;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
@@ -14,7 +15,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
- * Rabbit 消费启动前验证固定版本、服务身份、cgroup v2、seccomp 与实际沙箱工具链。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-14
+ * @Description: Rabbit 消费启动前验证固定版本、服务身份、cgroup v2、seccomp 与实际沙箱工具链。
  * 上游 API 仅报告 seccomp 是否启用；内置默认配置的来源同时由固定镜像和入口脚本约束。
  */
 @Slf4j
@@ -23,16 +26,19 @@ public class GoJudgeStartupCheck {
 
     public static final String REQUIRED_VERSION = "v1.13.3";
 
-    private final GoJudgeClient client;
-    private final GoJudgeProperties properties;
-    private final WorkerProperties workerProperties;
+    @Autowired
+    private GoJudgeClient client;
 
-    public GoJudgeStartupCheck(GoJudgeClient client, GoJudgeProperties properties, WorkerProperties workerProperties) {
-        this.client = client;
-        this.properties = properties;
-        this.workerProperties = workerProperties;
-    }
+    @Autowired
+    private GoJudgeProperties properties;
 
+    @Autowired
+    private WorkerProperties workerProperties;
+
+    /**
+     * 消费者启动前验证版本、鉴权、隔离和工具链，失败则阻止启动。
+     * @throws GoJudgeException 沙箱不符合部署安全约束
+     */
     @PostConstruct
     public void verify() throws GoJudgeException {
         long started = System.nanoTime();
@@ -62,6 +68,11 @@ public class GoJudgeStartupCheck {
                 properties.getSandboxConcurrency(), properties.getMaxProblemMemoryKiB(), properties.getProcessLimit());
     }
 
+    /**
+     * 验证固定 Linux 版本及项目依赖的安全修复标记。
+     * @param version 沙箱版本响应
+     * @throws GoJudgeException 版本或能力标记不符合要求
+     */
     static void validateVersion(JsonNode version) throws GoJudgeException {
         if (!version.isObject() || !REQUIRED_VERSION.equals(version.path("buildVersion").asText())
                 || !"linux".equals(version.path("os").asText())
@@ -71,6 +82,11 @@ public class GoJudgeStartupCheck {
         }
     }
 
+    /**
+     * 验证 cgroup v2、seccomp、控制器及独占磁盘文件缓存。
+     * @param config 沙箱配置响应
+     * @throws GoJudgeException 隔离或缓存配置不符合要求
+     */
     static void validateConfig(JsonNode config) throws GoJudgeException {
         JsonNode runner = config.path("runnerConfig");
         Set<String> controllers = new HashSet<>();
@@ -90,6 +106,13 @@ public class GoJudgeStartupCheck {
         }
     }
 
+    /**
+     * 在真实沙箱执行探针并校验输出版本。
+     * @param args 固定探针命令
+     * @param expression 预期输出的完整匹配表达式
+     * @param deadline 启动截止时间，UTC epoch 毫秒
+     * @throws GoJudgeException 命令失败或版本输出不匹配
+     */
     private void verifyToolchain(List<String> args, String expression, long deadline) throws GoJudgeException {
         JsonNode result = probe(args, deadline);
         String output = (result.path("files").path("stdout").asText() + "\n"
@@ -99,6 +122,11 @@ public class GoJudgeStartupCheck {
         }
     }
 
+    /**
+     * 在沙箱内验证权限、只读挂载及文件大小限制。
+     * @param deadline 启动截止时间，UTC epoch 毫秒
+     * @throws GoJudgeException 实际隔离不符合部署约束
+     */
     private void verifyIsolation(long deadline) throws GoJudgeException {
         // 默认 sandbox 使用命名空间内的无特权 root；不将 UID 0 等同于宿主 root 权限。
         String script = "import os,resource\n"
@@ -112,6 +140,13 @@ public class GoJudgeStartupCheck {
         verifyToolchain(List.of("/usr/bin/python3", "-I", "-c", script), "sandbox-ready", deadline);
     }
 
+    /**
+     * 以固定的小资源预算运行启动探针。
+     * @param args 固定探针命令
+     * @param deadline 启动截止时间，UTC epoch 毫秒
+     * @return 唯一且正常退出的探针响应
+     * @throws GoJudgeException 沙箱请求或探针运行失败
+     */
     private JsonNode probe(List<String> args, long deadline) throws GoJudgeException {
         Map<String, Object> command = Map.ofEntries(
                 Map.entry("args", args),

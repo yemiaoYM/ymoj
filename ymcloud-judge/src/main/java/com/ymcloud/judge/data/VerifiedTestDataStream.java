@@ -8,7 +8,9 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
 /**
- * 逐字节校验缓存文件，部分读取后关闭仍须校验剩余内容。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 逐字节校验缓存文件，部分读取后关闭仍须校验剩余内容。
  * 校验失败后停止读取，避免再次计算摘要掩盖首次失败。
  */
 final class VerifiedTestDataStream extends FilterInputStream {
@@ -24,6 +26,12 @@ final class VerifiedTestDataStream extends FilterInputStream {
     private boolean closed;
     private IOException failure;
 
+    /**
+     * 绑定原始数据流与不可变文件元数据。
+     * @param input 由本实例负责关闭的输入
+     * @param expectedSize 期望字节数
+     * @param expectedHash 小写 SHA-256
+     */
     VerifiedTestDataStream(InputStream input, long expectedSize, String expectedHash) {
         super(input);
         this.expectedSize = expectedSize;
@@ -31,6 +39,11 @@ final class VerifiedTestDataStream extends FilterInputStream {
         this.digest = sha256();
     }
 
+    /**
+     * 读取一个字节并累计摘要，EOF 时验证完整性。
+     * @return 字节值，EOF 为 -1
+     * @throws IOException 已关闭、中断或完整性失败
+     */
     @Override
     public int read() throws IOException {
         requireReadable();
@@ -50,6 +63,14 @@ final class VerifiedTestDataStream extends FilterInputStream {
         }
     }
 
+    /**
+     * 按块读取并累计摘要，EOF 时验证完整性。
+     * @param buffer 目标缓冲区
+     * @param offset 写入偏移
+     * @param length 最多读取字节数
+     * @return 实际字节数，EOF 为 -1
+     * @throws IOException 已关闭、读取或完整性失败
+     */
     @Override
     public int read(byte[] buffer, int offset, int length) throws IOException {
         requireReadable();
@@ -69,6 +90,12 @@ final class VerifiedTestDataStream extends FilterInputStream {
         }
     }
 
+    /**
+     * 通过实际读取实现跳过，不能绕过摘要校验。
+     * @param amount 请求跳过的字节数
+     * @return 实际跳过字节数
+     * @throws IOException 读取或完整性失败
+     */
     @Override
     public long skip(long amount) throws IOException {
         requireReadable();
@@ -84,16 +111,28 @@ final class VerifiedTestDataStream extends FilterInputStream {
         return skipped;
     }
 
+    /**
+     * 禁止回退读取，避免摘要重复累计。
+     * @return 始终为 false
+     */
     @Override
     public boolean markSupported() {
         return false;
     }
 
+    /**
+     * 拒绝重置校验流。
+     * @throws IOException 始终抛出，不支持回退
+     */
     @Override
     public synchronized void reset() throws IOException {
         throw new IOException("校验流不支持 reset");
     }
 
+    /**
+     * 未失败时读完剩余内容并验证，再关闭底层流；重复关闭无操作。
+     * @throws IOException 中断、完整性或关闭失败
+     */
     @Override
     public void close() throws IOException {
         if (closed) {
@@ -113,6 +152,10 @@ final class VerifiedTestDataStream extends FilterInputStream {
         }
     }
 
+    /**
+     * 拒绝已关闭或已失败的流继续读取。
+     * @throws IOException 流已关闭或先前失败
+     */
     private void requireReadable() throws IOException {
         if (closed) {
             throw new IOException("测试数据校验流已经关闭");
@@ -122,12 +165,20 @@ final class VerifiedTestDataStream extends FilterInputStream {
         }
     }
 
+    /**
+     * 立即拒绝超过清单大小的数据。
+     * @throws IOException 已读取字节数超过声明
+     */
     private void checkSize() throws IOException {
         if (bytesRead > expectedSize) {
             throw new IOException("运行中的测试数据文件大小改变");
         }
     }
 
+    /**
+     * 到达 EOF 后只核对一次长度和摘要。
+     * @throws IOException 大小或摘要不匹配
+     */
     private void verify() throws IOException {
         if (!verified) {
             if (bytesRead != expectedSize || !expectedHash.equals(HexFormat.of().formatHex(digest.digest()))) {
@@ -137,6 +188,10 @@ final class VerifiedTestDataStream extends FilterInputStream {
         }
     }
 
+    /**
+     * 为当前流创建独立摘要。
+     * @return SHA-256 摘要实例
+     */
     private static MessageDigest sha256() {
         try {
             return MessageDigest.getInstance("SHA-256");

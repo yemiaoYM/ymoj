@@ -8,7 +8,9 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 /**
- * Worker 的本地目录、执行边界和消息恢复配置。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: Worker 的本地目录、执行边界和消息恢复配置。
  */
 @Data
 @ConfigurationProperties(prefix = "ymcloud.worker")
@@ -25,6 +27,9 @@ public class WorkerProperties {
     private long retentionMillis = 7 * 24 * 60 * 60 * 1000L;
     private int maxOutputBytes = 1024 * 1024;
 
+    /**
+     * 启动时检查目录、并发、租约及输出预算，非法配置阻止启动。
+     */
     @PostConstruct
     public void validate() {
         if (id == null || id.isBlank() || id.length() > 128 || workDir == null || journalDir == null
