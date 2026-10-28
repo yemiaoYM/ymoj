@@ -731,6 +731,17 @@ class ComposeConfigurationTest(unittest.TestCase):
     def test_missing_variables_resolve_to_usable_defaults(self):
         self.assert_resolved_credentials(self.resolve(), DEFAULT_CREDENTIALS)
 
+    def test_default_sandbox_capacity_supports_1024_mib(self):
+        model = self.resolve()
+        for service in ("preflight", "worker"):
+            env = model["services"][service]["environment"]
+            self.assertEqual("1048576", env["YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB"])
+            self.assertEqual("1610612736", env["YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES"])
+        sandbox = model["services"]["go-judge"]
+        self.assertEqual("1610612736", sandbox["mem_limit"])
+        self.assertEqual(sandbox["mem_limit"], sandbox["memswap_limit"])
+        PREFLIGHT.validate(model["services"]["preflight"]["environment"])
+
     def test_web_native_libraries_use_private_executable_tmpfs(self):
         web = self.resolve()["services"]["web"]
         self.assertEqual("-Djna.tmpdir=/jna-tmp", web["environment"]["JAVA_TOOL_OPTIONS"])

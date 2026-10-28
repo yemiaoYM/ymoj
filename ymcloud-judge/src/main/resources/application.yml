@@ -76,12 +76,12 @@ ymcloud:
             max-request-bytes: ${YMCLOUD_GO_JUDGE_MAX_REQUEST_BYTES:25165824}
             # 单文件和编译产物 16 MiB；内存单位明确区分 bytes 与 KiB。
             max-file-bytes: ${YMCLOUD_GO_JUDGE_MAX_FILE_BYTES:16777216}
-            max-problem-memory-ki-b: ${YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB:524288}
+            max-problem-memory-ki-b: ${YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB:1048576}
             compile-memory-bytes: ${YMCLOUD_GO_JUDGE_COMPILE_MEMORY_BYTES:536870912}
             compile-wall-time-millis: ${YMCLOUD_GO_JUDGE_COMPILE_WALL_MS:10000}
             process-limit: ${YMCLOUD_GO_JUDGE_PROCESS_LIMIT:64}
             sandbox-concurrency: ${YMCLOUD_GO_JUDGE_CONCURRENCY:1}
-            service-memory-bytes: ${YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES:1073741824}
+            service-memory-bytes: ${YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES:1610612736}
             cpu-rate-limit: ${YMCLOUD_GO_JUDGE_CPU_RATE:1000}
         cache:
             # 私有测试版本缓存，禁止多个 Worker 共用同一目录。

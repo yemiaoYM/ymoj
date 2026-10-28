@@ -19,6 +19,12 @@
     </properties>
 
     <dependencies>
+        <!-- 公开题面 HTML 解析与 Markdown 转换 -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.23.2</version>
+        </dependency>
         <!--hutool-->
         <dependency>
             <groupId>cn.hutool</groupId>

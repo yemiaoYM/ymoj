@@ -6,6 +6,12 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import { permission } from '@/directives/permission';
+import { config } from 'md-editor-v3';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+// 题面公式随应用提供，编辑器和预览器共用同一个本地实例。
+config({ editorExtensions: { katex: { instance: katex } } });
 
 const app = createApp(App);
 app.use(createPinia());

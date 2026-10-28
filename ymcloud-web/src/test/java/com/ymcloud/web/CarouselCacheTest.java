@@ -23,6 +23,7 @@ import com.ymcloud.web.controller.admin.common.AdminCarouselController;
 import com.ymcloud.web.controller.common.PublicCarouselController;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.impl.CarouselSettingServiceImpl;
+import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
 import com.ymcloud.web.service.oj.FileService;
 import com.ymcloud.web.service.oj.impl.FileServiceImpl;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -121,7 +122,7 @@ class CarouselCacheTest {
             return null;
         }).when(writer).put(anyString(), any(byte[].class), any(byte[].class), any(Duration.class));
 
-        // 使用生产键前缀和序列化，仅替换 Redis 网络 writer。
+        // 使用生产键前缀和序列化，仅替换 Redis 网络 writer
         RedisCacheManager production = new RedisConfig().cacheManager(mock(RedisConnectionFactory.class));
         production.afterPropertiesSet();
         var config = ((org.springframework.data.redis.cache.RedisCache)
@@ -136,7 +137,7 @@ class CarouselCacheTest {
         context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
         context.registerBean("cacheManager", RedisCacheManager.class, () -> manager);
         context.registerBean("transactionManager", TestTransactionManager.class, () -> transactions);
-        context.register(CacheConfig.class, CarouselSettingServiceImpl.class, FileServiceImpl.class,
+        context.register(CacheConfig.class, PublicImageServiceImpl.class, CarouselSettingServiceImpl.class, FileServiceImpl.class,
                 PublicCarouselController.class, AdminCarouselController.class);
         context.refresh();
         service = context.getBean(CarouselSettingService.class);

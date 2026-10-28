@@ -78,6 +78,35 @@ class ProblemMetadataTest {
     }
 
     /**
+     * 新增和编辑均接受 1024 MB，并拒绝超过上限及缺失的内存限制。
+     * @throws Exception MVC 请求失败
+     */
+    @Test
+    void validatesMemoryLimitAtHttpBoundary() throws Exception {
+        AdminProblemService service = mock(AdminProblemService.class);
+        AdminProblemController controller = new AdminProblemController();
+        ReflectionTestUtils.setField(controller, "adminProblemService", service);
+        var mvc = MockMvcBuilders.standaloneSetup(controller).build();
+        ProblemDTO dto = request();
+        for (Long memory : new Long[]{256L, 512L, 1024L}) {
+            dto.setMemoryLimit(memory);
+            mvc.perform(post("/admin/problem").contentType(MediaType.APPLICATION_JSON)
+                    .content(JSON.toJSONString(dto))).andExpect(status().isOk());
+            mvc.perform(put("/admin/problem/10").contentType(MediaType.APPLICATION_JSON)
+                    .content(JSON.toJSONString(dto))).andExpect(status().isOk());
+        }
+        for (Long memory : new Long[]{null, 255L, 1025L}) {
+            dto.setMemoryLimit(memory);
+            mvc.perform(post("/admin/problem").contentType(MediaType.APPLICATION_JSON)
+                    .content(JSON.toJSONString(dto))).andExpect(status().isBadRequest());
+            mvc.perform(put("/admin/problem/10").contentType(MediaType.APPLICATION_JSON)
+                    .content(JSON.toJSONString(dto))).andExpect(status().isBadRequest());
+        }
+        verify(service, times(3)).addProblem(any(ProblemDTO.class));
+        verify(service, times(3)).updateProblem(eq(10L), any(ProblemDTO.class));
+    }
+
+    /**
      * 来源只作说明，新增题目保留已校验的自定义展示 ID。
      */
     @Test
@@ -91,6 +120,7 @@ class ProblemMetadataTest {
         AdminProblemServiceImpl service = service(problems, mock(ProblemTagEntityService.class));
         ProblemDTO dto = request();
         dto.setProblemId("Custom_1000");
+        dto.setMemoryLimit(1024L);
         dto.setSource("  此题来源于洛谷 P1000  ");
         User user = new User();
         user.setId(1L);
@@ -104,7 +134,7 @@ class ProblemMetadataTest {
         assertEquals("Custom_1000", saved.getValue().getProblemId());
         assertEquals("此题来源于洛谷 P1000", saved.getValue().getSource());
         assertEquals("default", saved.getValue().getJudgeMode());
-        assertEquals(262144L, saved.getValue().getMemoryLimit());
+        assertEquals(1048576L, saved.getValue().getMemoryLimit());
     }
 
     /**
@@ -158,7 +188,7 @@ class ProblemMetadataTest {
             mvc.perform(post("/admin/problem").contentType(MediaType.APPLICATION_JSON)
                     .content(JSON.toJSONString(dto))).andExpect(status().isBadRequest());
         }
-        // Create 必须继承通用约束，不能只验证题号。
+        // Create 必须继承通用约束，不能只验证题号
         dto.setProblemId("P1000");
         dto.setTitle(" ");
         mvc.perform(post("/admin/problem").contentType(MediaType.APPLICATION_JSON)
@@ -176,7 +206,8 @@ class ProblemMetadataTest {
                 .content(JSON.toJSONString(dto))).andExpect(status().isOk());
         verify(service).updateProblem(eq(10L), any(ProblemDTO.class));
 
-        // 样例最多3组，标签仍允许5个；新增和编辑使用相同的样例上限。
+        // 样例最多3组，标签仍允许5个
+        // 新增和编辑使用相同的样例上限
         dto.setProblemId("P1000");
         dto.setTagList(List.of(1L, 2L, 3L, 4L, 5L));
         dto.setProblemCaseList(Collections.nCopies(3, new ProblemCaseVO()));

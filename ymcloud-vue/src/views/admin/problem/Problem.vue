@@ -49,7 +49,7 @@
             <el-input-number
               v-model="problem.memoryLimit"
               :min="256"
-              :max="512"
+              :max="1024"
               :step="16"
             />
           </el-form-item>
@@ -215,6 +215,11 @@
         >
           {{ mode === 'edit' ? '更新' : '保存' }}
         </el-button>
+        <el-popconfirm v-if="mode === 'add'" title="清空当前内容及本地草稿？" @confirm="handleDiscardDraft">
+          <template #reference>
+            <el-button size="large" type="warning" :disabled="saving">清空</el-button>
+          </template>
+        </el-popconfirm>
         <el-text v-if="saveFailed" type="danger">保存失败，内容已保留，请调整后重试。</el-text>
       </template>
     </el-card>
@@ -229,14 +234,22 @@ import { useRoute, useRouter } from "vue-router";
 import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/api/api";
 import type { Tag, ProblemDTO } from "@/type/types";
 import { PROBLEM_DIFFICULTIES } from "@/constants/problem";
+import { isDraftRecord, useLocalDraft } from "@/composables/useLocalDraft";
+import { useRemoteProblemStore } from "@/stores/remoteProblem";
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/MarkdownEidt.vue")
 );
 
-type ProblemForm = Omit<ProblemDTO, "examples" | "source"> & { source: string; tagList: number[] };
+type ProblemForm = Omit<ProblemDTO, "examples" | "source" | "timeLimit" | "memoryLimit"> & {
+  source: string;
+  tagList: number[];
+  timeLimit: number | null | undefined;
+  memoryLimit: number | null | undefined;
+};
 
 const route = useRoute();
 const router = useRouter();
+const remoteStore = useRemoteProblemStore();
 const media = window.matchMedia('(max-width: 767px)');
 const isNarrow = ref(media.matches);
 const loading = ref(false);
@@ -250,6 +263,33 @@ const problemId = ref<number | null>(null);
 const tagList = ref<Tag[]>([]);
 const problem = ref<ProblemForm>(handleCreateForm());
 let revision = 0;
+const draftActive = ref(false);
+type ProblemDraft = ProblemForm & { importNotice?: string };
+const localDraft = useLocalDraft<ProblemDraft>(
+  'problem',
+  () => problem.value,
+  () => draftActive.value,
+  (value): value is ProblemDraft => {
+    if (!isDraftRecord(value)) return false;
+    return value.id === null
+      && ['problemId', 'title', 'content', 'input', 'output', 'source']
+        .every(key => typeof value[key] === 'string')
+      && ['difficulty', 'visibility'].every(key => typeof value[key] === 'number')
+      && ['timeLimit', 'memoryLimit'].every(key => value[key] == null || typeof value[key] === 'number')
+      && value.judgeMode === 'default' && typeof value.openCaseResult === 'boolean'
+      && Array.isArray(value.tagList) && value.tagList.every(tag => typeof tag === 'number')
+      && Array.isArray(value.problemCaseList) && value.problemCaseList.every(item =>
+        isDraftRecord(item) && typeof item.input === 'string' && typeof item.output === 'string'
+        && typeof item.note === 'string');
+  },
+);
+
+function handleDiscardDraft() {
+  saveFailed.value = false;
+  problem.value = handleCreateForm();
+  localDraft.clear();
+  nextTick(() => formRef.value?.clearValidate());
+}
 
 //验证测试用例
 const validateTestCases = (_rule: unknown, value: ProblemForm['problemCaseList'], callback: (error?: Error) => void) => {
@@ -343,8 +383,8 @@ const rules = computed<FormRules<ProblemForm>>(() => ({
     {
       type: "number",
       min: 256,
-      max: 512,
-      message: "内存限制必须在256MB到512MB之间",
+      max: 1024,
+      message: "内存限制必须在256MB到1024MB之间",
       trigger: "blur",
     },
   ],
@@ -386,11 +426,13 @@ const onSubmitProblem = async () => {
       await router.push('/admin/problem/list');
     } else {
       problem.value = handleCreateForm();
+      localDraft.clear();
       await nextTick();
       formRef.value?.clearValidate();
     }
   } catch {
-    // 请求层统一提示原因；保留当前输入，允许修正后重试。
+    // 请求层统一提示原因
+    // 保留当前输入，允许修正后重试
     if (current === revision) saveFailed.value = true;
   } finally {
     if (current === revision) saving.value = false;
@@ -467,6 +509,8 @@ const handleLoadProblem = async () => {
 
 // 切换题目或回到新增页时，使旧请求失效，避免覆盖正在编辑的表单。
 watch(() => [route.name, route.params.id], () => {
+  localDraft.flush();
+  draftActive.value = false;
   revision++;
   mode.value = route.name === 'AdminProblemEdit' ? 'edit' : 'add';
   problemId.value = mode.value === 'edit' ? Number(route.params.id) : null;
@@ -477,7 +521,26 @@ watch(() => [route.name, route.params.id], () => {
   problem.value = handleCreateForm();
   if (mode.value === 'edit') {
     handleLoadProblem();
-  } else {
+  } else if (route.name === 'AdminAddProblem') {
+    const cached = localDraft.restore();
+    if (cached) {
+      const { importNotice: _notice, ...fields } = cached;
+      problem.value = fields;
+    }
+    draftActive.value = true;
+    if (route.query.remote === '1') {
+      const draft = remoteStore.draft;
+      remoteStore.draft = null;
+      if (draft) {
+        const { notice, ...fields } = draft;
+        problem.value = {
+          ...problem.value,
+          ...fields,
+          timeLimit: draft.timeLimit === null ? 1000 : Math.min(10000, Math.max(1000, draft.timeLimit)),
+          memoryLimit: draft.memoryLimit === null ? 256 : Math.min(1024, Math.max(256, draft.memoryLimit)),
+        };
+      }
+    }
     nextTick(() => formRef.value?.clearValidate());
   }
 }, { immediate: true });

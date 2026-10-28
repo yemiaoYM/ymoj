@@ -108,7 +108,7 @@ public class ProblemDTO {
      */
     @NotNull(message = "请设定内存限制")
     @Min(value = 256, message = "内存限制不能少于256MB")
-    @Max(value = 512, message = "内存限制不能超过512MB")
+    @Max(value = 1024, message = "内存限制不能超过1024MB")
     private Long memoryLimit;
 
     /**

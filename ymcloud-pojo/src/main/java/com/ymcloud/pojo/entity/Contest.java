@@ -1,12 +1,18 @@
 package com.ymcloud.pojo.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/** 比赛表。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2025-07-30
+ * @Description: 比赛表，封面为空时使用前端默认图片。
+ */
 @Data
 public class Contest {
 
@@ -21,6 +27,7 @@ public class Contest {
     private String creatorUsername;
 
     /** 比赛Logo图片路径 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String image;
 
     /** 比赛标题 */

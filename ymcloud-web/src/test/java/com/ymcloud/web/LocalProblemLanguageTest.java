@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.*;
 
 /**
@@ -69,7 +70,7 @@ class LocalProblemLanguageTest {
     }
 
     /**
-     * 比赛题目保留比赛展示号，同时使用本站语言模板。
+     * 比赛题目保留比赛展示号与语言模板，但不返回原题来源。
      * @param source 原题出处
      */
     @ParameterizedTest
@@ -105,7 +106,8 @@ class LocalProblemLanguageTest {
             security.when(SecurityUtils::getUserId).thenReturn(2L);
             ProblemVO response = service.getContestProblem(contest.getId(), "A");
             assertEquals(enabled, response.getLanguageList());
-            assertEquals(source, response.getSource());
+            assertNull(response.getSource());
+            assertEquals(source, problem.getSource());
             assertEquals("A", response.getProblemId());
             assertEquals(mapping.getDisplayTitle(), response.getTitle());
         }

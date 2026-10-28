@@ -8,7 +8,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.contest.ContestException;
 import com.ymcloud.common.exception.contest.ContestNotExistException;
+import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
@@ -17,16 +19,20 @@ import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.ContestUser;
+import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.query.admin.AdminContestPageQuery;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminContestService;
+import com.ymcloud.web.service.common.PublicImageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -34,8 +40,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * @PackageName: com.ymcloud.web.service.admin.impl
- * @ClassName: AdminContestServiceImpl
  * @Author: Yemiao
  * @CreateTime: 2025-09-24  19:09
  * @Description: 管理端比赛服务实现类
@@ -54,6 +58,22 @@ public class AdminContestServiceImpl implements AdminContestService {
 
     @Autowired
     private ProblemEntityService problemEntityService;
+
+    @Autowired
+    private PublicImageService publicImages;
+
+    @Autowired
+    private StoredFileService storedFiles;
+
+    /**
+     * 上传封面并返回统一公开地址，文件先独立保存供表单草稿引用。
+     * @param file 经过前端裁剪的 JPEG 或 PNG
+     * @return 已登记的公开图片地址
+     */
+    @Override
+    public String uploadImage(MultipartFile file) {
+        return publicImages.upload(file, "contest.png", 1, 1).getUrl();
+    }
 
     /**
      * 分页查询比赛列表
@@ -97,6 +117,7 @@ public class AdminContestServiceImpl implements AdminContestService {
     public void addContest(ContestDTO contestDTO) {
         //验证比赛时间
         validateContestTime(contestDTO.getStartTime(), contestDTO.getEndTime());
+        validateContestImage(contestDTO.getImage());
         //构造实体
         Contest contest = BeanUtil.copyProperties(contestDTO, Contest.class);
         //如果是私有，必须设置密码
@@ -133,6 +154,7 @@ public class AdminContestServiceImpl implements AdminContestService {
         }
         //验证比赛时间
         validateContestTime(contestDTO.getStartTime(), contestDTO.getEndTime());
+        validateContestImage(contestDTO.getImage());
         //修改字段
         Contest contest = BeanUtil.copyProperties(contestDTO, Contest.class);
         contest.setId(id);
@@ -595,6 +617,20 @@ public class AdminContestServiceImpl implements AdminContestService {
                 .update();
         if (!updateVisibility) {
             throw new ContestException("更新题目权限失败，请稍后再试");
+        }
+    }
+
+    /**
+     * 非空封面必须引用统一存储中的公开图片，不能通过比赛暴露私有文件。
+     * @param image 封面地址；null 表示使用默认图
+     */
+    private void validateContestImage(String image) {
+        if (image == null) {
+            return;
+        }
+        File file = storedFiles.resolvePublicUrl(image);
+        if (file == null || file.getBizType() != FileBizType.IMAGE) {
+            throw new FileException("封面不存在或不是公开图片，请重新上传", HttpStatus.BAD_REQUEST);
         }
     }
 

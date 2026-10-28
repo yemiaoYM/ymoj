@@ -12,7 +12,7 @@
 
   <el-dialog
     title="裁剪图片"
-    width="760px"
+    width="min(760px, calc(100vw - 32px))"
     align-center
     destroy-on-close
     :model-value="visible"
@@ -23,28 +23,25 @@
     @opened="handleInitCropper"
     @closed="handleRelease"
   >
-    <el-scrollbar max-height="70vh">
-      <x-flex vertical :size="16">
-        <x-flex justify="space-between" align="center">
-          <el-text type="info">拖动选框或边角裁剪，滚轮／双指缩放图片。</el-text>
-          <el-tag>{{ aspectRatio.join(':') }} 固定比例</el-tag>
+    <el-scrollbar max-height="calc(100dvh - 160px)" view-style="padding: 0 12px 4px 0">
+      <x-flex :wrap="false" :size="16" class="crop-layout" style="flex-direction: var(--crop-layout-direction, row)">
+        <x-flex vertical :size="12" class="crop-editor">
+          <div class="crop-stage" tabindex="0" aria-label="图片裁剪区域，可用方向键移动图片" @keydown="onMoveImage">
+            <img ref="imageRef" alt="待裁剪原图" :src="imageUrl" />
+          </div>
+          <x-flex justify="center" :size="8" class="crop-tools">
+            <el-button aria-label="向左旋转90度" title="向左旋转90度" :icon="RefreshLeft" :disabled="!ready || exporting" @click="onRotate(-90)" />
+            <el-button aria-label="向右旋转90度" title="向右旋转90度" :icon="RefreshRight" :disabled="!ready || exporting" @click="onRotate(90)" />
+            <el-button aria-label="缩小图片" title="缩小图片" :icon="ZoomOut" :disabled="!ready || exporting" @click="onZoom(-0.1)" />
+            <el-button aria-label="放大图片" title="放大图片" :icon="ZoomIn" :disabled="!ready || exporting" @click="onZoom(0.1)" />
+            <el-button aria-label="重置裁剪" title="重置裁剪" :icon="Refresh" :disabled="!ready || exporting" @click="onReset" />
+          </x-flex>
         </x-flex>
-        <div class="crop-stage" tabindex="0" aria-label="图片裁剪区域，可用方向键移动图片" @keydown="onMoveImage">
-          <img ref="imageRef" alt="待裁剪原图" :src="imageUrl" />
-        </div>
-        <x-flex justify="center" :size="8">
-          <el-button aria-label="向左旋转90度" title="向左旋转90度" :icon="RefreshLeft" :disabled="!ready || exporting" @click="onRotate(-90)" />
-          <el-button aria-label="向右旋转90度" title="向右旋转90度" :icon="RefreshRight" :disabled="!ready || exporting" @click="onRotate(90)" />
-          <el-button aria-label="缩小图片" title="缩小图片" :icon="ZoomOut" :disabled="!ready || exporting" @click="onZoom(-0.1)" />
-          <el-button aria-label="放大图片" title="放大图片" :icon="ZoomIn" :disabled="!ready || exporting" @click="onZoom(0.1)" />
-          <el-button aria-label="重置裁剪" title="重置裁剪" :icon="Refresh" :disabled="!ready || exporting" @click="onReset" />
-        </x-flex>
-        <x-flex align="center" :size="16">
+        <x-flex :wrap="false" align="center" :size="12" class="crop-preview" style="flex-direction: var(--crop-preview-direction, column)">
           <div ref="previewRef" class="crop-result" aria-label="裁剪结果预览" :style="{ aspectRatio: ratio }" />
           <x-flex vertical :size="4">
-            <el-text>结果预览</el-text>
-            <el-text type="info" size="small">选区 {{ selectionSize }} px</el-text>
-            <el-text type="info" size="small">导出 {{ outputWidth }} × {{ outputHeight }} px</el-text>
+            <el-text>预览</el-text>
+            <el-text type="info" size="small">{{ aspectRatio.join(':') }}</el-text>
           </x-flex>
         </x-flex>
       </x-flex>
@@ -85,7 +82,6 @@ const reading = ref(false);
 const ready = ref(false);
 const exporting = ref(false);
 const imageUrl = ref('');
-const selectionSize = ref('—');
 const ratio = computed(() => props.aspectRatio[0] / props.aspectRatio[1]);
 const outputHeight = computed(() => Math.round(props.outputWidth / ratio.value));
 let cropper: Cropper | null = null;
@@ -142,9 +138,6 @@ function handleInitCropper() {
     minCropBoxWidth: 40,
     minCropBoxHeight: 40 / ratio.value,
     ready() { ready.value = true; },
-    crop(event) {
-      selectionSize.value = `${Math.round(event.detail.width)} × ${Math.round(event.detail.height)}`;
-    },
     error() {
       ready.value = false;
       ElMessage.error('图片裁剪器加载失败，请重新选择');
@@ -234,9 +227,20 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.crop-editor {
+  flex: 1;
+  min-width: 0;
+}
 .crop-stage {
-  height: clamp(240px, 46vh, 420px);
+  height: clamp(200px, calc(100dvh - 260px), 420px);
   background: var(--el-fill-color-light);
+}
+.crop-tools :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+.crop-preview {
+  width: 160px;
+  flex-shrink: 0;
 }
 .crop-stage > img {
   display: block;
@@ -254,8 +258,21 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 .crop-result {
-  width: 144px;
+  width: 112px;
+  flex-shrink: 0;
   overflow: hidden;
   background: var(--el-fill-color-light);
+}
+@media (max-width: 640px) {
+  .crop-layout {
+    --crop-layout-direction: column;
+  }
+  .crop-stage {
+    height: clamp(180px, calc(100dvh - 380px), 360px);
+  }
+  .crop-preview {
+    width: auto;
+    --crop-preview-direction: row;
+  }
 }
 </style>

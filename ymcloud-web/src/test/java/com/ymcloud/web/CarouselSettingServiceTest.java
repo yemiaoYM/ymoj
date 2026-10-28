@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWra
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.ServiceException;
+import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.FileEntityService;
@@ -21,6 +22,7 @@ import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.impl.CarouselSettingServiceImpl;
+import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
 import jakarta.validation.Validation;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
@@ -85,7 +87,10 @@ class CarouselSettingServiceTest {
         when(settings.lambdaQuery()).thenAnswer(call -> new LambdaQueryChainWrapper<>(settingMapper, SystemSetting.class));
         when(settings.lambdaUpdate()).thenAnswer(call -> new LambdaUpdateChainWrapper<>(settingMapper));
         when(files.lambdaQuery()).thenAnswer(call -> new LambdaQueryChainWrapper<>(fileMapper, File.class));
+        PublicImageServiceImpl publicImages = new PublicImageServiceImpl();
+        ReflectionTestUtils.setField(publicImages, "storedFiles", storage);
         service = new CarouselSettingServiceImpl();
+        ReflectionTestUtils.setField(service, "publicImages", publicImages);
         ReflectionTestUtils.setField(service, "settings", settings);
         ReflectionTestUtils.setField(service, "files", files);
         ReflectionTestUtils.setField(service, "storedFiles", storage);
@@ -171,7 +176,7 @@ class CarouselSettingServiceTest {
         ordered.verify(storage, times(2)).open(any());
         ordered.verify(transactions).getTransaction(any());
         verify(settingMapper).update(isNull(), argThat(wrapper -> {
-            wrapper.getSqlSegment(); // MyBatis 实际执行时会渲染 SQL 并填充参数。
+            wrapper.getSqlSegment(); // MyBatis 实际执行时会渲染 SQL 并填充参数
             return ((LambdaUpdateWrapper<SystemSetting>) wrapper).getParamNameValuePairs().containsValue("[2,1]");
         }));
     }
@@ -187,11 +192,11 @@ class CarouselSettingServiceTest {
         File testData = image(1);
         testData.setBizType(FileBizType.TEST_DATA);
         when(fileMapper.selectOne(any(Wrapper.class))).thenReturn(null, privateImage, testData, image(1));
-        assertThrows(ServiceException.class, () -> service.save(request(List.of("1"))));
-        assertThrows(ServiceException.class, () -> service.save(request(List.of("1"))));
-        assertThrows(ServiceException.class, () -> service.save(request(List.of("1"))));
+        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
+        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
+        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
         when(storage.open(any())).thenReturn(new ByteArrayInputStream(png(100, 100)));
-        assertThrows(ServiceException.class, () -> service.save(request(List.of("1"))));
+        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
         verify(transactions, never()).getTransaction(any());
     }
 
@@ -204,7 +209,7 @@ class CarouselSettingServiceTest {
         when(fileMapper.selectOne(any(Wrapper.class))).thenReturn(image(1)).thenReturn(null);
         when(storage.open(any())).thenReturn(new ByteArrayInputStream(png(160, 90)));
         when(settingMapper.selectOne(any(Wrapper.class))).thenReturn(setting("true"));
-        assertThrows(ServiceException.class, () -> service.save(request(List.of("1"))));
+        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
         verify(settings, never()).save(any());
         verify(transactions).rollback(any());
     }
@@ -218,7 +223,7 @@ class CarouselSettingServiceTest {
         for (byte[] bytes : List.of(new byte[0], "not png".getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 png(160, 100), new byte[5 * 1024 * 1024 + 1])) {
             var upload = new MockMultipartFile("file", "fake.png", "image/png", bytes);
-            assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ServiceException.class, () -> service.upload(upload)).getCode());
+            assertEquals(HttpStatus.BAD_REQUEST, assertThrows(FileException.class, () -> service.upload(upload)).getCode());
         }
         verifyNoInteractions(storage);
     }

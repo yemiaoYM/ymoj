@@ -97,6 +97,9 @@ class GoJudgeStartupCheckTest {
         }
     }
 
+    /**
+     * 1024 MiB 单题预算须有服务预留空间，提高并发时仍要求配套扩容。
+     */
     @Test
     void concurrencyAndServiceMemoryCannotBeRaisedIndependently() {
         GoJudgeProperties properties = new GoJudgeProperties();
@@ -105,6 +108,8 @@ class GoJudgeStartupCheckTest {
         properties.setSandboxConcurrency(2);
         assertThrows(IllegalArgumentException.class, properties::validate);
         properties.setServiceMemoryBytes(2L * 1024 * 1024 * 1024);
+        assertThrows(IllegalArgumentException.class, properties::validate);
+        properties.setServiceMemoryBytes(3L * 1024 * 1024 * 1024);
         assertDoesNotThrow(properties::validate);
         GoJudgeStartupCheck check = createGoJudgeStartupCheck(mock(GoJudgeClient.class), properties,
                 new WorkerProperties());

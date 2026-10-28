@@ -205,7 +205,7 @@ public class ContestServiceImpl implements ContestService {
     }
 
     /**
-     * 查询比赛题目详情
+     * 查询比赛题目详情，仅返回比赛展示信息，不公开原题来源。
      * @param contestId 比赛id
      * @param displayId 题目展示id
      * @return 比赛题目详情
@@ -228,15 +228,23 @@ public class ContestServiceImpl implements ContestService {
         if (problem == null) {
             throw new ContestProblemNotExistException();
         }
-        //拷贝实体
-        ProblemVO problemVO = BeanUtil.copyProperties(problem, ProblemVO.class);
+        // 按比赛展示白名单组装，原题来源不进入响应
+        ProblemVO problemVO = new ProblemVO();
+        problemVO.setContent(problem.getContent());
+        problemVO.setInput(problem.getInput());
+        problemVO.setOutput(problem.getOutput());
+        problemVO.setDifficulty(problem.getDifficulty());
+        problemVO.setJudgeMode(problem.getJudgeMode());
+        problemVO.setTimeLimit(problem.getTimeLimit());
+        problemVO.setMemoryLimit(problem.getMemoryLimit());
+        problemVO.setAuthorUsername(problem.getAuthorUsername());
         //比赛题目优先实现简单信息中的标题和标识
         problemVO.setProblemId(contestProblem.getDisplayId());
         problemVO.setTitle(contestProblem.getDisplayTitle());
         //查询题目的题面样例,将json转化为对象
         List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
         problemVO.setProblemCaseList(problemCaseVOList);
-        //比赛题目同样使用本站语言配置，原题来源不决定执行平台。
+        // 比赛题目同样使用本站语言配置，原题来源不决定执行平台
         List<LanguageVO> languageVOList = languageEntityService.getByStatusAndOj(
                 LanguageConstants.ABLE,
                 LanguageConstants.LOCAL_PLATFORM);

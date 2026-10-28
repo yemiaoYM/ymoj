@@ -8,109 +8,118 @@
         </span>
       </template>
       <x-flex vertical :size="[12, 12]" style="width: 100%; padding: 15px">
+        <el-skeleton v-if="loading" animated :rows="8" />
+        <el-alert v-else-if="loadFailed" title="比赛加载失败，请重试" type="error" :closable="false">
+          <el-button text type="primary" @click="loadContestData">重新加载</el-button>
+        </el-alert>
         <!-- 基础信息 -->
         <el-form
+          v-else
+          :disabled="saving || uploading"
           ref="formRef"
           :model="contest"
           :rules="rules"
           label-width="auto"
+          label-position="top"
           style="width: 100%"
         >
-          <!-- 基本信息区域 -->
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="比赛标题" prop="title">
-                <el-input v-model="contest.title" placeholder="请输入比赛标题" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <!-- 时间设置区域 -->
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="开始时间" prop="startTime">
-                <el-date-picker
-                  v-model="contest.startTime"
-                  type="datetime"
-                  placeholder="选择开始时间"
-                  style="width: 100%"
-                  format="YYYY-MM-DD HH:mm:ss"
-                  value-format="YYYY-MM-DD HH:mm:ss"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="结束时间" prop="endTime">
-                <el-date-picker
-                  v-model="contest.endTime"
-                  type="datetime"
-                  placeholder="选择结束时间"
-                  style="width: 100%"
-                  format="YYYY-MM-DD HH:mm:ss"
-                  value-format="YYYY-MM-DD HH:mm:ss"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <!-- 比赛设置区域 -->
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="比赛类型" prop="style">
-                <el-select v-model="contest.style" style="width: 100%">
-                  <el-option :value="0" label="其他" />
-                  <el-option :value="1" label="周赛" />
-                  <el-option :value="2" label="月赛" />
-                  <el-option :value="3" label="娱乐赛" />
-                  <el-option :value="4" label="挑战赛" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="赛制模式" prop="mode">
-                <el-select v-model="contest.mode" style="width: 100%">
-                  <el-option :value="0" label="ACM" />
-                  <el-option :value="1" label="OI" />
-                  <el-option :value="2" label="IOI" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="访问权限" prop="visibility">
-                <el-select v-model="contest.visibility" style="width: 100%">
-                  <el-option :value="0" label="公开" />
-                  <el-option :value="1" label="私有（需密码）" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-
-          <!-- 比赛密码（私有比赛时显示） -->
+          <el-form-item label="比赛标题" prop="title">
+            <el-input v-model="contest.title" placeholder="请输入比赛标题" maxlength="100" show-word-limit />
+          </el-form-item>
+          <el-form-item label="比赛封面" prop="image">
+            <x-flex align="center" :size="20" style="width: 100%">
+              <el-image
+                class="contest-cover"
+                fit="cover"
+                alt="比赛封面"
+                :src="contest.image || defaultContest"
+              />
+              <x-flex vertical :size="8">
+                <x-flex v-if="canEdit" align="center">
+                  <ImageCropUpload
+                    :key="`cover-${mode}-${contestId}`"
+                    :disabled="saving || uploading"
+                    :aspect-ratio="[1, 1]"
+                    :output-width="1024"
+                    @cropped="onUploadImage"
+                  >
+                    <el-button type="primary" plain :loading="uploading" :disabled="saving || uploading">上传封面</el-button>
+                  </ImageCropUpload>
+                  <el-button :disabled="saving || uploading || !contest.image" @click="onResetImage">恢复默认</el-button>
+                </x-flex>
+                <el-text type="info" size="small">支持 JPEG、PNG、WebP，最大 5MB，上传前可裁剪。</el-text>
+                <x-flex v-if="pendingUpload" align="center">
+                  <el-text type="danger">封面上传失败</el-text>
+                  <el-button text :disabled="saving || uploading" @click="onUploadImage(pendingUpload)">重试上传</el-button>
+                </x-flex>
+              </x-flex>
+            </x-flex>
+          </el-form-item>
+          <x-flex :size="[20, 0]">
+            <el-form-item class="contest-field" label="开始时间" prop="startTime">
+              <el-date-picker
+                v-model="contest.startTime"
+                type="datetime"
+                placeholder="选择开始时间"
+                style="width: 100%"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+              />
+            </el-form-item>
+            <el-form-item class="contest-field" label="结束时间" prop="endTime">
+              <el-date-picker
+                v-model="contest.endTime"
+                type="datetime"
+                placeholder="选择结束时间"
+                style="width: 100%"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+              />
+            </el-form-item>
+          </x-flex>
+          <x-flex :size="[20, 0]">
+            <el-form-item class="contest-field" label="比赛类型" prop="style">
+              <el-select v-model="contest.style" style="width: 100%">
+                <el-option :value="0" label="其他" />
+                <el-option :value="1" label="周赛" />
+                <el-option :value="2" label="月赛" />
+                <el-option :value="3" label="娱乐赛" />
+                <el-option :value="4" label="挑战赛" />
+              </el-select>
+            </el-form-item>
+            <el-form-item class="contest-field" label="赛制模式" prop="mode">
+              <el-select v-model="contest.mode" style="width: 100%">
+                <el-option :value="0" label="ACM" />
+                <el-option :value="1" label="OI" />
+                <el-option :value="2" label="IOI" />
+              </el-select>
+            </el-form-item>
+            <el-form-item class="contest-field" label="访问权限" prop="visibility">
+              <el-select v-model="contest.visibility" style="width: 100%">
+                <el-option :value="0" label="公开" />
+                <el-option :value="1" label="私有（需密码）" />
+              </el-select>
+            </el-form-item>
+          </x-flex>
           <el-form-item v-if="contest.visibility === 1" label="比赛密码" prop="password">
             <el-input
               v-model="contest.password"
               placeholder="请输入比赛密码（私有比赛必填）"
               show-password
-              style="width: 300px"
+              style="width: 100%; max-width: 400px"
             />
           </el-form-item>
-
-          <!-- 其他设置 -->
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="是否计入Rating" prop="rated">
-                <el-radio-group v-model="contest.rated">
-                  <el-radio :value="0">否</el-radio>
-                  <el-radio :value="1">是</el-radio>
-                </el-radio-group>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="允许结束后提交" prop="allowEndSubmit">
-                <el-switch v-model="contest.allowEndSubmit" />
-              </el-form-item>
-            </el-col>
-          </el-row>
+          <x-flex :size="[20, 0]">
+            <el-form-item class="contest-field" label="是否计入Rating" prop="rated">
+              <el-radio-group v-model="contest.rated">
+                <el-radio :value="0">否</el-radio>
+                <el-radio :value="1">是</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item class="contest-field" label="允许结束后提交" prop="allowEndSubmit">
+              <el-switch v-model="contest.allowEndSubmit" />
+            </el-form-item>
+          </x-flex>
 
           <!-- 比赛描述 -->
           <el-form-item
@@ -128,11 +137,18 @@
           v-permission="mode === 'edit' ? ['contest:contest:edit'] : ['contest:contest:add']"
           size="large"
           type="primary"
-          :loading="loading"
+          :loading="saving"
+          :disabled="loading || loadFailed || uploading"
           @click="handleSubmitContest"
         >
           {{ mode === 'edit' ? '更新' : '保存' }}
         </el-button>
+        <el-popconfirm v-if="mode === 'add'" title="清空当前内容及本地草稿？" @confirm="handleDiscardDraft">
+          <template #reference>
+            <el-button size="large" type="warning" :disabled="saving || uploading">清空</el-button>
+          </template>
+        </el-popconfirm>
+        <el-text v-if="saveFailed" type="danger">保存失败，内容已保留，请调整后重试。</el-text>
       </template>
     </el-card>
   </div>
@@ -140,9 +156,15 @@
 
 <script setup lang="ts">
 //import
-import { ref, defineAsyncComponent, watch } from "vue";
+import { computed, ref, defineAsyncComponent, watch, nextTick, onBeforeUnmount } from "vue";
 import { ElMessage } from "element-plus";
+import type { FormInstance, FormRules } from "element-plus";
+import { isDraftRecord, useLocalDraft } from "@/composables/useLocalDraft";
 import { useRoute, useRouter } from "vue-router";
+import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
+import defaultContest from '@/assets/image/defaultContest.jpg';
+import { uploadContestImage } from '@/api/contest';
+import { useUserStore } from '@/stores/user';
 import { addAdminContest, updateAdminContest, getAdminContestById } from "@/api/api";
 
 //异步导入markdown
@@ -154,12 +176,21 @@ const MarkdownEidt = defineAsyncComponent(
 const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
-const formRef = ref();
+const saving = ref(false);
+const uploading = ref(false);
+const pendingUpload = ref<Blob | null>(null);
+const userStore = useUserStore();
+const canEdit = computed(() => userStore.hasEveryPermission([
+  mode.value === 'edit' ? 'contest:contest:edit' : 'contest:contest:add',
+]));
+const loadFailed = ref(false);
+const saveFailed = ref(false);
+const formRef = ref<FormInstance>();
 const mode = ref('add');
 const contestId = ref<number | null>(null);
 
 // 验证比赛时间
-const validateContestTime = (rule: any, value: string, callback: any) => {
+const validateContestTime = (_rule: unknown, _value: unknown, callback: (error?: Error) => void) => {
   if (!contest.value.startTime || !contest.value.endTime) {
     callback();
     return;
@@ -174,7 +205,7 @@ const validateContestTime = (rule: any, value: string, callback: any) => {
 };
 
 //表单验证规则
-const rules = {
+const rules: FormRules<ContestForm> = {
   title: [
     { required: true, message: "比赛标题不能为空", trigger: "blur" },
     { max: 100, message: "比赛标题长度不能超过100个字符", trigger: "blur" },
@@ -204,7 +235,7 @@ const rules = {
       required: true, 
       message: "私有比赛必须设置密码", 
       trigger: "blur",
-      validator: (rule: any, value: string, callback: any) => {
+      validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
         if (contest.value.visibility === 1 && !value) {
           callback(new Error("私有比赛必须设置密码"));
         } else {
@@ -218,132 +249,193 @@ const rules = {
   ],
 };
 
-const contest = ref({
-  id: null,
-  title: "",
-  description: "请输入比赛说明",
-  sourceId: 0,
-  rated: 0,
-  mode: 0,
-  style: 0,
-  visibility: 0,
-  password: "",
-  startTime: "",
-  endTime: "",
-  allowEndSubmit: false,
-});
-
-//methods
-//提交比赛（新增或编辑）
-const handleSubmitContest = () => {
-  if (!formRef.value) return;
-  formRef.value.validate((valid: boolean) => {
-    if (valid) {
-      loading.value = true;
-      
-      //构造符合后端DTO的数据结构
-      const submitData = {
-        title: contest.value.title,
-        description: contest.value.description,
-        sourceId: contest.value.sourceId,
-        rated: contest.value.rated,
-        mode: contest.value.mode,
-        style: contest.value.style,
-        visibility: contest.value.visibility,
-        password: contest.value.visibility === 1 ? contest.value.password : null,
-        startTime: contest.value.startTime,
-        endTime: contest.value.endTime,
-        allowEndSubmit: contest.value.allowEndSubmit,
-      };
-      
-      const api = mode.value === 'edit' && contest.value.id
-        ? updateAdminContest(contest.value.id, submitData)
-        : addAdminContest(submitData);
-      
-      api.then((res) => {
-          ElMessage.success(res.data.msg);
-          if (mode.value === 'edit') {
-            router.push('/admin/contest/list');
-          } else {
-            //新增模式成功后重置表单
-            resetForm();
-          }
-        }).catch((e) => {
-          console.error(e);
-        }).finally(() => {
-          loading.value = false;
-        });
-    } else {
-      ElMessage.warning("请检查表单输入");
-    }
-  });
+type ContestForm = {
+  id: number | null;
+  title: string;
+  image: string | null;
+  description: string;
+  sourceId: number;
+  rated: number;
+  mode: number;
+  style: number;
+  visibility: number;
+  password: string;
+  startTime: string | null;
+  endTime: string | null;
+  allowEndSubmit: boolean;
 };
+type ContestDraft = Omit<ContestForm, 'password'>;
 
-//重置表单
-const resetForm = () => {
-  contest.value = {
+function createForm(): ContestForm {
+  return {
     id: null,
-    title: "",
-    description: "请输入比赛说明",
+    title: '',
+    image: null,
+    description: '',
     sourceId: 0,
     rated: 0,
     mode: 0,
     style: 0,
     visibility: 0,
-    password: "",
-    startTime: "",
-    endTime: "",
+    password: '',
+    startTime: '',
+    endTime: '',
     allowEndSubmit: false,
   };
-  if (formRef.value) {
-    formRef.value.resetFields();
+}
+
+const contest = ref<ContestForm>(createForm());
+const draftActive = ref(false);
+let revision = 0;
+const localDraft = useLocalDraft<ContestDraft>(
+  'contest',
+  () => {
+    const { password, ...fields } = contest.value;
+    return fields;
+  },
+  () => draftActive.value,
+  (value): value is ContestDraft => {
+    if (!isDraftRecord(value)) return false;
+    return value.id === null && !('password' in value)
+      && (value.image === null || typeof value.image === 'string')
+      && ['title', 'description'].every(key => typeof value[key] === 'string')
+      && ['startTime', 'endTime'].every(key => value[key] === null || typeof value[key] === 'string')
+      && ['sourceId', 'rated', 'mode', 'style', 'visibility'].every(key => typeof value[key] === 'number')
+      && typeof value.allowEndSubmit === 'boolean';
+  },
+);
+
+function handleDiscardDraft() {
+  saveFailed.value = false;
+  pendingUpload.value = null;
+  contest.value = createForm();
+  localDraft.clear();
+  nextTick(() => formRef.value?.clearValidate());
+}
+
+async function onUploadImage(blob: Blob) {
+  if (!canEdit.value || saving.value || uploading.value) return;
+  const current = revision;
+  uploading.value = true;
+  try {
+    const response = await uploadContestImage(blob);
+    if (current !== revision) return;
+    contest.value.image = response.data.data;
+    pendingUpload.value = null;
+  } catch {
+    if (current === revision) pendingUpload.value = blob;
+  } finally {
+    if (current === revision) uploading.value = false;
+  }
+}
+
+function onResetImage() {
+  contest.value.image = null;
+  pendingUpload.value = null;
+}
+
+const handleSubmitContest = async () => {
+  if (!formRef.value || saving.value || uploading.value || loading.value || loadFailed.value) return;
+  const current = revision;
+  saving.value = true;
+  saveFailed.value = false;
+  try {
+    const valid = await formRef.value.validate(valid => {
+      if (!valid) ElMessage.warning("请检查表单输入");
+    });
+    if (!valid || current !== revision) return;
+    const { id, ...fields } = contest.value;
+    const submitData = { ...fields, password: fields.visibility === 1 ? fields.password : null };
+    const res = mode.value === 'edit' && id
+      ? await updateAdminContest(id, submitData)
+      : await addAdminContest(submitData);
+    if (current !== revision) return;
+    ElMessage.success(res.data.msg);
+    if (mode.value === 'edit') {
+      await router.push('/admin/contest/list');
+    } else {
+      handleDiscardDraft();
+    }
+  } catch {
+    // 请求层提示原因，页面保留输入和重试状态
+    if (current === revision) saveFailed.value = true;
+  } finally {
+    if (current === revision) saving.value = false;
   }
 };
 
-//加载比赛数据
 const loadContestData = async () => {
-  if (!contestId.value) return;
+  const id = contestId.value;
+  if (!id || !Number.isSafeInteger(id) || id < 1) {
+    loadFailed.value = true;
+    return;
+  }
+  const current = ++revision;
+  loading.value = true;
+  loadFailed.value = false;
   try {
-    loading.value = true;
-    const res = await getAdminContestById(contestId.value);
+    const res = await getAdminContestById(id);
+    if (current !== revision) return;
     const data = res.data.data;
-    
-    //获取到的数据赋值给表单
-    Object.assign(contest.value, {
+    contest.value = {
       id: data.id,
       title: data.title,
+      image: data.image ?? null,
       description: data.description,
       sourceId: data.sourceId,
       rated: data.rated,
       mode: data.mode,
       style: data.style,
       visibility: data.visibility,
-      password: data.password,
+      password: data.password ?? '',
       startTime: data.startTime,
       endTime: data.endTime,
       allowEndSubmit: data.allowEndSubmit,
-    });
-  } catch (e) {
-    console.log(e);
+    };
+  } catch {
+    if (current === revision) loadFailed.value = true;
   } finally {
-    loading.value = false;
+    if (current === revision) loading.value = false;
   }
 };
 
-//监听路由参数变化
-watch(() => route.name, () => {
-  if (route.name === 'AdminContestEdit' && route.params.id) {
-    mode.value = 'edit';
-    contestId.value = Number(route.params.id);
+watch(() => [route.name, route.params.id], () => {
+  localDraft.flush();
+  draftActive.value = false;
+  revision++;
+  mode.value = route.name === 'AdminContestEdit' ? 'edit' : 'add';
+  contestId.value = mode.value === 'edit' ? Number(route.params.id) : null;
+  loading.value = false;
+  loadFailed.value = false;
+  saving.value = false;
+  uploading.value = false;
+  pendingUpload.value = null;
+  saveFailed.value = false;
+  contest.value = createForm();
+  if (mode.value === 'edit') {
     loadContestData();
-  } else {
-    mode.value = 'add';
-    resetForm();
+  } else if (route.name === 'AdminContestAdd') {
+    const cached = localDraft.restore();
+    if (cached) contest.value = { ...cached, password: '' };
+    draftActive.value = true;
+    nextTick(() => formRef.value?.clearValidate());
   }
 }, { immediate: true });
+
+onBeforeUnmount(() => { revision++; });
 </script>
 
 <style scoped>
+.contest-field {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.contest-cover {
+  width: 160px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--el-border-radius-base);
+}
 .container {
   width: 100%;
   height: 100%;

@@ -36,9 +36,11 @@ public class Problem {
     private Long memoryLimit;
 
     /** 输入描述 */
+    @TableField("`input`")
     private String input;
 
     /** 输出描述 */
+    @TableField("`output`")
     private String output;
 
     /** 题面样例 */

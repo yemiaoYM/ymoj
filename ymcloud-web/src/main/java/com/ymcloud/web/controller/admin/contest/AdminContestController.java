@@ -13,13 +13,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.web.controller.admin.contest
- * @ClassName: AdminContestController
  * @Author: Yemiao
  * @CreateTime: 2025-09-24  19:07
  * @Description: 管理端比赛控制器
@@ -31,6 +38,18 @@ public class AdminContestController {
 
     @Autowired
     private AdminContestService adminContestService;
+
+    /**
+     * 上传比赛封面，仅允许具备比赛新增或编辑权限的管理员使用。
+     * @param file 待上传的公开图片
+     * @return 图片公开地址
+     */
+    @PreAuthorize("@ss.hasAnyPermi('contest:contest:add', 'contest:contest:edit')")
+    @PostMapping("/image")
+    public Result<String> uploadImage(@RequestParam("file") MultipartFile file) {
+        log.info("上传比赛封面");
+        return Result.ok(adminContestService.uploadImage(file));
+    }
 
     /**
      * 查询比赛列表
@@ -66,7 +85,7 @@ public class AdminContestController {
     @PreAuthorize("@ss.hasPermi('contest:contest:add')")
     @PostMapping
     public Result<Void> addContest(@RequestBody @Validated ContestDTO contestDTO) {
-        log.info("新增比赛:{}", contestDTO);
+        log.info("新增比赛");
         adminContestService.addContest(contestDTO);
         return Result.ok();
     }
@@ -80,7 +99,7 @@ public class AdminContestController {
     @PreAuthorize("@ss.hasPermi('contest:contest:edit')")
     @PutMapping("/{id}")
     public Result<Void> updateContest(@PathVariable("id") Long id, @Validated @RequestBody ContestDTO contestDTO) {
-        log.info("修改比赛:{}, 数据:{}", id, contestDTO);
+        log.info("修改比赛: id={}", id);
         adminContestService.updateContest(id, contestDTO);
         return Result.ok();
     }

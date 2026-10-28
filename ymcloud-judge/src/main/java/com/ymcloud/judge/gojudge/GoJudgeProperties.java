@@ -29,10 +29,10 @@ public class GoJudgeProperties {
     private long maxFileBytes = 16 * 1024 * 1024;
     private long compileMemoryBytes = 512 * 1024 * 1024;
     private long compileWallTimeMillis = 10000;
-    private long maxProblemMemoryKiB = 512 * 1024;
+    private long maxProblemMemoryKiB = 1024 * 1024;
     private int processLimit = 64;
     private int sandboxConcurrency = 1;
-    private long serviceMemoryBytes = 1024 * 1024 * 1024;
+    private long serviceMemoryBytes = 1536L * 1024 * 1024;
     private int cpuRateLimit = 1000;
 
     /**

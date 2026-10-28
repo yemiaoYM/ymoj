@@ -1,12 +1,15 @@
 package com.ymcloud.pojo.dto.admin;
 
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 
 /**
- * @PackageName: com.ymcloud.pojo.dto.admin
- * @ClassName: ContestDTO
  * @Author: Yemiao
  * @CreateTime: 2025-09-24  19:10
  * @Description: 添加或更新比赛请求体
@@ -20,6 +23,10 @@ public class ContestDTO {
     @NotBlank(message = "比赛标题不能为空")
     @Size(min = 1, max = 100, message = "比赛标题长度必须在1-100个字符之间")
     private String title;
+
+    /** 公开封面图片地址；null 使用原有默认图。 */
+    @Size(max = 512, message = "比赛封面地址不能超过512个字符")
+    private String image;
     
     /**
      * 比赛说明内容

@@ -7,29 +7,23 @@ import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.SystemSettingConstants;
 import com.ymcloud.common.exception.ServiceException;
-import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.SystemSettingEntityService;
 import com.ymcloud.pojo.dto.admin.CarouselSettingDTO;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.SystemSetting;
-import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.vo.common.CarouselSettingVO;
 import com.ymcloud.web.service.common.CarouselSettingService;
+import com.ymcloud.web.service.common.PublicImageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.MemoryCacheImageInputStream;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -47,8 +41,6 @@ import java.util.stream.Collectors;
 @Service
 public class CarouselSettingServiceImpl implements CarouselSettingService {
 
-    private static final int MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-
     @Autowired
     private SystemSettingEntityService settings;
 
@@ -57,6 +49,9 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
 
     @Autowired
     private StoredFileService storedFiles;
+
+    @Autowired
+    private PublicImageService publicImages;
 
     @Autowired
     private ObjectMapper json;
@@ -104,36 +99,14 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
     }
 
     /**
-     * 校验后保存轮播图片；重新编码去掉元数据及附加内容，存储失败沿用事务补偿。
+     * 上传轮播候选图；与比赛封面共用校验和存储，尚不改变轮播顺序。
      * @param upload 不超过 5 MiB、16:9 的 JPEG 或 PNG 图片
-     * @return 可加入轮播的文件 ID 和公开地址；尚不改变线上轮播顺序
+     * @return 文件 ID 与公开地址
      */
     @Override
     public CarouselSettingVO.Image upload(MultipartFile upload) {
-        if (upload.isEmpty() || upload.getSize() > MAX_IMAGE_BYTES) {
-            throw new ServiceException("图片不能为空且不能超过5MB", HttpStatus.BAD_REQUEST);
-        }
-        try (InputStream input = upload.getInputStream()) {
-            BufferedImage image = readImage(input);
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            ImageIO.write(image, "png", output);
-            byte[] bytes = output.toByteArray();
-            if (bytes.length > MAX_IMAGE_BYTES) {
-                throw new ServiceException("图片处理后超过5MB，请降低分辨率", HttpStatus.BAD_REQUEST);
-            }
-            User user = SecurityUtils.getUser();
-            File file = new File();
-            file.setFileName("carousel.png");
-            file.setFileType("image/png");
-            file.setBizType(FileBizType.IMAGE);
-            file.setIsPublic(FileConstants.ACCESS_PUBLIC);
-            file.setUploaderId(user.getId());
-            file.setUploaderUsername(user.getUsername());
-            storedFiles.save(new ByteArrayInputStream(bytes), bytes.length, file);
-            return new CarouselSettingVO.Image(file.getId().toString(), file.getUrl());
-        } catch (IOException e) {
-            throw new ServiceException("图片读取失败，请重新选择", HttpStatus.BAD_REQUEST, e);
-        }
+        File file = publicImages.upload(upload, "carousel.png", 16, 9);
+        return new CarouselSettingVO.Image(file.getId().toString(), file.getUrl());
     }
 
     /**
@@ -158,11 +131,12 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
                     .eq(File::getId, id)
                     .one();
             requirePublicImage(file);
-            // 先校验不可变文件内容，再进入短事务；其他图片入口可能未校验比例。
+            // 先校验不可变文件内容，再进入短事务
+            // 其他图片入口可能未校验比例
             try (InputStream input = storedFiles.open(file)) {
-                readImage(input);
+                publicImages.validate(input, 16, 9);
             } catch (IOException e) {
-                throw new ServiceException("轮播图片读取失败", e);
+                throw new FileException("轮播图片读取失败", e);
             }
         }
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> saveLocked(ids));
@@ -173,7 +147,7 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
      * @param ids 已校验内容的有序文件 ID
      */
     private void saveLocked(List<Long> ids) {
-        // 与网站设置使用同一已有行锁，串行化旧数据库首次插入配置的操作。
+        // 与网站设置使用同一已有行锁，串行化旧数据库首次插入配置的操作
         SystemSetting anchor = settings.lambdaQuery()
                 .eq(SystemSetting::getSettingKey, SystemSettingConstants.REGISTER_ENABLED)
                 .last("FOR UPDATE")
@@ -222,45 +196,8 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
         if (file == null || file.getBizType() != FileBizType.IMAGE
                 || !Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())
                 || file.getUrl() == null || !file.getUrl().startsWith("/files/public/")) {
-            throw new ServiceException("图片不存在或不是公开图片，请重新上传", HttpStatus.BAD_REQUEST);
+            throw new FileException("图片不存在或不是公开图片，请重新上传", HttpStatus.BAD_REQUEST);
         }
     }
 
-    /**
-     * 先读取尺寸再解码，拒绝非图片、过大图片及非 16:9 图片。
-     * @param input 调用方负责关闭的图片流，最多读取 5 MiB 加一个探测字节
-     * @return 已解码的 JPEG 或 PNG；宽度 16～3840，高度 9～2160
-     * @throws IOException 图片流损坏或无法读取
-     */
-    private BufferedImage readImage(InputStream input) throws IOException {
-        byte[] bytes = input.readNBytes(MAX_IMAGE_BYTES + 1);
-        if (bytes.length > MAX_IMAGE_BYTES) {
-            throw new ServiceException("图片不能超过5MB", HttpStatus.BAD_REQUEST);
-        }
-        try (var stream = new MemoryCacheImageInputStream(new ByteArrayInputStream(bytes))) {
-            var readers = ImageIO.getImageReaders(stream);
-            if (!readers.hasNext()) {
-                throw new ServiceException("请选择有效的JPEG或PNG图片", HttpStatus.BAD_REQUEST);
-            }
-            ImageReader reader = readers.next();
-            try {
-                reader.setInput(stream);
-                String format = reader.getFormatName();
-                int width = reader.getWidth(0);
-                int height = reader.getHeight(0);
-                if (!("PNG".equalsIgnoreCase(format)
-                        || "JPEG".equalsIgnoreCase(format))
-                        || width < 16
-                        || height < 9
-                        || width > 3840
-                        || height > 2160
-                        || width * 9 != height * 16) {
-                    throw new ServiceException("图片必须为16:9的JPEG或PNG，最大3840×2160", HttpStatus.BAD_REQUEST);
-                }
-                return reader.read(0);
-            } finally {
-                reader.dispose();
-            }
-        }
-    }
 }

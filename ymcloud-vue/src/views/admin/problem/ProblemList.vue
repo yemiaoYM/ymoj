@@ -46,6 +46,12 @@
             创建
           </el-button>
           <el-button
+            v-permission="['problem:problem:add']"
+            type="success"
+            :icon="Plus"
+            @click="onOpenRemoteProblem"
+          >添加远程题目</el-button>
+          <el-button
             v-permission="['problem:problem:remove']"
             plain
             type="danger"
@@ -137,6 +143,43 @@
       </el-card>
     </x-flex>
 
+    <el-dialog
+      title="添加远程题目"
+      width="min(560px, calc(100vw - 32px))"
+      align-center
+      :model-value="remoteVisible"
+      :close-on-click-modal="!remoteLoading"
+      :close-on-press-escape="!remoteLoading"
+      :show-close="!remoteLoading"
+      @update:model-value="remoteVisible = $event"
+    >
+      <el-form
+        ref="remoteFormRef"
+        class="remote-problem-form"
+        label-position="top"
+        hide-required-asterisk
+        size="large"
+        :model="remoteForm"
+        :rules="remoteRules"
+        :disabled="remoteLoading"
+        @submit.prevent="onFetchRemoteProblem"
+      >
+        <el-form-item label="平台" prop="platform">
+          <el-radio-group v-model="remoteForm.platform" class="remote-platforms" @change="onRemotePlatformChange">
+            <el-radio v-for="item in remotePlatforms" :key="item.value" border :value="item.value">{{ item.label }}</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="题目标识" prop="problemId">
+          <el-input maxlength="128" clearable v-model="remoteForm.problemId" :placeholder="remotePlatform.placeholder" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button size="large" :disabled="remoteLoading" @click="remoteVisible = false">取消</el-button>
+        <el-button size="large" type="primary" :icon="DocumentCopy" :loading="remoteLoading" @click="onFetchRemoteProblem">
+          {{ remoteLoading ? '正在读取' : '添加' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -144,8 +187,12 @@
 //import
 import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
 import { useUserStore } from '@/stores/user';
-import { ref, onMounted, watch } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import type { FormInstance, FormRules } from 'element-plus';
+import { fetchRemoteProblem } from '@/api/remoteProblem';
+import { useRemoteProblemStore } from '@/stores/remoteProblem';
+import type { RemoteProblemRequest } from '@/type/remoteProblem';
 import { Search, Refresh, Plus, Edit, Delete, DocumentCopy } from '@element-plus/icons-vue';
 import { useRouter, useRoute } from 'vue-router';
 import type { AdminProblemVO } from '@/type/types';
@@ -163,6 +210,55 @@ const problemList = ref<AdminProblemVO[]>([] as AdminProblemVO[]);
 const problemIds = ref<number[]>([]);
 const total = ref<number>(0);
 const loading = ref<boolean>(false);
+const remoteStore = useRemoteProblemStore();
+const remoteVisible = ref(false);
+const remoteLoading = ref(false);
+const remoteFormRef = ref<FormInstance>();
+const remoteForm = ref<RemoteProblemRequest>({ platform: 'luogu', problemId: '' });
+const remotePlatforms = [
+  { value: 'luogu', label: '洛谷', placeholder: '例如 P1002' },
+  { value: 'leetcode', label: '力扣', placeholder: '例如 two-sum' },
+  { value: 'atcoder', label: 'AtCoder', placeholder: '例如 abc480_a 或 abc480/abc480_a' },
+  { value: 'codeforces', label: 'Codeforces', placeholder: '例如 2194A' },
+];
+const remotePlatform = computed(() => remotePlatforms.find(item => item.value === remoteForm.value.platform)!);
+const remoteRules: FormRules<RemoteProblemRequest> = {
+  platform: [{ required: true, message: '请选择题目平台', trigger: 'change' }],
+  problemId: [
+    { required: true, message: '请输入题号', trigger: 'blur' },
+    { pattern: /^[A-Za-z0-9_/-]{1,128}$/, message: '请输入题目标识，不支持完整网址', trigger: 'blur' },
+  ],
+};
+let disposed = false;
+onBeforeUnmount(() => { disposed = true; });
+
+const onOpenRemoteProblem = () => {
+  remoteVisible.value = true;
+};
+
+const onRemotePlatformChange = () => {
+  remoteForm.value.problemId = '';
+  remoteFormRef.value?.clearValidate('problemId');
+};
+
+const onFetchRemoteProblem = async () => {
+  if (!remoteFormRef.value || remoteLoading.value) return;
+  remoteLoading.value = true;
+  try {
+    remoteForm.value.problemId = remoteForm.value.problemId.trim();
+    const valid = await remoteFormRef.value.validate(() => {});
+    if (!valid || disposed) return;
+    const response = await fetchRemoteProblem({ ...remoteForm.value });
+    if (disposed) return;
+    remoteStore.draft = response.data.data;
+    await router.push({ path: '/admin/problem/add', query: { remote: '1' } });
+  } catch {
+    // 请求层统一提示失败，保留题号供用户重试
+    return;
+  } finally {
+    if (!disposed) remoteLoading.value = false;
+  }
+};
 
 //URL同步工具函数
 const useUrlSync = () => {
@@ -353,6 +449,27 @@ watch(
 </script>
 
 <style scoped lang="css">
+.remote-problem-form {
+  padding-top: 12px;
+}
+.remote-platforms {
+  width: 100%;
+  gap: 8px;
+}
+.remote-platforms :deep(.el-radio) {
+  flex: 1 1 100px;
+  margin-right: 0;
+  padding: 0 12px;
+}
+.remote-problem-form :deep(.el-form-item:last-child) {
+  margin-bottom: 8px;
+}
+@media (max-width: 600px) {
+  .remote-platforms :deep(.el-radio) {
+    flex-basis: calc(50% - 4px);
+  }
+}
+
 .problem-management {
   padding: 24px;
 }

@@ -20,6 +20,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -58,6 +60,34 @@ class GoJudgeExecutorTest {
         language.setRunCmd("untrusted legacy command");
         task = JudgeTask.builder().executionId("test").languageConfig(language).code("class Main {}")
                 .timeLimit(1000L).memoryLimit(262144L).deadlineEpochMs(System.currentTimeMillis() + 60000).build();
+    }
+
+    /**
+     * 1024 MiB 题目通过容量检查，并以完整字节预算运行；超出上限仍拒绝。
+     * @throws Exception 沙箱模拟调用失败
+     */
+    @Test
+    void supportsOneGiBWithoutTruncatingRuntimeBudget() throws Exception {
+        task.setMemoryLimit(1048576L);
+        assertNull(executor.capacityFailure(task));
+        when(client.upload(any(InputStream.class), eq("stdin"), anyLong())).thenReturn("input-id");
+        ObjectNode response = result("Accepted");
+        response.put("memory", 1073741824L);
+        when(client.execute(any(), anyLong())).thenAnswer(invocation -> {
+            Map<?, ?> request = invocation.getArgument(0);
+            Map<?, ?> command = (Map<?, ?>) ((List<?>) request.get("cmd")).get(0);
+            assertEquals(1073741824L, command.get("memoryLimit"));
+            assertTrue(command.get("args").toString().contains("-Xmx1048576k"));
+            return List.of(response);
+        });
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            var program = new GoJudgeExecutor.PreparedProgram("Java", "program.jar", "artifact-id");
+            assertEquals(JudgeVerdict.STATUS_ACCEPTED, executor.run(session, program, stream("1")).status());
+        }
+        response.put("memory", 1073741825L);
+        assertEquals(JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED, executor.classify(response, task).status());
+        task.setMemoryLimit(1048577L);
+        assertNotNull(executor.capacityFailure(task));
     }
 
     @Test
