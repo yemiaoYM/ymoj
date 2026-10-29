@@ -12,8 +12,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * @PackageName: com.ymcloud.web.controller.user
- * @ClassName: ProblemController
  * @Author: Yemiao
  * @CreateTime: 2025-07-23  12:12
  * @Description: 题目相关接口控制器

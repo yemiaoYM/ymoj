@@ -74,16 +74,16 @@
           <el-table-column label="更新时间" prop="updatedTime" width="160" align="center" />
           <el-table-column label="权限" width="150" align="center">
             <template #default="scope">
-              <el-select
-                :model-value="scope.row.visibility"
+              <AsyncSelect
+                v-model="scope.row.visibility"
                 :disabled="!userStore.hasEveryPermission(['problem:problem:edit'])"
-                @change="(value: number) => handleVisibilityChange(scope.row, value)"
+                :before-change="(value: number) => handleVisibilityChange(scope.row, value)"
                 style="width: 100px;"
               >
                 <el-option :value="1" label="公开" />
                 <el-option :value="2" label="私有" />
                 <el-option :value="3" label="比赛专用" />
-              </el-select>
+              </AsyncSelect>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="200" align="center">
@@ -185,6 +185,7 @@
 
 <script lang="ts" setup>
 //import
+import AsyncSelect from '@/components/common/AsyncSelect.vue';
 import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
 import { useUserStore } from '@/stores/user';
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
@@ -397,30 +398,14 @@ const handleDelete = (row: AdminProblemVO) => {
   }).catch(() => { });
 };
 //权限变更处理
-const handleVisibilityChange = (row: AdminProblemVO, newVisibility: number) => {
-  //如果值没有变化，直接返回
-  if (row.visibility === newVisibility) {
-    return;
-  }
-  const visibilityText = getVisibilityText(newVisibility);
-  const currentText = getVisibilityText(row.visibility);
-  
-  ElMessageBox.confirm(
-    `确认将题目 "${row.title}" 的权限从 "${currentText}" 修改为 "${visibilityText}" 吗？`,
+const handleVisibilityChange = async (row: AdminProblemVO, newVisibility: number) => {
+  await ElMessageBox.confirm(
+    `确认将题目 "${row.title}" 的权限从 "${getVisibilityText(row.visibility)}" 修改为 "${getVisibilityText(newVisibility)}" 吗？`,
     '权限修改确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(() => {
-    updateProblemVisibility(row.id, newVisibility).then(res => {
-      ElMessage.success(res.data.msg);
-      row.visibility = newVisibility;
-    }).catch(e => {
-      console.log(e);
-    });
-  }).catch(() => {  });
+    { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+  );
+  const response = await updateProblemVisibility(row.id, newVisibility);
+  ElMessage.success(response.data.msg);
 };
 
 //监听 URL 变化 同步查询参数

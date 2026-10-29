@@ -9,10 +9,12 @@ import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.vo.oj.ProblemTableVO;
 import org.springframework.stereotype.Service;
 
+import java.util.Set;
+
 /**
  * @Author: Yemiao
  * @CreateTime: 2025-07-26  20:23
- * @Description: ProblemEntityServiceImpl
+ * @Description: 题目实体访问与分页查询实现
  */
 @Service
 public class ProblemEntityServiceImpl extends ServiceImpl<ProblemMapper, Problem> implements ProblemEntityService {
@@ -22,12 +24,13 @@ public class ProblemEntityServiceImpl extends ServiceImpl<ProblemMapper, Problem
      * @param page   分页
      * @param keyword  题目/题号 支持模糊查询
      * @param difficulty 难度
-     * @param source     来源
-     * @return 题单列表
+     * @param tagIds 必须同时包含的标签 ID，空集合表示不筛选
+     * @return 题目分页结果
      */
     @Override
-    public Page<ProblemTableVO> pageQuery(IPage<ProblemTableVO> page, String keyword, Integer difficulty, String source) {
-        return getBaseMapper().pageQuery(page,keyword,difficulty,source);
+    public Page<ProblemTableVO> pageQuery(IPage<ProblemTableVO> page, String keyword, Integer difficulty,
+                                        Set<Long> tagIds) {
+        return getBaseMapper().pageQuery(page, keyword, difficulty, tagIds);
     }
 
 }

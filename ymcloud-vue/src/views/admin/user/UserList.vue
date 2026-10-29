@@ -69,12 +69,12 @@
           <el-table-column label="学校" prop="school" min-width="150" show-overflow-tooltip align="center" />
           <el-table-column label="状态" width="100" align="center">
             <template #default="scope">
-              <el-switch
+              <AsyncSwitch
                 v-model="scope.row.status"
                 :disabled="scope.row.id === 1 || !userStore.hasEveryPermission(['user:user:edit'])"
                 active-value="正常"
                 inactive-value="停用"
-                @change="handleStatusChange(scope.row)"
+                :before-change="() => handleStatusChange(scope.row)"
               />
             </template>
           </el-table-column>
@@ -143,8 +143,8 @@
 
     <!-- 添加或修改用户配置对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px" :close-on-click-modal="false" destroy-on-close
-      top="5vh" append-to-body>
-      <el-form :model="userForm" :rules="userRules" ref="userFormRef" label-width="auto">
+      top="5vh" append-to-body :show-close="!submitLoading" :close-on-press-escape="!submitLoading">
+      <el-form :disabled="submitLoading" :model="userForm" :rules="userRules" ref="userFormRef" label-width="auto">
         <x-flex vertical :size="16">
           <x-flex :size="16">
             <el-form-item label="用户名" prop="username" style="flex: 1;">
@@ -206,7 +206,7 @@
 
       <template #footer>
         <x-flex justify="end" :size="12">
-          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button :disabled="submitLoading" @click="dialogVisible = false">取消</el-button>
           <el-button
             v-permission="userForm.id === null ? ['user:user:add'] : ['user:user:edit']"
             type="primary"
@@ -252,6 +252,7 @@
 
 <script lang="ts" setup>
 //import
+import AsyncSwitch from '@/components/common/AsyncSwitch.vue';
 import { ref, reactive, onMounted, nextTick, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, Setting } from '@element-plus/icons-vue';
@@ -428,25 +429,15 @@ const handleSelectionChange = (selection: User[]) => {
   userIds.value = selection.map(item => item.id);
 };
 //修改用户状态
-const handleStatusChange = (row: User) => {
-  ElMessageBox.confirm(
-    `确定要将用户 "${row.username}" 的状态改为 "${row.status}" 吗？`,
+const handleStatusChange = async (row: User) => {
+  const nextStatus = row.status === '正常' ? '停用' : '正常';
+  await ElMessageBox.confirm(
+    `确定要将用户 "${row.username}" 的状态改为 "${nextStatus}" 吗？`,
     '状态修改确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(() => {
-    changeUserStatus(row.id, row.status).then(res => {
-      ElMessage.success(res.data.msg);
-    }).catch(e => {
-      row.status = row.status === '正常' ? '停用' : '正常';
-      console.log(e);
-    });
-  }).catch(() => {
-    row.status = row.status === '正常' ? '停用' : '正常';
-  })
+    { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+  );
+  const response = await changeUserStatus(row.id, nextStatus);
+  ElMessage.success(response.data.msg);
 };
 //新增用户
 const handleAdd = () => {
@@ -543,33 +534,24 @@ const reset = () => {
   });
 };
 //提交表单
-const handleSubmit = () => {
-  nextTick(() => {
-    userFormRef.value?.validate(valid => {
-      if (valid) {
-        submitLoading.value = true;
-        if (userForm.id === null) {
-          addUser(userForm).then(res => {
-            ElMessage.success(res.data.msg);
-            handleQuery();
-          }).catch(e => {
-            console.log(e);
-          });
-        } else {
-          updateUser(userForm).then(res => {
-            ElMessage.success(res.data.msg);
-            handleQuery();
-          }).catch(e => {
-            console.log(e);
-          });
-        }
-        submitLoading.value = false;
-        dialogVisible.value = false;
-      } else {
-        ElMessage.warning('请填写完整的用户信息');
-      }
-    });
-  });
+const handleSubmit = async () => {
+  if (submitLoading.value || !userFormRef.value) return;
+  submitLoading.value = true;
+  try {
+    let valid = false;
+    await userFormRef.value.validate(passed => { valid = passed; });
+    if (!valid) return;
+    const data = { ...userForm };
+    const response = data.id === null ? await addUser(data) : await updateUser(data);
+    ElMessage.success(response.data.msg);
+    dialogVisible.value = false;
+    handleQuery();
+  } catch {
+    //request 已提示失败，保留弹窗及用户输入以便重试
+    return;
+  } finally {
+    submitLoading.value = false;
+  }
 };
 </script>
 

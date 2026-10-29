@@ -16,6 +16,8 @@ declare module 'vue' {
     AdminLayout: typeof import('./src/components/admin/AdminLayout.vue')['default']
     AnnouncementFeed: typeof import('./src/components/oj/AnnouncementFeed.vue')['default']
     AnnouncementItem: typeof import('./src/components/oj/AnnouncementItem.vue')['default']
+    AsyncSelect: typeof import('./src/components/common/AsyncSelect.vue')['default']
+    AsyncSwitch: typeof import('./src/components/common/AsyncSwitch.vue')['default']
     Avatar: typeof import('./src/components/common/Avatar.vue')['default']
     BrandLogo: typeof import('./src/components/common/BrandLogo.vue')['default']
     CalendarHeatMap: typeof import('./src/components/common/CalendarHeatMap.vue')['default']

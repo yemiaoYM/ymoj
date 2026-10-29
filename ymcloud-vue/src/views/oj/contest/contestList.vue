@@ -1,208 +1,303 @@
 <template>
-  <div class="container">
-    <x-flex vertical style="width: 100%;height: 100%;">
-      <!-- 比赛查询模块 -->
-      <el-card>
-        <template #header>
-          <x-flex align="center">
-            <el-icon :size="24" color="#409eff">
-              <Promotion />
-            </el-icon>
-            <span style="font-size: 20px; font-weight: 600; margin-left: 8px;">比赛查询</span>
-          </x-flex>
-        </template>
-        <el-input v-model="keyword" placeholder="请输入搜索比赛名称" size="large" @keyup.enter="handleSearch" clearable>
-          <template #append>
-            <el-button @click="handleSearch" :icon="Search"></el-button>
-          </template>
-        </el-input>
-      </el-card>
-
-      <!-- 比赛列表模块 -->
-      <el-card>
-        <template #header>
-          <x-flex align="center">
-            <el-icon :size="24" color="#409eff">
-              <List />
-            </el-icon>
-            <span style="font-size: 20px; font-weight: 600; margin-left: 8px;">比赛列表</span>
-          </x-flex>
-        </template>
-        <el-skeleton v-if="ContestListLoading" :rows="20" :animated="true" />
-        <!-- 比赛列表 -->
-        <el-card v-for="competition in competitions" :key="competition.id"
-          style="width: 100%;margin-bottom: 10px;border-radius: 10px;" :style="{
-            borderLeft: competition.status === '已结束' ? '4px solid #aab4bf' : '4px solid #25bb9b'
-          }" shadow="hover">
-          <template #header>
-            <!-- 比赛名称和进行状态 -->
-            <x-flex justify="space-between" align="center">
-              <x-flex>
-                <span style="font-size: 20px; font-weight: 600;cursor: pointer;"
-                  @click="toContestDetail(competition.id)">{{ competition.title }}</span>
-                <el-tag v-if="competition.visibility === 0" disable-transitions size="large" effect="plain"
-                  type="success">公开赛</el-tag>
-                <el-tag v-else disable-transitions size="large" effect="plain" type="danger">私有赛</el-tag>
-              </x-flex>
-              <x-flex align="center">
-                <el-tooltip effect="light" content="需要密码才能加入比赛" placement="top">
-                  <el-icon v-show="competition.visibility" size="20">
-                    <Lock />
-                  </el-icon>
-                </el-tooltip>
-                <el-button :type="getContestStatusType(competition.status)" round style="width: 120px;height: 40px;"
-                  @click="toContestDetail(competition.id)">
-                  {{ competition.status }}
-                </el-button>
-              </x-flex>
-            </x-flex>
-          </template>
-          <x-flex align="center">
-            <!-- 比赛图片 -->
-            <el-image class="contest-image" lazy :alt="competition.title" :src="competition.image || ''" />
-            <!-- 比赛信息 -->
-            <x-flex vertical size="large">
-              <!-- 标签 -->
-              <x-flex :size="10">
-                <el-tag size="large" disable-transitions color="#ffc171" style="color: white;">
-                  <span style="display: flex;align-items: center;">
-                    <el-icon>
-                      <Trophy />
-                    </el-icon>{{ formatContestMode(competition.mode) }}
-                  </span>
-                </el-tag>
-                <el-tag size="large" disable-transitions color="#409eff"
-                  style="color: white;">{{ formatContestStyle(competition.style) }}</el-tag>
-                <el-tag size="large" disable-transitions color="#25bb9b" style="color: white;">
-                  {{ competition.sourceId === 0 ? '原创' : '重建赛' }}
-                </el-tag>
-                <el-tag size="large" v-show="competition.rated" disable-transitions color="#fe8053"
-                  style="color: white;">
-                  <span style="display: flex;align-items: center;">
-                    <el-icon>
-                      <Flag />
-                    </el-icon>Rated</span>
-                </el-tag>
-              </x-flex>
-              <x-flex align="center">
-                <el-icon size="20">
-                  <Clock />
-                </el-icon>比赛时间
-                <span>{{ competition.startTime + " ~ " + competition.endTime }}</span>
-              </x-flex>
-              <x-flex>
-                <el-icon size="20">
-                  <AlarmClock />
-                </el-icon>比赛时长
-                <span>{{ formatContestDuration(competition.duration) }}</span>
-              </x-flex>
-              <x-flex align="center">
-                <el-icon size="20">
-                  <CollectionTag />
-                </el-icon>主办方
-                <el-tag round size="large" disable-transitions color="#15bec4" style="color: white;font-size: 13px;">
-                  {{ competition.creatorUsername }}</el-tag>
-              </x-flex>
-              <x-flex v-if="competition.visibility !== 0" align="center">
-                <el-icon size="20">
-                  <User />
-                </el-icon>已报名
-                <el-tag round effect="plain" disable-transitions style="font-size: 13px;"> × {{
-                  competition.participantCount
-                  }}</el-tag>
-              </x-flex>
-            </x-flex>
-          </x-flex>
-        </el-card>
-      </el-card>
-      <!-- 分页 -->
-      <el-card>
-        <x-flex justify="center">
-          <el-pagination background layout="total, sizes, prev, pager, next" :page-sizes="[5, 10]" :total="total"
-            :page-size="pageSize" :current-page="pageNo" @update:current-page="handleCurrentChange"
-            @update:page-size="handleSizeChange" />
+  <div class="contest-page">
+    <el-card class="contest-list">
+      <template #header>
+        <x-flex align="center" justify="space-between" :size="20">
+          <h2>比赛列表</h2>
+          <el-input
+            class="contest-search"
+            aria-label="搜索比赛"
+            placeholder="搜索比赛名称"
+            size="large"
+            clearable
+            v-model="keyword"
+            :prefix-icon="Search"
+            :disabled="loading"
+            @keyup.enter="handleSearch"
+          >
+            <template #suffix>
+              <el-button type="primary" :disabled="loading" @click="handleSearch">搜索</el-button>
+            </template>
+          </el-input>
         </x-flex>
-      </el-card>
-    </x-flex>
+      </template>
+
+      <el-skeleton v-if="loading" :rows="12" animated />
+      <template v-else>
+        <el-empty v-if="loaded && !competitions.length" description="暂无相关比赛" />
+        <article v-for="competition in competitions" :key="competition.id" class="contest-row">
+          <x-flex align="flex-start" :wrap="false" :size="16">
+            <el-image
+              class="contest-image"
+              fit="contain"
+              lazy
+              :alt="competition.title"
+              :src="competition.image || defaultContest"
+            />
+            <x-flex class="contest-info" vertical :size="14">
+              <x-flex align="center" justify="space-between" :size="12" :wrap="false">
+                <RouterLink
+                  class="contest-title"
+                  :to="{ name: 'ContestDetail', params: { contestID: competition.id } }"
+                >{{ competition.title }}</RouterLink>
+                <el-button
+                  class="contest-status"
+                  round
+                  :type="competition.status === '进行中' ? 'primary' : competition.status === '未开始' ? 'warning' : 'info'"
+                  @click="router.push({ name: 'ContestDetail', params: { contestID: competition.id } })"
+                >{{ competition.status }}</el-button>
+              </x-flex>
+              <x-flex align="center" :size="8">
+                <el-tag size="large" disable-transitions type="warning" effect="dark">{{ formatContestMode(competition.mode) }}</el-tag>
+                <el-tag size="large" disable-transitions type="primary" effect="dark">{{ formatContestStyle(competition.style) }}</el-tag>
+                <el-tag size="large" disable-transitions type="success" effect="dark">{{ competition.sourceId === 0 ? '原创' : '重建赛' }}</el-tag>
+                <el-tag v-if="competition.rated" size="large" disable-transitions type="danger" effect="dark">Rated</el-tag>
+                <x-flex class="contest-access" align="center" :size="4" :wrap="false">
+                  <el-icon v-if="competition.visibility !== 0"><Lock /></el-icon>
+                  <span>{{ competition.visibility === 0 ? '公开赛' : '私有赛' }}</span>
+                </x-flex>
+              </x-flex>
+              <x-flex class="contest-time" align="center" :size="8">
+                <el-icon><Clock /></el-icon>
+                <time>{{ competition.startTime }}</time>
+                <span>—</span>
+                <time>{{ competition.endTime }}</time>
+              </x-flex>
+              <x-flex class="contest-meta" align="center" :size="[24, 8]">
+                <x-flex align="center" :size="8" :wrap="false">
+                  <el-icon><AlarmClock /></el-icon>
+                  <span>时长 <strong>{{ formatContestDuration(competition.duration) }}</strong></span>
+                </x-flex>
+                <x-flex align="center" :size="8" :wrap="false">
+                  <el-icon><CollectionTag /></el-icon>
+                  <span>主办方 <strong>{{ competition.creatorUsername }}</strong></span>
+                </x-flex>
+                <x-flex v-if="competition.visibility !== 0" align="center" :size="8" :wrap="false">
+                  <el-icon><User /></el-icon>
+                  <span>已报名 <strong>{{ competition.participantCount }} 人</strong></span>
+                </x-flex>
+              </x-flex>
+            </x-flex>
+          </x-flex>
+        </article>
+      </template>
+
+      <template v-if="total > 0" #footer>
+        <x-flex justify="center">
+          <el-pagination
+            background
+            layout="total, sizes, prev, pager, next"
+            :page-sizes="[5, 10]"
+            :pager-count="5"
+            :total="total"
+            :page-size="pageSize"
+            :current-page="pageNo"
+            :disabled="loading"
+            @update:current-page="handleCurrentChange"
+            @update:page-size="handleSizeChange"
+          />
+        </x-flex>
+      </template>
+    </el-card>
   </div>
 </template>
 
-
 <script setup lang="ts">
-//import
 import { ref, onMounted } from 'vue';
-import { Search, User } from '@element-plus/icons-vue';
-import type { ContestTableVO } from '@/type/types';
 import { useRouter } from 'vue-router';
+import { Search, Clock, Lock, AlarmClock, CollectionTag, User } from '@element-plus/icons-vue';
+import type { ContestTableVO } from '@/type/types';
 import { getContestTableList } from '@/api/api';
-import { formatContestMode, formatContestStyle, formatContestDuration, getContestStatusType } from '@/utils/utils';
+import { formatContestMode, formatContestStyle, formatContestDuration } from '@/utils/utils';
 import defaultContest from '@/assets/image/defaultContest.jpg';
 
-//data
 const router = useRouter();
-const competitions = ref<ContestTableVO[]>([] as ContestTableVO[]);
-const ContestListLoading = ref<boolean>(false);
-const keyword = ref<string>('');
-const pageNo = ref<number>(1);
-const pageSize = ref<number>(5);
-const total = ref<number>(0);
+const competitions = ref<ContestTableVO[]>([]);
+const loading = ref(false);
+const loaded = ref(false);
+const keyword = ref('');
+const pageNo = ref(1);
+const pageSize = ref(5);
+const total = ref(0);
+let confirmedKeyword = '';
 
-//methods
-onMounted(() => {
-  page();
-})
-const page = () => {
-  ContestListLoading.value = true;
-  getContestTableList(keyword.value, pageNo.value, pageSize.value).then(res => {
-    competitions.value = res.data.data.records;
-    total.value = res.data.data.total;
-    competitions.value.forEach(e => {
-      if (e.image === null) {
-        e.image = defaultContest;
-      } else {
-        e.image = import.meta.env.VITE_API_URL + e.image;
-      }
-    })
-  }).catch(err => {
-    console.log(err);
-  }).finally(() => {
-    ContestListLoading.value = false;
-  })
-}
-const handleSizeChange = (val: number) => {
-  pageSize.value = val;
-  page();
-}
-const handleCurrentChange = (val: number) => {
-  pageNo.value = val;
-  page();
-}
-const handleSearch = () => {
-  console.log('Searching for:', keyword.value);
-  page();
+onMounted(() => { void loadContests(); });
+
+//查询成功后更新页码和列表，失败保留最近一次结果
+const loadContests = async (nextPage = 1, nextSize = pageSize.value, nextKeyword = confirmedKeyword) => {
+  if (loading.value) return;
+  loading.value = true;
+  try {
+    const response = await getContestTableList(nextKeyword, nextPage, nextSize);
+    competitions.value = response.data.data.records;
+    total.value = response.data.data.total;
+    pageNo.value = nextPage;
+    pageSize.value = nextSize;
+    confirmedKeyword = nextKeyword;
+    loaded.value = true;
+  } catch {
+    //请求层统一提示失败，保留列表供用户重试
+    return;
+  } finally {
+    loading.value = false;
+  }
 };
-const toContestDetail = (contestID: number) => {
-  router.push({ name: 'ContestDetail', params: { contestID: contestID } })
-}
+const handleSizeChange = (value: number) => {
+  void loadContests(1, value);
+};
+const handleCurrentChange = (value: number) => {
+  void loadContests(value);
+};
+const handleSearch = () => {
+  void loadContests(1, pageSize.value, keyword.value.trim());
+};
 </script>
 
-<style lang="css" scoped>
-.contest-image {
-  width: 150px;
-  flex-shrink: 0;
-}
-
-.container {
-  height: 100%;
+<style scoped>
+.contest-page {
   width: 100%;
-  display: flex;
-  margin: 0 auto;
-  gap: 10px;
+  padding: 16px 5%;
 }
 
-@media screen and (min-width: 1024px) {
-  .container {
-    padding: 15px 5%;
+.contest-list {
+  --el-card-padding: 24px;
+}
+
+.contest-list h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--el-text-color-primary);
+}
+
+.contest-search {
+  width: min(440px, 100%);
+  height: 48px;
+  --el-border-radius-base: 10px;
+  --el-input-border-color: #dce7fa;
+}
+
+.contest-search :deep(.el-input__wrapper) {
+  padding: 0 8px 0 16px;
+}
+
+.contest-search :deep(.el-button) {
+  min-width: 68px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.contest-search :deep(.el-input__clear) {
+  margin-right: 12px;
+}
+
+.contest-row {
+  padding: 24px 0;
+}
+
+.contest-row:first-child {
+  padding-top: 4px;
+}
+
+.contest-row:last-child {
+  padding-bottom: 4px;
+}
+
+.contest-row + .contest-row {
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.contest-image {
+  width: 128px;
+  height: 128px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.contest-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.contest-title {
+  color: var(--el-text-color-primary);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.contest-title:hover {
+  color: var(--el-color-primary);
+}
+
+.contest-title:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+.contest-status {
+  flex-shrink: 0;
+  width: 100px;
+  height: 40px;
+}
+
+.contest-access,
+.contest-meta {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+
+.contest-access {
+  margin-left: 4px;
+}
+
+.contest-time {
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.contest-meta .el-icon,
+.contest-time .el-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.contest-meta strong {
+  margin-left: 6px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .contest-page {
+    padding: 12px;
+  }
+
+  .contest-list {
+    --el-card-padding: 16px;
+  }
+
+  .contest-search {
+    width: 100%;
+  }
+
+  .contest-image {
+    width: 72px;
+    height: 72px;
+  }
+
+  .contest-title {
+    font-size: 16px;
+  }
+
+  .contest-list :deep(.el-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
   }
 }
 </style>

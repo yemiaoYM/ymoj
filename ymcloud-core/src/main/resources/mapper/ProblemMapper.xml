@@ -37,10 +37,14 @@
             <if test="difficulty != null and difficulty >=0 ">
                 AND p.difficulty = #{difficulty}
             </if>
-            <if test="source != null">
-                AND p.source = #{source}
-            </if>
+            <foreach collection="tagIds" item="tagId">
+                AND EXISTS (
+                    SELECT 1 FROM problem_tag pt
+                    WHERE pt.problem_id = p.id AND pt.tag_id = #{tagId}
+                )
+            </foreach>
         </where>
+        ORDER BY p.id ASC
     </select>
 
     <!-- 子查询：获取问题的标签列表 -->

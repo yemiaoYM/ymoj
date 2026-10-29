@@ -96,19 +96,19 @@
           />
           <el-table-column label="置顶" width="80" align="center">
             <template #default="scope">
-              <el-switch
+              <AsyncSwitch
                 :disabled="!userStore.hasEveryPermission(['announcement:announcement:edit'])"
                 v-model="scope.row.pinned"
-                @change="handlePinnedChange(scope.row)"
+                :before-change="() => handleAnnouncementChange(scope.row, 'pinned')"
               />
             </template>
           </el-table-column>
           <el-table-column label="状态" width="80" align="center">
             <template #default="scope">
-              <el-switch
+              <AsyncSwitch
                 :disabled="!userStore.hasEveryPermission(['announcement:announcement:edit'])"
                 v-model="scope.row.status"
-                @change="handleStatusChange(scope.row)"
+                :before-change="() => handleAnnouncementChange(scope.row, 'status')"
               />
             </template>
           </el-table-column>
@@ -194,6 +194,7 @@
     >
       <el-form
         ref="announcementFormRef"
+        :disabled="submitLoading"
         :model="announcementForm"
         :rules="announcementRules"
         label-width="100px"
@@ -240,7 +241,7 @@
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button :disabled="submitLoading" @click="handleClose">取消</el-button>
           <el-button
             v-permission="currentAnnouncementId === null ? ['announcement:announcement:add'] : ['announcement:announcement:edit']"
             type="primary"
@@ -257,9 +258,10 @@
 
 <script lang="ts" setup>
 //import
+import AsyncSwitch from '@/components/common/AsyncSwitch.vue';
 import { useUserStore } from "@/stores/user";
 import { ref, onMounted, reactive, nextTick, defineAsyncComponent } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";
 import { Search, Refresh, Plus, Edit, Delete } from "@element-plus/icons-vue";
 import type { Announcement, AnnouncementDTO } from "@/type/types";
 import {
@@ -286,7 +288,7 @@ const submitLoading = ref<boolean>(false);
 const dialogVisible = ref<boolean>(false);
 const dialogTitle = ref<string>("");
 const queryFormRef = ref();
-const announcementFormRef = ref();
+const announcementFormRef = ref<FormInstance>();
 const currentAnnouncementId = ref<number | null>(null);
 //查询参数
 const queryParams = ref({
@@ -371,59 +373,17 @@ const handleCurrentChange = (val: number) => {
 const handleSelectionChange = (selection: Announcement[]) => {
   announcementIds.value = selection.map((item) => item.id);
 };
-//修改公告状态
-const handleStatusChange = (row: Announcement) => {
-  const statusText = row.status ? "显示" : "隐藏";
-  ElMessageBox.confirm(
-    `确定要将公告 "${row.title}" 的状态改为 "${statusText}" 吗？`,
-    "状态修改确认",
-    {
-      confirmButtonText: "确定",
-      cancelButtonText: "取消",
-      type: "warning",
-    }
-  )
-    .then(() => {
-      updateAnnouncementStatus(row.id, row.status)
-        .then((res) => {
-          ElMessage.success(res.data.msg);
-          handleQuery();
-        })
-        .catch((err) => {
-          row.status = !row.status;
-          console.log(err);
-        });
-    })
-    .catch(() => {
-      row.status = !row.status;
-    });
-};
-//修改公告置顶状态
-const handlePinnedChange = (row: Announcement) => {
-  const pinnedText = row.pinned ? "置顶" : "取消置顶";
-  ElMessageBox.confirm(
-    `确定要将公告 "${row.title}" ${pinnedText} 吗？`,
-    "置顶状态修改确认",
-    {
-      confirmButtonText: "确定",
-      cancelButtonText: "取消",
-      type: "warning",
-    }
-  )
-    .then(() => {
-      updateAnnouncementPinned(row.id, row.pinned)
-        .then((res) => {
-          ElMessage.success(res.data.msg);
-          handleQuery();
-        })
-        .catch((err) => {
-          row.pinned = !row.pinned;
-          console.log(err);
-        });
-    })
-    .catch(() => {
-      row.pinned = !row.pinned;
-    });
+//公告的即时状态在确认和请求成功后才交给开关更新
+const handleAnnouncementChange = async (row: Announcement, field: 'status' | 'pinned') => {
+  const nextValue = !row[field];
+  const action = field === 'status' ? (nextValue ? '显示' : '隐藏') : (nextValue ? '置顶' : '取消置顶');
+  await ElMessageBox.confirm(`确定要${action}公告 "${row.title}" 吗？`, '状态修改确认', {
+    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning',
+  });
+  const response = field === 'status'
+    ? await updateAnnouncementStatus(row.id, nextValue)
+    : await updateAnnouncementPinned(row.id, nextValue);
+  ElMessage.success(response.data.msg);
 };
 //新增公告
 const handleAdd = () => {
@@ -481,39 +441,27 @@ const handleDelete = (row: Announcement) => {
     })
     .catch(() => {});
 };
-//提交表单
-const submitForm = () => {
-  nextTick(() => {
-    announcementFormRef.value?.validate((valid: boolean) => {
-      if (valid) {
-        submitLoading.value = true;
-        if (currentAnnouncementId.value === null) {
-          addAnnouncement(announcementForm)
-            .then((res) => {
-              ElMessage.success(res.data.msg);
-              handleQuery();
-            })
-            .catch((e) => {
-              console.log(e);
-            });
-        } else {
-          updateAnnouncement(currentAnnouncementId.value, announcementForm)
-            .then((res) => {
-              ElMessage.success(res.data.msg);
-              handleQuery();
-            })
-            .catch((e) => {
-              console.log(e);
-            });
-        }
-      } else {
-        ElMessage.warning("请填写完整的公告信息");
-      }
-    }).finally(() => {
-      submitLoading.value = false;
-      dialogVisible.value = false;
-    });
-  });
+//校验和保存期间保持弹窗，只有成功后才关闭
+const submitForm = async () => {
+  if (submitLoading.value || !announcementFormRef.value) return;
+  submitLoading.value = true;
+  try {
+    let valid = false;
+    await announcementFormRef.value.validate((passed: boolean) => { valid = passed; });
+    if (!valid) return;
+    const data = { ...announcementForm };
+    const response = currentAnnouncementId.value === null
+      ? await addAnnouncement(data)
+      : await updateAnnouncement(currentAnnouncementId.value, data);
+    ElMessage.success(response.data.msg);
+    dialogVisible.value = false;
+    handleQuery();
+  } catch {
+    //request 已提示失败，保留弹窗及用户输入以便重试
+    return;
+  } finally {
+    submitLoading.value = false;
+  }
 };
 //重置表单
 const reset = () => {
@@ -533,6 +481,7 @@ const reset = () => {
 };
 //关闭对话框
 const handleClose = () => {
+  if (submitLoading.value) return;
   reset();
   dialogVisible.value = false;
 };

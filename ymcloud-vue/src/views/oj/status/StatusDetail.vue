@@ -274,16 +274,18 @@ const getTestCaseClass = (status: string) => {
 };
 //更新分享代码权限
 const handleUpdateShareCode = () => {
+  if (shareLoading.value) return;
+  const nextShare = !submissionData.value.share;
   shareLoading.value = true;
   updateShareCode(submissionData.value.submissionId)
     .then((res) => {
       ElMessage({
-        message: "分享成功",
+        message: nextShare ? "分享成功" : "已取消分享",
         grouping: true,
         type: "success",
         plain: true,
       });
-      submissionData.value.share = !submissionData.value.share;
+      submissionData.value.share = nextShare;
     })
     .catch((err) => {
       console.log(err.message);

@@ -63,15 +63,15 @@
           <el-table-column label="时长(分钟)" prop="duration" width="100" align="center" />
           <el-table-column label="访问权限" width="120" align="center">
             <template #default="scope">
-              <el-select
-                :model-value="scope.row.visibility"
+              <AsyncSelect
+                v-model="scope.row.visibility"
                 :disabled="!userStore.hasEveryPermission(['contest:contest:edit'])"
-                @change="(value: number) => handleVisibilityChange(scope.row, value)"
+                :before-change="(value: number) => handleVisibilityChange(scope.row, value)"
                 style="width: 80px;"
               >
                 <el-option :value="0" label="公开" />
                 <el-option :value="1" label="私有" />
-              </el-select>
+              </AsyncSelect>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="260" align="center">
@@ -146,6 +146,7 @@
 
 <script lang="ts" setup>
 //import
+import AsyncSelect from '@/components/common/AsyncSelect.vue';
 import { useUserStore } from '@/stores/user';
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -406,69 +407,35 @@ const handleDelete = (row: any) => {
     });
   }).catch(() => { });
 };
-//可见性变更处理
-const handleVisibilityChange = (row: any, newVisibility: number) => {
-  if (row.visibility === newVisibility) {
-    return;
-  }
-  //如果要修改为私有比赛，需要设置密码
+//请求成功后由异步选择器更新权限
+const handleVisibilityChange = async (row: { id: number; title: string; visibility: number }, newVisibility: number) => {
+  let password: string | null = null;
   if (newVisibility === 1) {
-    handleSetPrivatePassword(row);
-    return;
+    const result = await ElMessageBox.prompt(
+      `将比赛 "${row.title}" 设置为私有需要设置访问密码：`,
+      '设置比赛密码',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputType: 'password',
+        inputPlaceholder: '请输入5-20位密码',
+        inputValidator: (value: string) => {
+          if (!value || value.trim() === '') return '密码不能为空';
+          if (value.length < 5 || value.length > 20) return '密码长度应为5-20位';
+          return true;
+        },
+      }
+    );
+    password = result.value;
+  } else {
+    await ElMessageBox.confirm(
+      `确认将比赛 "${row.title}" 的访问权限从 "${getVisibilityText(row.visibility)}" 修改为 "${getVisibilityText(newVisibility)}" 吗？`,
+      '权限修改确认',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    );
   }
-  //修改为公开比赛的确认
-  const visibilityText = getVisibilityText(newVisibility);
-  const currentText = getVisibilityText(row.visibility);
-  
-  ElMessageBox.confirm(
-    `确认将比赛 "${row.title}" 的访问权限从 "${currentText}" 修改为 "${visibilityText}" 吗？`,
-    '权限修改确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(() => {
-    updateContestVisibility(row.id, newVisibility, null).then(res => {
-      ElMessage.success(res.data.msg);
-      row.visibility = newVisibility;
-    }).catch(e => {
-      console.log(e);
-    });
-  }).catch(() => { });
-};
-//设置私有比赛密码
-const handleSetPrivatePassword = (row: any) => {
-  ElMessageBox.prompt(
-    `将比赛 "${row.title}" 设置为私有需要设置访问密码：`,
-    '设置比赛密码',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputType: 'password',
-      inputPlaceholder: '请输入5-20位密码',
-      inputValidator: (value: string) => {
-        if (!value || value.trim() === '') {
-          return '密码不能为空';
-        }
-        if (value.length < 5) {
-          return '密码长度至少5位';
-        }
-        if (value.length > 20) {
-          return '密码长度不能超过20位';
-        }
-        return true;
-      },
-      inputErrorMessage: '请输入有效的密码'
-    }
-  ).then(({ value }) => {
-    updateContestVisibility(row.id, 1, value).then(res => {
-      ElMessage.success(res.data.msg);
-      row.visibility = 1;
-    }).catch(e => {
-      console.log(e);
-    });
-  }).catch(() => {});
+  const response = await updateContestVisibility(row.id, newVisibility, password);
+  ElMessage.success(response.data.msg);
 };
 </script>
 

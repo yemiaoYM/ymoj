@@ -11,22 +11,23 @@
         >
           <x-flex align="center" :size="24" :wrap="true">
             <span class="filter-label">范围</span>
-            <el-switch
-              v-model="isMine"
+            <AsyncSwitch
+              :model-value="isMine"
+              :disabled="loading"
               active-text="我的"
               inactive-text="全部"
               :before-change="handleOnlyMine"
-              @change="pushRouter"
             />
             <span class="filter-label">状态</span>
-            <el-select
+            <AsyncSelect
               style="width: 200px"
               aria-label="评测状态"
               clearable
               placeholder="选择状态"
-              v-model="status"
+              :model-value="status"
+              :disabled="loading"
               :value-on-clear="null"
-              @change="pushRouter"
+              :before-change="onStatusChange"
             >
               <el-option
                 v-for="item in statusOptions"
@@ -34,13 +35,14 @@
                 :label="item.label"
                 :value="item.value"
               />
-            </el-select>
+            </AsyncSelect>
           </x-flex>
           <el-button
             style="margin-right: 15px"
             round
             type="primary"
             :icon="Refresh"
+            :disabled="loading"
             @click="reset"
             >重置</el-button
           >
@@ -53,7 +55,8 @@
               clearable
               placeholder="请输入题目/题号..."
               :suffix-icon="Search"
-              @keyup.enter="pushRouter"
+              :disabled="loading"
+              @keyup.enter="pushRouter()"
             />
             <el-input
               v-model="username"
@@ -62,7 +65,8 @@
               clearable
               placeholder="请输入用户名..."
               :suffix-icon="Search"
-              @keyup.enter="pushRouter"
+              :disabled="loading"
+              @keyup.enter="pushRouter()"
             />
           </x-flex>
         </x-flex>
@@ -167,6 +171,7 @@
             layout="total, sizes, prev, pager, next"
             :page-sizes="[10, 15, 20]"
             :total="total"
+            :disabled="loading"
             :page-size="pageSize"
             :current-page="pageNo"
             @update:current-page="handleCurrentChange"
@@ -180,8 +185,10 @@
 
 <script setup lang="ts">
 //import
+import AsyncSwitch from '@/components/common/AsyncSwitch.vue';
+import AsyncSelect from '@/components/common/AsyncSelect.vue';
 import { Search, Refresh } from "@element-plus/icons-vue";
-import { ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRouter, useRoute } from "vue-router";
 import type { SubmissionTableVO } from "@/type/types";
@@ -225,63 +232,49 @@ const username = ref<string | null>(null);
 const problemKey = ref<string | null>(null);
 const status = ref<number | null>(null);
 
-//methods
-const init = () => {
-  routeName.value = route.name as string;
-  if (routeName.value === "ContestSubmissionList") {
-    isContest.value = true;
-    contestId.value = Number(route.params.contestID);
-  } else {
-    isContest.value = false;
-    contestId.value = 0;
-  }
-  const queryParams = route.query;
-  isMine.value = queryParams.isMine === "true";
-  status.value = queryParams.status !== undefined ? Number(queryParams.status) : null;
-  problemKey.value = (queryParams.problemKey as string) || null;
-  username.value = (queryParams.username as string) || null;
-  pageNo.value = Number(queryParams.pageNo) || 1;
-  pageSize.value = Number(queryParams.pageSize) || 15;
+type SubmissionQuery = {
+  isMine: boolean;
+  status: number | null;
+  problemKey: string | null;
+  username: string | null;
+  pageNo: number;
+  pageSize: number;
 };
-//分页查询
-const getData = () => {
+let requestGeneration = 0;
+let confirmedPath = '';
+
+//列表、筛选状态和路由在同一次请求成功后一起生效
+const getData = async (params: SubmissionQuery, targetPath: string) => {
+  const generation = ++requestGeneration;
+  const target = router.resolve(targetPath);
+  const nextIsContest = target.name === 'ContestSubmissionList';
+  const nextContestId = nextIsContest ? Number(target.params.contestID) : 0;
   loading.value = true;
-  let params = {
-    isMine: isMine.value,
-    status: status.value,
-    problemKey: problemKey.value,
-    username: username.value,
-    pageNo: pageNo.value,
-    pageSize: pageSize.value,
-  };
-  //比赛提交列表查询
-  if (isContest.value && contestId.value > 0) {
-    getContestSubmissionList({
-      contestId: contestId.value,
-      ...params,
-    })
-      .then((res) => {
-        tableData.value = res.data.data.records;
-        total.value = res.data.data.total;
-      })
-      .catch((e) => {
-        console.log(e);
-      })
-      .finally(() => {
-        loading.value = false;
-      });
-  } else {
-    getSubmissionTableList(params)
-      .then((res) => {
-        tableData.value = res.data.data.records;
-        total.value = res.data.data.total;
-      })
-      .catch((e) => {
-        console.log(e);
-      })
-      .finally(() => {
-        loading.value = false;
-      });
+  try {
+    const response = nextIsContest
+      ? await getContestSubmissionList({ contestId: nextContestId, ...params })
+      : await getSubmissionTableList(params);
+    if (generation !== requestGeneration) return;
+    tableData.value = response.data.data.records;
+    total.value = response.data.data.total;
+    isMine.value = params.isMine;
+    status.value = params.status;
+    problemKey.value = params.problemKey;
+    username.value = params.username;
+    pageNo.value = params.pageNo;
+    pageSize.value = params.pageSize;
+    isContest.value = nextIsContest;
+    contestId.value = nextContestId;
+    routeName.value = target.name as string;
+    confirmedPath = targetPath;
+    if (route.fullPath !== targetPath) await router.push(targetPath);
+  } catch {
+    //request 已提示失败，恢复最近成功的路由并保留原列表和筛选状态
+    if (generation === requestGeneration && confirmedPath && route.fullPath !== confirmedPath) {
+      await router.replace(confirmedPath);
+    }
+  } finally {
+    if (generation === requestGeneration) loading.value = false;
   }
 };
 //查看提交详情
@@ -297,25 +290,25 @@ const handSubmissionDetail = (submitId: number) => {
   }
   router.push({ name: "SubmissionDetail", params: { submitID: submitId } });
 };
-//改变页码
-const handleCurrentChange = (val: number): void => {
-  pageNo.value = val;
-  pushRouter();
+//分页只提交候选值，成功后才更新显示页码
+const handleCurrentChange = (val: number) => {
+  pushRouter({ pageNo: val });
 };
-//改变页大小
-const handleSizeChange = (val: number): void => {
-  pageSize.value = val;
-  pushRouter();
+const handleSizeChange = (val: number) => {
+  pushRouter({ pageNo: 1, pageSize: val });
 };
-//只看个人提交
-const handleOnlyMine = () => {
-  return new Promise((resolve) => {
-    if (!userStore.isLogin) {
-      ElMessage.warning("请先登录");
-      resolve(false);
-    }
-    resolve(true);
-  });
+//由 getData 提交确认状态，阻止开关自行提前翻转
+const handleOnlyMine = async (): Promise<boolean> => {
+  if (!isMine.value && !userStore.isLogin) {
+    ElMessage.warning("请先登录");
+    return false;
+  }
+  await pushRouter({ isMine: !isMine.value, pageNo: 1 });
+  return false;
+};
+const onStatusChange = async (value: number | null) => {
+  await pushRouter({ status: value, pageNo: 1 });
+  return false;
 };
 const handToUserInfo = (username: string) => {
   router.push({ name: "UserHome", query: { username: username } });
@@ -333,43 +326,55 @@ const handToProblem = (displayId: string) => {
     router.push({ name: "ProblemDetail", params: { problemID: displayId } });
   }
 };
-const pushRouter = () => {
-  let query: { [key: string]: string | number | null } = {
-    isMine: isMine.value ? "true" : "false",
+const pushRouter = async (changes: Partial<SubmissionQuery> = {}) => {
+  if (loading.value) return;
+  const params: SubmissionQuery = {
+    isMine: isMine.value,
     status: status.value,
     problemKey: problemKey.value,
     username: username.value,
-    pageNo: pageNo.value,
+    pageNo: 1,
     pageSize: pageSize.value,
+    ...changes,
   };
-  //删除空值
-  Object.keys(query).forEach((key) => {
-    if (query[key] === null || query[key] === undefined || query[key] === "") {
-      delete query[key];
-    }
+  const target = router.resolve({
+    name: routeName.value,
+    params: route.params,
+    query: {
+      ...params,
+      isMine: String(params.isMine),
+      status: params.status ?? undefined,
+      problemKey: params.problemKey || undefined,
+      username: params.username || undefined,
+    },
   });
-  router.push({ name: routeName.value, query: query });
+  await getData(params, target.fullPath);
 };
-//重置
 const reset = () => {
-  isMine.value = false;
-  status.value = null;
-  problemKey.value = null;
-  username.value = null;
-  pageNo.value = 1;
-  pageSize.value = 15;
-  router.push({ name: routeName.value });
+  void pushRouter({ isMine: false, status: null, problemKey: null, username: null, pageNo: 1, pageSize: 15 });
 };
-//监听路由变化
+//刷新、前进后退及比赛路由复用都通过同一查询入口
 watch(
-  () => [route.query, route.name],
-  (newRouteQuery: any, newRouteName: any) => {
-    routeName.value = newRouteName;
-    init();
-    getData();
+  () => route.fullPath,
+  (path) => {
+    if (path === confirmedPath) {
+      requestGeneration++;
+      loading.value = false;
+      return;
+    }
+    const query = route.query;
+    void getData({
+      isMine: query.isMine === 'true',
+      status: query.status !== undefined ? Number(query.status) : null,
+      problemKey: (query.problemKey as string) || null,
+      username: (query.username as string) || null,
+      pageNo: Number(query.pageNo) || 1,
+      pageSize: Number(query.pageSize) || 15,
+    }, path);
   },
   { immediate: true }
 );
+onBeforeUnmount(() => { requestGeneration++; });
 </script>
 
 <style lang="css" scoped>
@@ -398,7 +403,7 @@ watch(
 ::v-deep(.el-table__body .el-table__cell) {
   font-size: 15px;
   color: #000305;
-  font-family: Consolas;
+  font-family: Consolas,serif;
   text-align: center;
 }
 

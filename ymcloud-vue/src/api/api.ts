@@ -80,13 +80,24 @@ export function getTagsList() {
  * @param params 题目列表信息
  * @returns 题目列表
  */
-export function getProblemTableList(params: any) {
+export function getProblemTableList(params: ProblemListQuery) {
   return request({
     url: "/public/problems",
     method: "GET",
-    params
+    params: {
+      ...params,
+      tagIds: params.tagIds.length ? params.tagIds.join(',') : undefined,
+    }
   })
 }
+
+export type ProblemListQuery = {
+  pageNo: number;
+  pageSize: number;
+  keyword: string;
+  difficulty: number;
+  tagIds: number[];
+};
 /**
  * 获取题目详情
  * @param id 题目ID

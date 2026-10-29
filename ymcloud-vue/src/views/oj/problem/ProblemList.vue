@@ -18,10 +18,10 @@
             clearable
             v-model="query.keyword"
             :prefix-icon="Search"
-            @keyup.enter="pushRouter"
+            @keyup.enter="applyFilters"
           >
             <template #suffix>
-              <el-button type="primary" @click="pushRouter">搜索</el-button>
+              <el-button type="primary" @click="applyFilters">搜索</el-button>
             </template>
           </el-input>
           <x-flex justify="space-between" align="center" :size="16">
@@ -31,7 +31,7 @@
                 class="difficulty-options"
                 aria-label="题目难度"
                 v-model="query.difficulty"
-                @change="pushRouter"
+                @change="applyFilters"
               >
                 <el-radio-button
                   v-for="item in difficultyList"
@@ -49,6 +49,20 @@
                 :inactive-icon="Close"
               />
               <span>显示标签</span>
+            </x-flex>
+          </x-flex>
+          <x-flex v-if="selectedTags.length" class="selected-tags" align="center" :size="12" :wrap="false">
+            <span>标签</span>
+            <x-flex :size="8" aria-label="已选标签">
+              <el-tag
+                v-for="tag in selectedTags"
+                :key="tag.id"
+                closable
+                disable-transitions
+                size="large"
+                effect="dark"
+                @close="toggleTag(tag.id)"
+              >{{ tag.name }}</el-tag>
             </x-flex>
           </x-flex>
         </x-flex>
@@ -122,8 +136,19 @@
         </template>
         <el-skeleton v-if="tagListLoading" style="width: 100%;" :rows="10" />
         <x-flex v-else :size="8">
-          <el-tag v-for="tag in tagsList" :key="tag.id" size="large" :color="tag.color"
-            style="color: white;font-size: 15px;padding: 16px;">
+          <el-tag
+            v-for="tag in tagsList"
+            :key="tag.id"
+            class="tag-option"
+            size="large"
+            :color="tag.color"
+            role="button"
+            tabindex="0"
+            :aria-pressed="query.tagIds.includes(tag.id)"
+            @click="toggleTag(tag.id)"
+            @keydown.enter.prevent="toggleTag(tag.id)"
+            @keydown.space.prevent="toggleTag(tag.id)"
+          >
             {{ tag.name }}
           </el-tag>
         </x-flex>
@@ -141,10 +166,11 @@
 //import
 import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
 import { useRouter, useRoute } from 'vue-router';
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { MagicStick, Check, Close, Refresh, Search } from '@element-plus/icons-vue';
 import type { Tag, ProblemTableVO } from '@/type/types';
 import { getTagsList, getProblemTableList, getRandomProblem } from '@/api/api';
+import type { ProblemListQuery } from '@/api/api';
 
 //data
 const route = useRoute();
@@ -161,23 +187,21 @@ const colors = [
 const tableData = ref<ProblemTableVO[]>([] as ProblemTableVO[]);
 const tagsList = ref<Tag[]>([] as Tag[]);
 
-type ProblemListQuery = {
-  pageNo: number;
-  pageSize: number;
-  keyword: string;
-  difficulty: number;
-};
-
 const query = ref<ProblemListQuery>({
   pageNo: 1,
   pageSize: 15,
   keyword: '',
   difficulty: -1,
+  tagIds: [],
 });
+const selectedTags = computed(() => query.value.tagIds.map(id =>
+  tagsList.value.find(tag => tag.id === id) ?? { id, name: String(id), color: undefined }
+));
 
 const totalPage = ref<number>(0);
 const problemListLoading = ref<boolean>(false);
 const tagListLoading = ref<boolean>(false);
+let problemRequestId = 0;
 
 //methods
 const init = () => {
@@ -187,6 +211,8 @@ const init = () => {
   query.value.pageSize = Number(queryParams.pageSize) || 15;
   query.value.keyword = queryParams.keyword as string || '';
   query.value.difficulty = Number(queryParams.difficulty) || -1;
+  const tagIds = [queryParams.tagIds].flat().join(',').split(',').map(Number);
+  query.value.tagIds = [...new Set(tagIds.filter(id => Number.isSafeInteger(id) && id > 0))];
 }
 //初始化
 init();
@@ -228,30 +254,49 @@ const handlePageChange = (newPage: number) => {
 //每页条数变化
 const handlePageSizeChange = (newPageSize: number) => {
   query.value.pageSize = newPageSize;
+  applyFilters();
+};
+//筛选变化后从第一页查询
+const applyFilters = () => {
+  query.value.pageNo = 1;
   pushRouter();
+};
+//再次点击已选标签即可取消
+const toggleTag = (id: number) => {
+  query.value.tagIds = query.value.tagIds.includes(id)
+    ? query.value.tagIds.filter(tagId => tagId !== id)
+    : [...query.value.tagIds, id];
+  applyFilters();
 };
 //查询题目列表
 const getProblemTableListData = () => {
+  const requestId = ++problemRequestId;
   problemListLoading.value = true;
   getProblemTableList(query.value).then(res => {
+    //连续切换筛选时只展示最后一次请求的结果
+    if (requestId !== problemRequestId) return;
     tableData.value = res.data.data.records;
     totalPage.value = res.data.data.total;
   }).catch(error => {
     console.log(error);
   }).finally(() => {
-    problemListLoading.value = false;
+    if (requestId === problemRequestId) {
+      problemListLoading.value = false;
+    }
   })
 }
 //分页条件查询
 const pushRouter = () => {
-  let queryObj = query.value as { [key: string]: string | number | null };
-  //删除空值
-  Object.keys(queryObj).forEach(key => {
-    if (queryObj[key] === null || queryObj[key] === undefined || queryObj[key] === '') {
-      delete queryObj[key]
-    }
-  })
-  router.push({ name: 'ProblemList', query: queryObj })
+  router.push({
+    name: 'ProblemList',
+    query: {
+      pageNo: query.value.pageNo,
+      pageSize: query.value.pageSize,
+      keyword: query.value.keyword || undefined,
+      difficulty: query.value.difficulty,
+      tagIds: query.value.tagIds.length ? query.value.tagIds.join(',') : undefined,
+    },
+  });
 }
 //重置查询值
 const reset = () => {
@@ -259,12 +304,14 @@ const reset = () => {
   query.value.pageSize = 15;
   query.value.keyword = '';
   query.value.difficulty = -1;
+  query.value.tagIds = [];
   router.push({ name: 'ProblemList' });
 }
 //监听路由变化
 watch(
   () => route.query,
-  (newQuery: any) => {
+  () => {
+    init();
     getProblemTableListData()
   }
 )
@@ -312,6 +359,10 @@ watch(
   border-radius: 8px;
 }
 
+.problem-search :deep(.el-input__clear) {
+  margin-right: 12px;
+}
+
 .difficulty-filter {
   min-width: 0;
   max-width: 100%;
@@ -319,6 +370,27 @@ watch(
 
 .difficulty-filter > span {
   flex-shrink: 0;
+}
+
+.selected-tags > span {
+  flex-shrink: 0;
+}
+
+.tag-option {
+  color: white;
+  font-size: 15px;
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.tag-option:hover {
+  transform: scale(1.05);
+}
+
+.tag-option:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
 }
 
 .difficulty-options {

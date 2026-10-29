@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
 /**
  * @Author: Yemiao
  * @CreateTime: 2025-07-22  19:41
- * @Description: ProblemServiceImpl
+ * @Description: 公开题库查询、题目详情与提交记录服务
  */
 @Service
 public class ProblemServiceImpl implements ProblemService {
@@ -56,9 +56,9 @@ public class ProblemServiceImpl implements ProblemService {
     private LanguageEntityService languageEntityService;
 
     /**
-     * 获取题目列表表单 分页查询
-     * @param query 查询实体
-     * @return 题目列表
+     * 按关键词、难度及所选标签分页查询公开题目并附带提交统计
+     * @param query 已校验的查询条件，多标签须同时匹配
+     * @return 题目分页结果
      */
     @Override
     public PageVO<ProblemTableVO> pageQuery(ProblemPageQuery query) {
@@ -69,7 +69,7 @@ public class ProblemServiceImpl implements ProblemService {
                 page,
                 query.getKeyword(),
                 query.getDifficulty(),
-                query.getSource());
+                query.getTagIds());
         //如果不为空则设置提交情况
         if(pageResult.getTotal()>0){
             //查询对应的题目的ac和总提交数量
@@ -81,7 +81,9 @@ public class ProblemServiceImpl implements ProblemService {
             //使用map对应设置
             for (ProblemTableVO record : records) {
                 ProblemCountVO problemCountVO = problemCountVOMap.get(record.getProblemId());
-                if(problemCountVO == null)continue;
+                if (problemCountVO == null) {
+                    continue;
+                }
                 record.setAcceptCount(problemCountVO.getAc());
                 record.setSubmitCount(problemCountVO.getTotal());
             }
