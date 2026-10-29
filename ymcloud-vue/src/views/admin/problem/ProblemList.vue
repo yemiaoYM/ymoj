@@ -145,7 +145,7 @@
 
     <el-dialog
       title="添加远程题目"
-      width="min(560px, calc(100vw - 32px))"
+      width="min(680px, calc(100vw - 32px))"
       align-center
       :model-value="remoteVisible"
       :close-on-click-modal="!remoteLoading"
@@ -220,6 +220,7 @@ const remotePlatforms = [
   { value: 'leetcode', label: '力扣', placeholder: '例如 two-sum' },
   { value: 'atcoder', label: 'AtCoder', placeholder: '例如 abc480_a 或 abc480/abc480_a' },
   { value: 'codeforces', label: 'Codeforces', placeholder: '例如 2194A' },
+  { value: 'nowcoder', label: '牛客', placeholder: '题库 NC326157，比赛 142115/A' },
 ];
 const remotePlatform = computed(() => remotePlatforms.find(item => item.value === remoteForm.value.platform)!);
 const remoteRules: FormRules<RemoteProblemRequest> = {

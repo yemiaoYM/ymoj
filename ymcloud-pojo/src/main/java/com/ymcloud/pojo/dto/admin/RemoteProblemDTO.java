@@ -20,7 +20,7 @@ public class RemoteProblemDTO {
     private String platform;
 
     /**
-     * 平台题号或 AtCoder 比赛/题目标识；具体格式由对应适配器校验。
+     * 平台题号或比赛/题目标识；具体格式由对应适配器校验。
      */
     @NotBlank(message = "请输入远程题号")
     @Pattern(regexp = "[A-Za-z0-9_/-]{1,128}", message = "请输入题目标识，不支持完整网址")

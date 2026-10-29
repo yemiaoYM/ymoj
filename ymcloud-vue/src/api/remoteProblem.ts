@@ -7,5 +7,5 @@ export function fetchRemoteProblem(data: RemoteProblemRequest): Promise<AxiosRes
   msg: string;
   data: RemoteProblemDraft;
 }>> {
-  return request({ url: '/admin/problem/remote', method: 'POST', data, timeout: 20000 });
+  return request({ url: '/admin/problem/remote', method: 'POST', data, timeout: 90000 });
 }

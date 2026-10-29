@@ -2,6 +2,7 @@ package com.ymcloud.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.common.exception.problem.ProblemException;
+import com.ymcloud.common.exception.problem.RemoteProblemConnectionException;
 import com.ymcloud.common.exception.problem.RemoteProblemHttpException;
 import com.ymcloud.pojo.dto.admin.RemoteProblemDTO;
 import com.ymcloud.pojo.vo.admin.RemoteProblemVO;
@@ -12,6 +13,7 @@ import com.ymcloud.web.remote.LuoguProblemProvider;
 import com.ymcloud.web.remote.ProblemHtmlMarkdown;
 import com.ymcloud.web.remote.RemoteProblemHttpClient;
 import com.ymcloud.web.service.admin.impl.RemoteProblemServiceImpl;
+import com.ymcloud.web.remote.RemoteProblemImages;
 import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -19,6 +21,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
+import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -157,10 +162,10 @@ class PlatformProblemTest {
     }
 
     /**
-     * 主站仅在明确返回 403 时使用公开转载，并保留原平台及转载出处。
+     * 主站连接失败或返回 403 时使用公开转载，其他错误仍交给调用方。
      */
     @Test
-    void usesPublicReprintOnlyAfterCodeforces403() {
+    void usesPublicReprintAfterConnectionFailureOrCodeforces403() {
         RemoteProblemHttpClient client = mock(RemoteProblemHttpClient.class);
         LuoguProblemProvider luogu = mock(LuoguProblemProvider.class);
         CodeforcesProblemProvider provider = new CodeforcesProblemProvider();
@@ -189,8 +194,43 @@ class PlatformProblemTest {
         assertTrue(reprint.getSource().contains("Codeforces 2194A"));
         assertTrue(reprint.getSource().contains("https://www.luogu.com.cn/problem/CF2194A"));
         verify(luogu).fetch("CF2194A");
+        doThrow(new RemoteProblemConnectionException("连接超时", new IOException("timeout")))
+                .when(client).get(url, "Codeforces");
+        assertSame(reprint, provider.fetch("2194A"));
         when(luogu.fetch("CF2194A")).thenThrow(missing);
         assertSame(missing, assertThrows(ProblemException.class, () -> provider.fetch("2194A")));
+    }
+
+    /**
+     * 显式指定本机代理端口后，验证生产客户端直连及经代理的完整题面读取。
+     */
+    @Test
+    @EnabledIfSystemProperty(named = "codeforces.proxyPort", matches = "[0-9]+")
+    void fetchesCodeforcesWithAndWithoutProxy() {
+        ProxySelector original = ProxySelector.getDefault();
+        int port = Integer.parseInt(System.getProperty("codeforces.proxyPort"));
+        try {
+            for (ProxySelector selector : List.of(HttpClient.Builder.NO_PROXY,
+                    ProxySelector.of(new InetSocketAddress("127.0.0.1", port)))) {
+                ProxySelector.setDefault(selector);
+                RemoteProblemHttpClient client = new RemoteProblemHttpClient();
+                client.initialize();
+                LuoguProblemProvider luogu = new LuoguProblemProvider();
+                ReflectionTestUtils.setField(luogu, "httpClient", client);
+                ReflectionTestUtils.setField(luogu, "objectMapper", new ObjectMapper());
+                CodeforcesProblemProvider cf = new CodeforcesProblemProvider();
+                ReflectionTestUtils.setField(cf, "httpClient", client);
+                ReflectionTestUtils.setField(cf, "luoguProvider", luogu);
+                RemoteProblemVO draft = cf.fetch("2194A");
+                assertEquals("CF2194A", draft.getProblemId());
+                assertEquals("Lawn Mower", draft.getTitle());
+                assertFalse(draft.getContent().isBlank());
+                assertEquals(1, draft.getProblemCaseList().size());
+                assertTrue(draft.getSource().contains("Codeforces 2194A"));
+            }
+        } finally {
+            ProxySelector.setDefault(original);
+        }
     }
 
     /**
@@ -260,6 +300,7 @@ class PlatformProblemTest {
         when(client.get(atUrl, "AtCoder")).thenReturn(ATCODER.formatted(""));
         RemoteProblemServiceImpl service = new RemoteProblemServiceImpl();
         ReflectionTestUtils.setField(service, "providers", List.of(atCoder));
+        ReflectionTestUtils.setField(service, "images", mock(RemoteProblemImages.class));
         RemoteProblemDTO request = new RemoteProblemDTO();
         request.setPlatform("atcoder");
         request.setProblemId("past202010-open/past202010_task_a");

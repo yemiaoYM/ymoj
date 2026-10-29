@@ -5,6 +5,7 @@ import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.pojo.dto.admin.RemoteProblemDTO;
 import com.ymcloud.pojo.vo.admin.RemoteProblemVO;
 import com.ymcloud.web.remote.RemoteProblemProvider;
+import com.ymcloud.web.remote.RemoteProblemImages;
 import com.ymcloud.web.service.admin.RemoteProblemService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -22,8 +23,11 @@ public class RemoteProblemServiceImpl implements RemoteProblemService {
     @Autowired
     private List<RemoteProblemProvider> providers;
 
+    @Autowired
+    private RemoteProblemImages images;
+
     /**
-     * 仅调用匹配的平台，不创建题目或测试数据。
+     * 调用匹配的平台并保存插图，不创建题目或测试数据。
      * @param request 已通过入口结构校验的平台与题号
      * @return 待管理员确认保存的草稿
      */
@@ -38,6 +42,7 @@ public class RemoteProblemServiceImpl implements RemoteProblemService {
         if (!draft.getProblemId().matches("[A-Za-z0-9_]{1,15}")) {
             draft.setProblemId("");
         }
+        images.importImages(draft);
         return draft;
     }
 }

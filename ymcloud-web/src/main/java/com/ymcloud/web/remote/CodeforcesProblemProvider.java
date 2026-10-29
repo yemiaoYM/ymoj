@@ -2,6 +2,7 @@ package com.ymcloud.web.remote;
 
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.problem.ProblemException;
+import com.ymcloud.common.exception.problem.RemoteProblemConnectionException;
 import com.ymcloud.common.exception.problem.RemoteProblemHttpException;
 import com.ymcloud.pojo.vo.admin.RemoteProblemVO;
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
@@ -43,7 +44,7 @@ public class CodeforcesProblemProvider implements RemoteProblemProvider {
     }
 
     /**
-     * 读取主站公开题面；主站返回 403 时读取洛谷公开收录并注明转载出处。
+     * 读取主站公开题面；连接失败或返回 403 时读取洛谷公开收录并注明转载出处。
      * @param problemId 如 2194A 或 CF2194A
      * @return 未保存的题面草稿
      */
@@ -58,8 +59,9 @@ public class CodeforcesProblemProvider implements RemoteProblemProvider {
         String html;
         try {
             html = httpClient.get(URI.create(url + "?locale=en"), "Codeforces");
-        } catch (RemoteProblemHttpException exception) {
-            if (exception.getRemoteStatus() != HttpStatus.FORBIDDEN) {
+        } catch (RemoteProblemHttpException | RemoteProblemConnectionException exception) {
+            if (exception instanceof RemoteProblemHttpException httpException
+                    && httpException.getRemoteStatus() != HttpStatus.FORBIDDEN) {
                 throw exception;
             }
             RemoteProblemVO draft = luoguProvider.fetch("CF" + id);

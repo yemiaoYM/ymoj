@@ -19,6 +19,18 @@
     </properties>
 
     <dependencies>
+        <!-- 定位 Markdown 图片，保留公式、代码和其他原文 -->
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>0.30.0</version>
+        </dependency>
+        <!-- 远程题面中的 WebP 插图通过 ImageIO 统一解码 -->
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-webp</artifactId>
+            <version>3.12.0</version>
+        </dependency>
         <!-- 公开题面 HTML 解析与 Markdown 转换 -->
         <dependency>
             <groupId>org.jsoup</groupId>

@@ -1,19 +1,23 @@
 package com.ymcloud.web.remote;
 
 import com.ymcloud.common.constant.HttpStatus;
+import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.exception.problem.ProblemException;
+import com.ymcloud.common.exception.problem.RemoteProblemConnectionException;
 import com.ymcloud.common.exception.problem.RemoteProblemHttpException;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * @Author: Yemiao
@@ -25,6 +29,10 @@ import java.time.Duration;
 public class RemoteProblemHttpClient {
 
     private static final int MAX_PAGE_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+    private static final Set<String> IMAGE_DOMAINS = Set.of("luogu.com.cn", "luogu.com", "luogu.org",
+            "nowcoder.com", "nowcoder.net", "atcoder.jp", "codeforces.com",
+            "leetcode.com", "leetcode.cn", "leetcode-cn.com");
 
     private RestClient client;
 
@@ -68,10 +76,45 @@ public class RemoteProblemHttpClient {
                 }
                 return new String(page, StandardCharsets.UTF_8);
             });
-        } catch (RestClientException exception) {
+        } catch (ResourceAccessException exception) {
             log.warn("远程题面请求失败，平台：{}，异常类型：{}", platform, exception.getClass().getSimpleName());
-            throw new ProblemException(platform + "连接失败或超时，请稍后重试",
-                    HttpStatus.SERVICE_UNAVAILABLE, exception);
+            throw new RemoteProblemConnectionException(platform + "连接失败或超时，请稍后重试", exception);
+        }
+    }
+
+    /**
+     * 下载公开插图，地址只允许平台图片域名及标准端口，不跟随重定向或携带凭据。
+     * @param url 题面中未经信任的图片地址
+     * @return 最多 20 MiB 的图片候选字节，实际格式由图片处理入口验证
+     */
+    public byte[] getImage(String url) {
+        URI uri;
+        try {
+            uri = URI.create(url.startsWith("//") ? "https:" + url : url);
+        } catch (IllegalArgumentException exception) {
+            throw new FileException("题面图片地址格式不正确", HttpStatus.BAD_REQUEST, exception);
+        }
+        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+        boolean https = "https".equalsIgnoreCase(uri.getScheme());
+        boolean http = "http".equalsIgnoreCase(uri.getScheme());
+        if ((!https && !http) || uri.getRawUserInfo() != null
+                || (uri.getPort() != -1 && uri.getPort() != (https ? 443 : 80))
+                || IMAGE_DOMAINS.stream().noneMatch(domain -> host.equals(domain) || host.endsWith("." + domain))) {
+            throw new FileException("题面图片地址不属于支持的平台图片域名", HttpStatus.BAD_REQUEST);
+        }
+        try {
+            return client.get().uri(uri).exchange((request, response) -> {
+                if (response.getStatusCode().value() != HttpStatus.SUCCESS) {
+                    throw new FileException("题面图片暂时无法下载，请稍后重试", HttpStatus.SERVICE_UNAVAILABLE);
+                }
+                byte[] image = response.getBody().readNBytes(MAX_IMAGE_BYTES + 1);
+                if (image.length > MAX_IMAGE_BYTES) {
+                    throw new FileException("题面单张图片不能超过20MB", HttpStatus.BAD_REQUEST);
+                }
+                return image;
+            });
+        } catch (ResourceAccessException exception) {
+            throw new FileException("题面图片下载失败或超时，请稍后重试", HttpStatus.SERVICE_UNAVAILABLE, exception);
         }
     }
 }

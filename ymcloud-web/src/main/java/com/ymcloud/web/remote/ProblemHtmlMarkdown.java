@@ -1,9 +1,13 @@
 package com.ymcloud.web.remote;
 
+import com.ymcloud.common.constant.HttpStatus;
+import com.ymcloud.common.exception.problem.ProblemException;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.nodes.TextNode;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
 /**
@@ -14,6 +18,8 @@ import java.util.regex.Pattern;
 public final class ProblemHtmlMarkdown {
 
     private static final Pattern MATH = Pattern.compile("(\\${1,3})(.+?)\\1", Pattern.DOTALL);
+    private static final Pattern EQUATION_IMAGE = Pattern.compile(
+            "https?://(?:www|hr|ac)\\.nowcoder\\.com/equation\\?(.*)", Pattern.CASE_INSENSITIVE);
 
     /**
      * 工具类型无需实例化。
@@ -27,6 +33,32 @@ public final class ProblemHtmlMarkdown {
      */
     public static String convert(Element element) {
         return render(element, false).strip();
+    }
+
+    /**
+     * 还原平台公式图片中的 LaTeX，普通插图不凭替代文字猜测为公式。
+     * @param url 原始图片地址
+     * @param alt 平台提供的公式原文
+     * @return 公式原文；普通图片返回 null
+     */
+    public static String equationImage(String url, String alt) {
+        var equation = EQUATION_IMAGE.matcher(url.startsWith("//") ? "https:" + url : url);
+        if (!equation.matches()) {
+            return null;
+        }
+        if (!alt.isBlank()) {
+            return alt;
+        }
+        for (String parameter : equation.group(1).split("&")) {
+            if (parameter.startsWith("tex=")) {
+                try {
+                    return URLDecoder.decode(parameter.substring(4), StandardCharsets.UTF_8);
+                } catch (IllegalArgumentException exception) {
+                    throw new ProblemException("题面公式格式不正确，无法复制", HttpStatus.BAD_REQUEST, exception);
+                }
+            }
+        }
+        throw new ProblemException("题面公式缺少原文，无法复制", HttpStatus.BAD_REQUEST);
     }
 
     /**
@@ -73,9 +105,9 @@ public final class ProblemHtmlMarkdown {
             return "";
         }
         if (tag.equals("pre")) {
-            // AtCoder 输入格式中的 var 是公式
+            // 预格式输入说明中的公式和插图按实际内容显示
             // 实际样例由 sampleText 单独提取
-            if (element.selectFirst("var") != null && element.selectFirst("code") == null) {
+            if (element.selectFirst("var, img") != null && element.selectFirst("code") == null) {
                 StringBuilder format = new StringBuilder("\n\n");
                 for (Node child : element.childNodes()) {
                     format.append(render(child, true));
@@ -106,6 +138,10 @@ public final class ProblemHtmlMarkdown {
         }
         if (tag.equals("img")) {
             String url = safeUrl(element, "src");
+            String formula = equationImage(url, element.attr("alt"));
+            if (formula != null) {
+                return "$" + formula + "$";
+            }
             return url.isEmpty() ? escape(element.attr("alt"))
                     : "![" + escape(element.attr("alt")) + "](" + url + ")";
         }

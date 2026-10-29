@@ -2,6 +2,7 @@ package com.ymcloud.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.common.exception.problem.ProblemException;
+import com.ymcloud.common.exception.problem.RemoteProblemConnectionException;
 import com.ymcloud.common.exception.problem.RemoteProblemHttpException;
 import com.ymcloud.core.security.service.PermissionService;
 import com.ymcloud.pojo.dto.admin.RemoteProblemDTO;
@@ -9,6 +10,7 @@ import com.ymcloud.pojo.vo.admin.RemoteProblemVO;
 import com.ymcloud.web.controller.admin.problem.AdminRemoteProblemController;
 import com.ymcloud.web.remote.LuoguProblemProvider;
 import com.ymcloud.web.remote.RemoteProblemProvider;
+import com.ymcloud.web.remote.RemoteProblemImages;
 import com.ymcloud.web.remote.RemoteProblemHttpClient;
 import com.ymcloud.web.service.admin.RemoteProblemService;
 import com.ymcloud.web.service.admin.impl.RemoteProblemServiceImpl;
@@ -122,9 +124,12 @@ class RemoteProblemTest {
             server.verify();
         }
         server.reset();
+        IOException timeout = new IOException("timeout");
         server.expect(requestTo("https://www.luogu.com.cn/problem/P1002"))
-                .andRespond(withException(new IOException("timeout")));
-        assertEquals(503, assertThrows(ProblemException.class, () -> provider.fetch("P1002")).getCode());
+                .andRespond(withException(timeout));
+        var connectionFailure = assertThrows(RemoteProblemConnectionException.class, () -> provider.fetch("P1002"));
+        assertEquals(503, connectionFailure.getCode());
+        assertSame(timeout, connectionFailure.getCause().getCause());
         server.verify();
         server.reset();
         assertThrows(ProblemException.class, () -> provider.fetch("https://localhost"));
@@ -144,11 +149,14 @@ class RemoteProblemTest {
         when(other.fetch("A1")).thenReturn(draft);
         RemoteProblemServiceImpl service = new RemoteProblemServiceImpl();
         ReflectionTestUtils.setField(service, "providers", List.of(provider(), other));
+        RemoteProblemImages images = mock(RemoteProblemImages.class);
+        ReflectionTestUtils.setField(service, "images", images);
         RemoteProblemDTO request = request("other", "A1");
         assertSame(draft, service.fetch(request));
         assertEquals(400, assertThrows(ProblemException.class,
                 () -> service.fetch(request("unknown", "P1002"))).getCode());
         verify(other).fetch("A1");
+        verify(images).importImages(draft);
     }
 
     /**
