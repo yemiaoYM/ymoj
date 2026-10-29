@@ -98,7 +98,7 @@ async function main() {
     const seaweed = rowForKey('seaweedfs');
     assert.equal(await seaweed.count(), 1, 'Real SeaweedFS configuration must match exactly one identifier cell.');
     assert.ok(await seaweed.getByText('当前默认', { exact: true }).isVisible());
-    for (const key of ['minio', 'aliyun', 's3']) {
+    for (const key of ['silo', 'aliyun', 's3']) {
       await assertPendingConfiguration(rowForKey(key));
     }
     checks.push('pending-provider-examples-and-disabled-actions');
@@ -131,7 +131,7 @@ async function main() {
         .filter(tag => tag.textContent.trim() === '当前默认').length === 1);
       assert.equal(await page.getByText('当前默认', { exact: true }).count(), 1,
         'Fresh-install list must display exactly one current default.');
-      for (const key of ['minio', 'seaweedfs', 'aliyun', 's3']) {
+      for (const key of ['silo', 'seaweedfs', 'aliyun', 's3']) {
         await assertPendingConfiguration(rowForKey(key));
       }
       await page.screenshot({ path: path.join(output, 'storage-fresh-install.png'), fullPage: true, animations: 'disabled' });
@@ -170,13 +170,13 @@ async function main() {
     checks.push('local-first-no-source-column-fixed-tab-layout');
     checks.push('referenced-locator-disabled-and-credentials-not-returned');
 
-    await rowForKey('minio').getByRole('button', { name: '配置', exact: true }).click();
+    await rowForKey('silo').getByRole('button', { name: '配置', exact: true }).click();
     await dialog.waitFor();
-    await dialog.getByText('配置 MinIO', { exact: true }).waitFor();
+    await dialog.getByText('配置 Silo', { exact: true }).waitFor();
     const inputFor = label => dialog.locator('.el-form-item').filter({ hasText: label }).locator('input');
-    assert.equal(await inputFor('配置名称').inputValue(), 'MinIO');
-    assert.equal(await inputFor('配置标识').inputValue(), 'minio');
-    assert.ok(await dialog.locator('.el-form-item').filter({ hasText: '服务商' }).getByText('MinIO', { exact: true }).isVisible());
+    assert.equal(await inputFor('配置名称').inputValue(), 'Silo');
+    assert.equal(await inputFor('配置标识').inputValue(), 'silo');
+    assert.ok(await dialog.locator('.el-form-item').filter({ hasText: '服务商' }).getByText('Silo', { exact: true }).isVisible());
     for (const [label, placeholder] of [
       ['连接地址', 'http://127.0.0.1:9000'],
       ['公开文件桶', '例如 ymcloud-public'],
@@ -208,7 +208,7 @@ async function main() {
       page.off('request', recordConfigWrite);
     }
     await dialog.getByRole('button', { name: '取消', exact: true }).click();
-    checks.push('minio-example-new-mode-empty-fields-placeholder-and-no-post');
+    checks.push('silo-example-new-mode-empty-fields-placeholder-and-no-post');
 
     await page.getByRole('button', { name: '新增配置', exact: true }).click();
     await dialog.waitFor();

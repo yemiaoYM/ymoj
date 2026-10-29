@@ -114,6 +114,8 @@ export type UserProfile = {
  * 提交表单
  */
 export type SubmissionTableVO = {
+  /** 当前执行标识，历史提交为 null */
+  executionId: string | null;
   /** 提交 ID，来自 submission 表 */
   submissionId: number;
   /** 题目标题 */

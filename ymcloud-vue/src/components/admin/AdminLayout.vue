@@ -109,9 +109,12 @@ onBeforeUnmount(() => media.removeEventListener('change', onViewportChange));
   background: #eff3f5;
 }
 /* 后台列表沿用用户、题目列表的表头；列对齐仍由 el-table-column 决定。 */
+.admin-main :deep(.el-table) {
+  --el-table-header-bg-color: #f8f8f9;
+}
 .admin-main :deep(.el-table__header-wrapper th) {
   word-break: break-word;
-  background-color: #f8f8f9;
+  background-color: var(--el-table-header-bg-color);
   color: #515a6e;
   height: 40px;
   font-size: 13px;

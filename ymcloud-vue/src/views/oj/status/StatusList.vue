@@ -95,15 +95,7 @@
             </el-table-column>
             <el-table-column prop="status" label="状态" min-width="180">
               <template #default="{ row }">
-                <el-tag
-                  :type="getStatusType(row.status).tag"
-                  effect="dark"
-                  size="large"
-                  disable-transitions
-                  round
-                >
-                  {{ row.status }}
-                </el-tag>
+                <SubmissionStatus :submission="row" @changed="pushRouter({ pageNo })" />
               </template>
             </el-table-column>
             <el-table-column prop="score" label="分数">
@@ -185,6 +177,7 @@
 
 <script setup lang="ts">
 //import
+import SubmissionStatus from '@/components/oj/SubmissionStatus.vue';
 import AsyncSwitch from '@/components/common/AsyncSwitch.vue';
 import AsyncSelect from '@/components/common/AsyncSelect.vue';
 import { Search, Refresh } from "@element-plus/icons-vue";
@@ -193,7 +186,6 @@ import { ElMessage } from "element-plus";
 import { useRouter, useRoute } from "vue-router";
 import type { SubmissionTableVO } from "@/type/types";
 import {
-  getStatusType,
   getScoreType,
   formatSubmissionMemory,
   formatSubmissionTime,

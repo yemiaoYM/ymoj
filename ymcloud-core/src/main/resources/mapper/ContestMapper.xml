@@ -42,14 +42,14 @@
             FROM first_ac
             GROUP BY display_id
         ),
-        -- 错误次数统计：若有 first_ac 则统计 first_ac 之前的非 AC，否则统计全部非 AC
+        -- 错误次数统计：排除等待及执行中状态，重评期间不增加错误次数
         error_cnt AS (
             SELECT
             j.user_id,
             j.display_id,
             SUM(CASE
-                WHEN fa.first_ac_time IS NULL THEN (CASE WHEN j.status != 0 THEN 1 ELSE 0 END)
-                WHEN j.status != 0 AND j.created_time &lt; fa.first_ac_time THEN 1
+                WHEN fa.first_ac_time IS NULL THEN (CASE WHEN j.status NOT IN (0, 5, 6, 7, 9) THEN 1 ELSE 0 END)
+                WHEN j.status NOT IN (0, 5, 6, 7, 9) AND j.created_time &lt; fa.first_ac_time THEN 1
                 ELSE 0
             END) AS error_num
             FROM jc j
@@ -185,14 +185,14 @@
             FROM first_ac
             GROUP BY display_id
         ),
-        -- 错误次数统计：若有 first_ac 则统计 first_ac 之前的非 AC，否则统计全部非 AC
+        -- 错误次数统计：排除等待及执行中状态，重评期间不增加错误次数
         error_cnt AS (
             SELECT
                 j.user_id,
                 j.display_id,
                 SUM(CASE
-                WHEN fa.first_ac_time IS NULL THEN (CASE WHEN j.status != 0 THEN 1 ELSE 0 END)
-                WHEN j.status != 0 AND j.created_time &lt; fa.first_ac_time THEN 1
+                WHEN fa.first_ac_time IS NULL THEN (CASE WHEN j.status NOT IN (0, 5, 6, 7, 9) THEN 1 ELSE 0 END)
+                WHEN j.status NOT IN (0, 5, 6, 7, 9) AND j.created_time &lt; fa.first_ac_time THEN 1
                 ELSE 0
                 END) AS error_num
             FROM jc j

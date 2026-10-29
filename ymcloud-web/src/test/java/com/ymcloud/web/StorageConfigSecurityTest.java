@@ -186,6 +186,54 @@ class StorageConfigSecurityTest {
         verify(tester).test(any());
     }
 
+    /**
+     * Silo 配置保存加密凭据，测试当前版本后才可启用，列表保留服务商标识
+     */
+    @Test
+    void siloConfigurationUsesExistingTestAndActivationWorkflow() {
+        StorageConfigDTO request = dto();
+        request.setKey("silo");
+        request.setName("Silo");
+        request.setProvider("silo");
+        service.create(request);
+        ArgumentCaptor<StorageConfig> captured = ArgumentCaptor.forClass(StorageConfig.class);
+        verify(catalog).save(captured.capture(), eq(false));
+        StorageConfig config = captured.getValue();
+        assertEquals("silo", config.getProvider());
+        assertEquals("secret-value", cipher.decrypt("silo", "secretKey", config.getEncryptedSecretKey()));
+        when(catalog.find("silo")).thenReturn(config);
+        when(catalog.list()).thenReturn(List.of(config));
+        when(catalog.profile(config)).thenReturn(remoteProfile());
+        assertThrows(FileException.class, () -> service.activate("silo"));
+        service.test("silo");
+        verify(tester).test(any());
+        assertEquals(config.getRevision(), config.getTestedRevision());
+        service.activate("silo");
+        verify(catalog).activate(any(), eq("silo"));
+        assertEquals("silo", service.list().stream().filter(row -> "silo".equals(row.getKey()))
+                .findFirst().orElseThrow().getProvider());
+    }
+
+    /**
+     * YAML 中的 Silo 与历史 MinIO 配置继续独立定位，轮换旧凭据不会更改旧文件标识
+     */
+    @Test
+    void siloAndLegacyMinioYamlProfilesKeepTheirIdentity() {
+        properties.getProfiles().put("silo", remoteProfile());
+        properties.getProfiles().put("minio", remoteProfile());
+        var listed = service.list();
+        assertEquals("silo", listed.stream().filter(row -> "silo".equals(row.getKey()))
+                .findFirst().orElseThrow().getProvider());
+        assertEquals("minio", listed.stream().filter(row -> "minio".equals(row.getKey()))
+                .findFirst().orElseThrow().getProvider());
+        service.test("silo");
+        ArgumentCaptor<StorageProperties.Profile> tested = ArgumentCaptor.forClass(StorageProperties.Profile.class);
+        verify(tester).test(tested.capture());
+        assertEquals("s3", tested.getValue().getType());
+        assertTrue(tested.getValue().isPathStyle());
+        assertEquals("test-private", tested.getValue().getPrivateBucket());
+    }
+
     @Test
     void activeUpdateFailureDoesNotPersistCandidate() {
         properties.getProfiles().put("minio", remoteProfile());

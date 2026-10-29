@@ -14,6 +14,9 @@ import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
+import com.ymcloud.core.web.dao.ContestEntityService;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.springframework.core.io.ClassPathResource;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
@@ -35,6 +38,8 @@ import com.ymcloud.pojo.contract.judge.JudgeVerdict;
 import com.ymcloud.pojo.contract.judge.TestCaseResult;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
+import com.ymcloud.pojo.dto.SubmissionStatusDTO;
+import com.ymcloud.common.exception.submission.SubmissionException;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeDispatch;
 import com.ymcloud.pojo.entity.Problem;
@@ -622,6 +627,277 @@ class JudgeDispatchDatabaseIT {
         }
     }
 
+    /**
+     * 重评读取当前配置，清除旧结果和 AC，晚到旧结果不能覆盖新执行
+     */
+    @Test
+    void rejudgeUsesCurrentSnapshotAndDiscardsPreviousResults() {
+        JudgeDispatch old = formal(800L);
+        results.receive(accepted(old));
+        LocalDateTime createdTime = judges.getById(800L).getCreatedTime();
+        jdbc.update("INSERT INTO test_data_version (id,problem_id,manifest,manifest_sha256,created_time) "
+                + "VALUES (88,10,'{}',?,CURRENT_TIMESTAMP)", "cd".repeat(32));
+        jdbc.update("UPDATE problem SET time_limit=2345,memory_limit=1048576 WHERE id=10");
+        jdbc.update("UPDATE language SET version='rejudge-current' WHERE name='Python'");
+        when(context.getBean(TestDataService.class).getCurrentVersion(10L)).thenReturn(88L);
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
+            service.rejudge(800L, old.getExecutionId());
+        }
+        Judge judge = judges.getById(800L);
+        JudgeDispatch current = dispatches.lambdaQuery().eq(JudgeDispatch::getSubmissionId, 800L).one();
+        JudgeTask task = codec.task(current.getTaskPayload());
+        assertEquals(800L, task.getSubmissionId());
+        assertNotEquals(old.getExecutionId(), task.getExecutionId());
+        assertEquals(88L, task.getTestDataVersionId());
+        assertEquals("cd".repeat(32), task.getManifestSha256());
+        assertEquals(2345L, task.getTimeLimit());
+        assertEquals(1048576L, task.getMemoryLimit());
+        assertEquals("print(1)", task.getCode());
+        assertEquals("Python", task.getLanguageConfig().getName());
+        assertEquals("rejudge-current", task.getLanguageConfig().getVersion());
+        assertEquals(createdTime, judge.getCreatedTime());
+        assertEquals(2L, judge.getUserId());
+        assertEquals(JudgeStatus.STATUS_PENDING, judge.getStatus());
+        assertNull(judge.getScore());
+        assertNull(judge.getTime());
+        assertNull(judge.getMemory());
+        assertNull(judge.getErrorMessage());
+        assertEquals(0, count("judge_case"));
+        assertEquals(0, count("user_acproblem"));
+        results.receive(accepted(old));
+        assertEquals(JudgeStatus.STATUS_PENDING, judges.getById(800L).getStatus());
+        results.receive(accepted(current));
+        assertEquals(2, count("judge_case"));
+        assertEquals(1, count("user_acproblem"));
+    }
+
+    /**
+     * 同一原执行的并发重评最多创建一次新执行
+     * @throws Exception 并发任务失败时向测试框架报告
+     */
+    @Test
+    void concurrentRejudgeCommandsCreateOneExecution() throws Exception {
+        JudgeDispatch old = formal(801L);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<Boolean>> attempts = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                attempts.add(executor.submit(() -> {
+                    start.await();
+                    try (MockedStatic<SecurityUtils> security = superAdmin()) {
+                        service.rejudge(801L, old.getExecutionId());
+                        return true;
+                    } catch (SubmissionException e) {
+                        assertEquals(409, e.getCode());
+                        return false;
+                    }
+                }));
+            }
+            start.countDown();
+            int successes = 0;
+            for (Future<Boolean> attempt : attempts) {
+                if (attempt.get(15, TimeUnit.SECONDS)) {
+                    successes++;
+                }
+            }
+            assertEquals(1, successes);
+            assertEquals(1, count("judge_dispatch"));
+            assertEquals(1, count("judge"));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /**
+     * 人工状态阻断旧 Worker，AC 撤回时保留同用户同题的其他 AC
+     */
+    @Test
+    void manualStatusReconcilesAcAndRejectsLateResults() {
+        JudgeDispatch first = formal(802L);
+        JudgeDispatch second = formal(803L);
+        results.receive(accepted(first));
+        results.receive(accepted(second));
+        SubmissionStatusDTO request = new SubmissionStatusDTO();
+        request.setExecutionId(first.getExecutionId());
+        request.setStatus(-1);
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
+            service.updateSubmissionStatus(802L, request);
+            assertThrows(SubmissionException.class, () -> service.updateSubmissionStatus(802L, request));
+            assertEquals(JudgeStatus.STATUS_WRONG_ANSWER, service.getStatus(802L).getStatus());
+            assertEquals(803L, jdbc.queryForObject("SELECT submission_id FROM user_acproblem", Long.class));
+            request.setExecutionId(second.getExecutionId());
+            service.updateSubmissionStatus(803L, request);
+        }
+        assertEquals(0, count("user_acproblem"));
+        assertEquals(0, count("judge_case"));
+        results.receive(accepted(first));
+        results.receive(accepted(second));
+        assertEquals(JudgeStatus.STATUS_WRONG_ANSWER, judges.getById(802L).getStatus());
+        assertEquals(1, judges.getById(802L).getIsManual());
+        request.setExecutionId(judges.getById(802L).getExecutionId());
+        request.setStatus(0);
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
+            service.updateSubmissionStatus(802L, request);
+        }
+        assertEquals(1, count("user_acproblem"));
+    }
+
+    /**
+     * 历史提交无任务箱也可重新评测，保留提交编号
+     */
+    @Test
+    void legacySubmissionCanBeRejudged() {
+        formal(804L);
+        jdbc.update("DELETE FROM judge_dispatch WHERE submission_id=804");
+        jdbc.update("UPDATE judge SET execution_id=NULL,test_data_version_id=NULL WHERE id=804");
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
+            service.rejudge(804L, null);
+            assertThrows(SubmissionException.class, () -> service.rejudge(804L, null));
+        }
+        assertEquals(1, count("judge"));
+        assertEquals(77L, judges.getById(804L).getTestDataVersionId());
+        assertNotNull(judges.getById(804L).getExecutionId());
+    }
+
+    /**
+     * 新任务写入失败时旧任务、测试点、提交和 AC 必须一起回滚
+     */
+    @Test
+    void rejudgeInsertFailureRestoresAllPreviousState() {
+        JudgeDispatch old = formal(805L);
+        results.receive(accepted(old));
+        jdbc.execute("CREATE TRIGGER fail_rejudge BEFORE INSERT ON judge_dispatch FOR EACH ROW "
+                + "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated failure'");
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
+            assertThrows(RuntimeException.class, () -> service.rejudge(805L, old.getExecutionId()));
+        } finally {
+            jdbc.execute("DROP TRIGGER fail_rejudge");
+        }
+        assertEquals(old.getExecutionId(), judges.getById(805L).getExecutionId());
+        assertEquals(JudgeStatus.STATUS_ACCEPTED, judges.getById(805L).getStatus());
+        assertEquals(old.getExecutionId(), dispatches.lambdaQuery().eq(JudgeDispatch::getSubmissionId, 805L).one().getExecutionId());
+        assertEquals(2, count("judge_case"));
+        assertEquals(1, count("user_acproblem"));
+    }
+
+    /**
+     * 当前测试数据不可用时拒绝重评，原评测状态和结果保持完整
+     */
+    @Test
+    void unavailableCurrentDataLeavesOriginalResultUntouched() {
+        JudgeDispatch old = formal(807L);
+        results.receive(accepted(old));
+        when(context.getBean(TestDataService.class).getCurrentVersion(10L)).thenReturn(null);
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
+            assertThrows(JudgeException.class, () -> service.rejudge(807L, old.getExecutionId()));
+        }
+        assertEquals(old.getExecutionId(), judges.getById(807L).getExecutionId());
+        assertEquals(JudgeStatus.STATUS_ACCEPTED, judges.getById(807L).getStatus());
+        assertEquals(2, count("judge_case"));
+        assertEquals(1, count("user_acproblem"));
+    }
+
+    /**
+     * 重评与旧结果并发时最终保持新执行，其他提交的 AC 完成仍能正确汇总
+     * @throws Exception 并发任务异常时向测试框架报告
+     */
+    @Test
+    void concurrentRejudgeAndResultsKeepCurrentExecutionAndAcRecord() throws Exception {
+        JudgeDispatch old = formal(808L);
+        JudgeDispatch other = formal(809L);
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?> rejudge = executor.submit(() -> {
+                start.await();
+                try (MockedStatic<SecurityUtils> security = superAdmin()) {
+                    service.rejudge(808L, old.getExecutionId());
+                }
+                return null;
+            });
+            Future<?> oldResult = executor.submit(() -> {
+                start.await();
+                results.receive(accepted(old));
+                return null;
+            });
+            Future<?> otherResult = executor.submit(() -> {
+                start.await();
+                results.receive(accepted(other));
+                return null;
+            });
+            start.countDown();
+            rejudge.get(15, TimeUnit.SECONDS);
+            oldResult.get(15, TimeUnit.SECONDS);
+            otherResult.get(15, TimeUnit.SECONDS);
+            assertEquals(JudgeStatus.STATUS_PENDING, judges.getById(808L).getStatus());
+            assertEquals(JudgeStatus.STATUS_ACCEPTED, judges.getById(809L).getStatus());
+            assertEquals(809L, jdbc.queryForObject("SELECT submission_id FROM user_acproblem", Long.class));
+            assertEquals(2, count("judge_case"));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /**
+     * 已结束的比赛提交仍可重评并按当前赛制计分，人工分数不污染普通 AC
+     */
+    @Test
+    void contestRejudgeAndManualScoresPreserveContestIdentity() {
+        JudgeDispatch old = formal(806L);
+        jdbc.update("INSERT INTO contest (id,title,start_time,end_time,mode,creator_id,creator_username) "
+                + "VALUES (98765,'Rejudge IT','2020-01-01','2020-01-02',1,1,'admin')");
+        try {
+            jdbc.update("UPDATE judge SET contest_id=98765,contest_problem_id=123,created_time='2020-01-01 01:00:00' WHERE id=806");
+            try (MockedStatic<SecurityUtils> security = superAdmin()) {
+                service.rejudge(806L, old.getExecutionId());
+                JudgeDispatch current = dispatches.lambdaQuery().eq(JudgeDispatch::getSubmissionId, 806L).one();
+                assertEquals(1, codec.task(current.getTaskPayload()).getMode());
+                assertEquals(123L, judges.getById(806L).getContestProblemId());
+                ContestEntityService contests = context.getBean(ContestEntityService.class);
+                var pendingRank = contests.getOIContestRank(new Page<>(1, 20), 98765L, null).getRecords().get(0);
+                assertEquals(0, pendingRank.getAc());
+                assertEquals(0, pendingRank.getTotalScore());
+                assertEquals(0, pendingRank.getSubmissionInfo().get("YMOJ-10").getErrorNum());
+                SubmissionStatusDTO request = new SubmissionStatusDTO();
+                request.setExecutionId(current.getExecutionId());
+                request.setStatus(8);
+                request.setScore(45);
+                service.updateSubmissionStatus(806L, request);
+                assertEquals(45, judges.getById(806L).getScore());
+                assertEquals(45, contests.getOIContestRank(new Page<>(1, 20), 98765L, null).getRecords().get(0).getTotalScore());
+                request.setExecutionId(judges.getById(806L).getExecutionId());
+                request.setStatus(0);
+                request.setScore(null);
+                service.updateSubmissionStatus(806L, request);
+                assertEquals(100, judges.getById(806L).getScore());
+                var acceptedRank = contests.getOIContestRank(new Page<>(1, 20), 98765L, null).getRecords().get(0);
+                assertEquals(1, acceptedRank.getAc());
+                assertEquals(100, acceptedRank.getTotalScore());
+                jdbc.update("UPDATE contest SET mode=0 WHERE id=98765");
+                service.rejudge(806L, judges.getById(806L).getExecutionId());
+                var pendingAcm = contests.getAcmContestRank(new Page<>(1, 20), 98765L, null).getRecords().get(0);
+                assertEquals(0, pendingAcm.getAc());
+                assertEquals(0, pendingAcm.getTotalTime());
+                assertEquals(0, pendingAcm.getSubmissionInfo().get("YMOJ-10").getErrorNum());
+            }
+            assertEquals(0, count("user_acproblem"));
+        } finally {
+            jdbc.update("DELETE FROM contest WHERE id=98765");
+        }
+    }
+
+    /**
+     * 为当前测试线程提供超级管理员身份
+     * @return 由调用方关闭的安全上下文桩
+     */
+    private MockedStatic<SecurityUtils> superAdmin() {
+        MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        security.when(SecurityUtils::getUserId).thenReturn(1L);
+        security.when(() -> SecurityUtils.isSuperAdmin(1L)).thenReturn(true);
+        return security;
+    }
+
     private JudgeDispatch formal(Long id) {
         String execution = UUID.randomUUID().toString();
         Judge judge = Judge.builder()
@@ -739,6 +1015,12 @@ class JudgeDispatchDatabaseIT {
             return new JdbcTemplate(dataSource);
         }
 
+        /**
+         * 装配隔离数据库访问及实际比赛排行 SQL
+         * @param dataSource 隔离测试数据库
+         * @return 使用项目枚举映射的会话工厂
+         * @throws Exception 会话工厂初始化失败时向测试框架报告
+         */
         @Bean
         SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
             MybatisConfiguration configuration = new MybatisConfiguration();
@@ -747,6 +1029,7 @@ class JudgeDispatchDatabaseIT {
             MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
             factory.setDataSource(dataSource);
             factory.setConfiguration(configuration);
+            factory.setMapperLocations(new ClassPathResource("mapper/ContestMapper.xml"));
             return factory.getObject();
         }
 

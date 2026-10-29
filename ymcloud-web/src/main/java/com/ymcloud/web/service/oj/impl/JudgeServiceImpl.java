@@ -13,12 +13,15 @@ import com.ymcloud.common.exception.contest.ContestProblemNotExistException;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
+import com.ymcloud.common.exception.submission.SubmissionException;
+import com.ymcloud.common.exception.submission.SubmissionNotExistException;
 import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
+import com.ymcloud.core.web.dao.JudgeCaseEntityService;
 import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.LanguageEntityService;
@@ -28,11 +31,13 @@ import com.ymcloud.pojo.contract.judge.JudgeLanguage;
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.dto.JudgeDTO;
+import com.ymcloud.pojo.dto.SubmissionStatusDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.ContestUser;
 import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.entity.JudgeCase;
 import com.ymcloud.pojo.entity.JudgeDispatch;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Problem;
@@ -50,6 +55,7 @@ import com.ymcloud.web.service.oj.JudgeService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -57,6 +63,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -115,6 +122,126 @@ public class JudgeServiceImpl implements JudgeService {
 
     @Autowired
     private JudgeDispatchIdAllocator allocator;
+
+    @Autowired
+    private JudgeCaseEntityService cases;
+
+    /**
+     * 使用当前题目及语言配置重新评测，不复用历史任务或测试点结果
+     * @param submissionId 原正式提交编号
+     * @param executionId 操作者读取到的执行标识，历史提交可为 null
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
+    public void rejudge(Long submissionId, String executionId) {
+        replaceExecution(submissionId, executionId, null);
+    }
+
+    /**
+     * 人工确定最终状态并终止原执行，防止旧 Worker 覆盖人工结果
+     * @param submissionId 原正式提交编号
+     * @param request 已校验的最终状态及部分分数
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
+    public void updateSubmissionStatus(Long submissionId, SubmissionStatusDTO request) {
+        replaceExecution(submissionId, request.getExecutionId(), request);
+    }
+
+    /**
+     * 在同一事务替换当前执行、清除旧结果并同步 AC 记录
+     * 调用方使用读已提交隔离，确保用户锁取得后读取最新 AC 汇总
+     * @param submissionId 原正式提交编号
+     * @param expectedExecutionId 预期原执行标识，用于持久化并发检查
+     * @param request 人工状态，null 表示创建新的评测任务
+     */
+    private void replaceExecution(Long submissionId, String expectedExecutionId, SubmissionStatusDTO request) {
+        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
+            throw new SubmissionException("仅超级管理员可以管理提交", HttpStatus.FORBIDDEN);
+        }
+        if (submissionId <= 0) {
+            throw new SubmissionException("提交编号无效", HttpStatus.BAD_REQUEST);
+        }
+        //与结果接收保持任务、提交的锁定顺序
+        JudgeDispatch previous = dispatches.lambdaQuery()
+                .eq(JudgeDispatch::getSubmissionId, submissionId)
+                .last("FOR UPDATE")
+                .one();
+        Judge judge = judges.lambdaQuery()
+                .eq(Judge::getId, submissionId)
+                .last("FOR UPDATE")
+                .one();
+        if (judge == null) {
+            throw new SubmissionNotExistException();
+        }
+        if (!Objects.equals(judge.getExecutionId(), expectedExecutionId)) {
+            throw new SubmissionException("该提交已被操作，请刷新后重试", HttpStatus.CONFLICT);
+        }
+        Contest contest = null;
+        if (judge.getContestId() != 0) {
+            contest = contests.lambdaQuery()
+                    .eq(Contest::getId, judge.getContestId())
+                    .one();
+            if (contest == null) {
+                throw new ContestNotExistException();
+            }
+        }
+        JudgeTask task = null;
+        String executionId;
+        JudgeStatus status;
+        Integer score = null;
+        if (request == null) {
+            Problem problem = problems.lambdaQuery()
+                    .eq(Problem::getId, judge.getProblemId())
+                    .last("FOR UPDATE")
+                    .one();
+            if (problem == null) {
+                throw new ProblemNotExistException();
+            }
+            task = formalTask(problem, contest, judge.getLanguage(), judge.getCode());
+            task.setSubmissionId(submissionId);
+            executionId = task.getExecutionId();
+            status = JudgeStatus.STATUS_PENDING;
+        } else {
+            status = Arrays.stream(JudgeStatus.values())
+                    .filter(value -> value.getCode() == request.getStatus())
+                    .findFirst().orElseThrow();
+            if (status == JudgeStatus.STATUS_PARTIAL_ACCEPTED) {
+                score = request.getScore();
+            } else if (resolveScoringMode(contest).equals(JudgeConstants.OI)) {
+                score = status == JudgeStatus.STATUS_ACCEPTED ? 100 : 0;
+            }
+            executionId = UUID.randomUUID().toString();
+        }
+        //移除旧任务快照和结果，发布器及旧消息都不能再命中旧执行
+        if (previous != null && !dispatches.lambdaUpdate()
+                .eq(JudgeDispatch::getId, previous.getId())
+                .remove()) {
+            throw new JudgeException("旧评测任务清理失败");
+        }
+        cases.lambdaUpdate()
+                .eq(JudgeCase::getJudgeId, submissionId)
+                .remove();
+        boolean updated = judges.lambdaUpdate()
+                .eq(Judge::getId, submissionId)
+                .set(Judge::getExecutionId, executionId)
+                .set(Judge::getTestDataVersionId, task == null ? judge.getTestDataVersionId() : task.getTestDataVersionId())
+                .set(Judge::getStatus, status)
+                .set(Judge::getScore, score)
+                .set(Judge::getTime, null)
+                .set(Judge::getMemory, null)
+                .set(Judge::getErrorMessage, null)
+                .set(Judge::getJudgeServer, null)
+                .set(Judge::getIsManual, request == null ? 0 : 1)
+                .update();
+        if (!updated) {
+            throw new JudgeException("提交状态保存失败");
+        }
+        results.refreshAccepted(judge);
+        if (task != null) {
+            enqueue(task, judge.getUserId());
+        }
+    }
 
     /**
      * 版本读取持有题目行锁，提交记录和固定任务快照在同一事务提交。
@@ -203,10 +330,45 @@ public class JudgeServiceImpl implements JudgeService {
      */
     private Long createSubmission(JudgeDTO request, User user, Problem problem,
                                   Contest contest, ContestProblem contestProblem) {
+        JudgeTask task = formalTask(problem, contest, request.getLanguage(), request.getCode());
+        enqueue(task, user.getId());
+        Judge judge = Judge.builder()
+                .id(task.getSubmissionId())
+                .problemId(problem.getId())
+                .testDataVersionId(task.getTestDataVersionId())
+                .executionId(task.getExecutionId())
+                .problemTitle(contestProblem == null ? problem.getTitle() : contestProblem.getDisplayTitle())
+                .displayId(contestProblem == null ? problem.getProblemId() : contestProblem.getDisplayId())
+                .userId(user.getId())
+                .username(user.getUsername())
+                .language(task.getLanguageConfig().getName())
+                .status(JudgeStatus.STATUS_PENDING)
+                .code(request.getCode())
+                .codeLength(request.getCode().length())
+                .contestId(contest == null ? 0L : contest.getId())
+                .contestProblemId(contestProblem == null ? 0L : contestProblem.getId())
+                .judgeServer(JudgeConstants.LOCAL_JUDGE_SERVER)
+                .ip(IpUtils.getIpAddr())
+                .build();
+        if (!judges.save(judge)) {
+            throw new JudgeException("提交失败，请稍后再试");
+        }
+        return judge.getId();
+    }
+
+    /**
+     * 新提交和重新评测共用当前题目、语言与测试版本的任务快照
+     * @param problem 当前题目
+     * @param contest 所属比赛，普通提交为 null
+     * @param languageName 原提交或新提交选择的语言
+     * @param code 待评测源代码
+     * @return 具有新执行标识的正式任务，尚未分配提交编号
+     */
+    private JudgeTask formalTask(Problem problem, Contest contest, String languageName, String code) {
         if (!ProblemConstants.JUDGE_MODE_DEFAULT.equals(problem.getJudgeMode())) {
             throw new JudgeException("该题目的判题方式尚未支持", HttpStatus.BAD_REQUEST);
         }
-        Language language = requireLanguage(request.getLanguage());
+        Language language = requireLanguage(languageName);
         validateResources(problem.getTimeLimit(), problem.getMemoryLimit());
         Long versionId = testData.getCurrentVersion(problem.getId());
         if (versionId == null || versionId <= 0) {
@@ -221,7 +383,7 @@ public class JudgeServiceImpl implements JudgeService {
             throw new JudgeException("题目测试数据版本清单无效");
         }
         String executionId = UUID.randomUUID().toString();
-        JudgeTask task = newTask(executionId, language, request.getCode());
+        JudgeTask task = newTask(executionId, language, code);
         task.setStrategy(JudgeDispatchState.FORMAL);
         task.setProblemId(problem.getId());
         task.setTestDataVersionId(versionId);
@@ -229,29 +391,7 @@ public class JudgeServiceImpl implements JudgeService {
         task.setTimeLimit(problem.getTimeLimit());
         task.setMemoryLimit(problem.getMemoryLimit());
         task.setMode(resolveScoringMode(contest));
-        enqueue(task, user.getId());
-        Judge judge = Judge.builder()
-                .id(task.getSubmissionId())
-                .problemId(problem.getId())
-                .testDataVersionId(versionId)
-                .executionId(executionId)
-                .problemTitle(contestProblem == null ? problem.getTitle() : contestProblem.getDisplayTitle())
-                .displayId(contestProblem == null ? problem.getProblemId() : contestProblem.getDisplayId())
-                .userId(user.getId())
-                .username(user.getUsername())
-                .language(language.getName())
-                .status(JudgeStatus.STATUS_PENDING)
-                .code(request.getCode())
-                .codeLength(request.getCode().length())
-                .contestId(contest == null ? 0L : contest.getId())
-                .contestProblemId(contestProblem == null ? 0L : contestProblem.getId())
-                .judgeServer(JudgeConstants.LOCAL_JUDGE_SERVER)
-                .ip(IpUtils.getIpAddr())
-                .build();
-        if (!judges.save(judge)) {
-            throw new JudgeException("提交失败，请稍后再试");
-        }
-        return judge.getId();
+        return task;
     }
 
     /**
@@ -376,9 +516,9 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 在提交事务中分配 ID 并保存完整任务快照，提交后再更新缓存。
-     * @param task 已验证的任务，回填提交 ID
-     * @param userId 从安全上下文取得的操作者 ID
+     * 在提交事务中保存完整任务，新提交分配编号，重评保留原编号
+     * @param task 已验证的任务，首次提交时回填编号，重评时已有编号
+     * @param userId 提交所属用户编号，重评时仍为原作者
      */
     private void enqueue(JudgeTask task, Long userId) {
         if (!Objects.equals(task.getMode(), JudgeConstants.ACM)
@@ -401,7 +541,12 @@ public class JudgeServiceImpl implements JudgeService {
         dispatch.setNextAttemptTime(now);
         dispatch.setDeadlineTime(LocalDateTime.ofInstant(
                 Instant.ofEpochMilli(task.getDeadlineEpochMs()), ZoneOffset.UTC));
-        Long submissionId = allocator.reserve(dispatch);
+        Long submissionId = task.getSubmissionId();
+        if (submissionId == null) {
+            submissionId = allocator.reserve(dispatch);
+        } else if (!dispatches.save(dispatch)) {
+            throw new JudgeException("重新评测任务创建失败");
+        }
         task.setSubmissionId(submissionId);
         dispatch.setSubmissionId(submissionId);
         try {
@@ -426,7 +571,7 @@ public class JudgeServiceImpl implements JudgeService {
     /**
      * 仅在业务事务提交成功后记录创建成功，避免回滚任务出现在开发日志中。
      * @param task 已持久化任务
-     * @param userId 可信操作者 ID
+     * @param userId 提交所属用户编号
      */
     private void logSubmissionAfterCommit(JudgeTask task, Long userId) {
         Runnable record = () -> log.info("创建判题任务成功，提交编号：{}，执行编号：{}，用户编号：{}，题目编号：{}，数据版本：{}，策略：{}，语言：{}",

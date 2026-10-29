@@ -229,10 +229,15 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         return profile;
     }
 
+    /**
+     * 校验存储配置入口，保留历史 MinIO 配置的维护能力
+     * @param dto 待保存的配置及凭据
+     * @param key 新建或编辑的配置标识
+     */
     private void validateDto(StorageConfigDTO dto, String key) {
         StorageConfigValidation.validateKey(key);
         if (dto == null || (dto.getKey() != null && !key.equals(dto.getKey())) || "local".equals(key)
-                || !Set.of("seaweedfs", "minio", "aliyun", "s3").contains(String.valueOf(dto.getProvider()))
+                || !Set.of("seaweedfs", "silo", "minio", "aliyun", "s3").contains(String.valueOf(dto.getProvider()))
                 || !bounded(dto.getName(), 100) || !bounded(dto.getEndpoint(), 512)
                 || !bounded(dto.getRegion(), 64) || !bounded(dto.getPublicBucket(), 128)
                 || !bounded(dto.getPrivateBucket(), 128) || dto.getPathStyle() == null
@@ -261,6 +266,12 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         return dto;
     }
 
+    /**
+     * 根据驱动及配置标识展示预置服务商，未知 S3 配置保留通用类型
+     * @param key 配置标识，包含历史 MinIO 标识
+     * @param profile 配置文件中的存储连接
+     * @return 页面使用的服务商标识
+     */
     private String yamlProvider(String key, StorageProperties.Profile profile) {
         if ("local".equals(profile.getType())) {
             return "local";
@@ -268,7 +279,7 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         if ("oss".equals(profile.getType())) {
             return "aliyun";
         }
-        return Set.of("seaweedfs", "minio").contains(key) ? key : "s3";
+        return Set.of("seaweedfs", "silo", "minio").contains(key) ? key : "s3";
     }
 
     private StorageConfigVO view(String key, String name, String provider, StorageProperties.Profile profile,

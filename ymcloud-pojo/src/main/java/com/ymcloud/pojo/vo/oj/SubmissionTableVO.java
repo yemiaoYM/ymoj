@@ -14,6 +14,9 @@ import java.time.LocalDateTime;
  */
 @Data
 public class SubmissionTableVO {
+    /** 当前执行标识，历史提交为 null，用于管理操作的并发检查 */
+    private String executionId;
+
     /**
      * 提交ID，来自 judge 表
      */

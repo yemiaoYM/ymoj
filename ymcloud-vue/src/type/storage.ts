@@ -38,7 +38,7 @@ export type FilePageVO = {
   total: number;
 };
 
-export type StorageProvider = 'seaweedfs' | 'minio' | 'aliyun' | 's3' | 'local';
+export type StorageProvider = 'seaweedfs' | 'silo' | 'minio' | 'aliyun' | 's3' | 'local';
 
 export type StorageConfigDTO = {
   key: string;

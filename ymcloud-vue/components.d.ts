@@ -102,6 +102,7 @@ declare module 'vue' {
     SidebarItem: typeof import('./src/components/admin/SidebarItem.vue')['default']
     SiteFiling: typeof import('./src/components/oj/SiteFiling.vue')['default']
     SubmissionChart: typeof import('./src/components/admin/SubmissionChart.vue')['default']
+    SubmissionStatus: typeof import('./src/components/oj/SubmissionStatus.vue')['default']
     XFlex: typeof import('./src/components/common/XFlex.vue')['default']
   }
   export interface GlobalDirectives {

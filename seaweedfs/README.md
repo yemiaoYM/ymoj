@@ -1,6 +1,6 @@
 # SeaweedFS
 
-本目录为没有对象存储服务的用户提供可选 Docker 安装工具。OJ 默认使用本地 `files/public`、`files/private`；已有 SeaweedFS、MinIO 或 OSS 的用户直接在 OJ 后台添加连接，无需运行安装脚本。
+本目录为没有对象存储服务的用户提供可选 Docker 安装工具。OJ 默认使用本地 `files/public`、`files/private`；已有 SeaweedFS、Silo 或 OSS 的用户直接在 OJ 后台添加连接，无需运行安装脚本。Silo 使用现有 S3 驱动，官方项目为 [pgsty/silo](https://github.com/pgsty/silo)。历史 MinIO 配置仍可读取和维护，已有文件的存储标识保持不变；服务端迁移按 Silo 官方迁移说明另行执行。
 
 目录只保留这份说明、`compose.yml`、Linux 入口 `manage.sh` 和 Windows 入口 `install.ps1`。`.env`、`secrets/` 是首次运行生成的私有文件，不提交 Git。开发测试工具位于 `ymcloud-web/src/test/scripts/storage/`。
 

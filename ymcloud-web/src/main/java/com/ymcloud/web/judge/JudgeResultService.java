@@ -313,7 +313,8 @@ public class JudgeResultService {
     }
 
     /**
-     * 每个新提交绑定一次执行，终态与测试点原子提交；重复结果由任务行锁和终态检查拒绝。
+     * 每次执行只保存一次终态测试点，重评入口在切换执行时清理旧测试点。
+     * 终态与测试点原子提交，重复结果由任务行锁和终态检查拒绝。
      * 不先删除空的索引范围，避免不同提交在 REPEATABLE READ 下取得重叠间隙锁后互相阻塞插入。
      * @param submissionId 正式提交 ID
      * @param results 测试点列表，可空或空列表
@@ -366,6 +367,47 @@ public class JudgeResultService {
                     .build();
             if (!accepted.save(record)) {
                 throw new JudgeException("用户通过记录保存失败");
+            }
+        }
+    }
+
+    /**
+     * 管理操作后按仍然有效的普通 AC 提交重建记录，比赛不进入普通 AC 统计
+     * 调用方在读已提交事务内完成提交修改，本方法与接收结果共用用户行锁
+     * @param judge 已修改提交的归属信息
+     */
+    public void refreshAccepted(Judge judge) {
+        if (!Objects.equals(judge.getContestId(), 0L)) {
+            return;
+        }
+        User user = users.lambdaQuery()
+                .eq(User::getId, judge.getUserId())
+                .last("FOR UPDATE")
+                .one();
+        if (user == null) {
+            throw new JudgeException("提交用户不存在，无法更新通过记录");
+        }
+        Judge remaining = judges.lambdaQuery()
+                .eq(Judge::getUserId, judge.getUserId())
+                .eq(Judge::getProblemId, judge.getProblemId())
+                .eq(Judge::getContestId, 0L)
+                .eq(Judge::getStatus, JudgeStatus.STATUS_ACCEPTED)
+                .orderByAsc(Judge::getId)
+                .last("LIMIT 1")
+                .one();
+        accepted.lambdaUpdate()
+                .eq(UserAcproblem::getUserId, judge.getUserId())
+                .eq(UserAcproblem::getProblemId, judge.getProblemId())
+                .remove();
+        if (remaining != null) {
+            UserAcproblem record = new UserAcproblem();
+            record.setSubmissionId(remaining.getId());
+            record.setUserId(remaining.getUserId());
+            record.setUsername(remaining.getUsername());
+            record.setProblemId(remaining.getProblemId());
+            record.setDisplayId(remaining.getDisplayId());
+            if (!accepted.save(record)) {
+                throw new JudgeException("通过记录更新失败");
             }
         }
     }

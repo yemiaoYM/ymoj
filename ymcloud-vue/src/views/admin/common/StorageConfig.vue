@@ -66,9 +66,9 @@
               <el-tag v-else :type="row.active ? 'success' : 'info'">{{ row.active ? '当前默认' : '备用' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" min-width="265" align="center" fixed="right">
+          <el-table-column label="操作" width="330" align="center" fixed="right">
             <template #default="{ row }">
-              <x-flex :size="0" justify="center">
+              <x-flex class="storage-actions" align="center" justify="center" :size="4" :wrap="false">
                 <el-button
                   v-if="canEdit(row)"
                   type="success"
@@ -178,6 +178,7 @@
                     :disabled="!!editingConfig || !!configuringExample"
                     @change="applyProviderPreset"
                   >
+                    <el-option v-if="form.provider === 'minio'" label="MinIO（历史配置）" value="minio" />
                     <el-option
                       v-for="item in providers"
                       :key="item.value"
@@ -233,7 +234,7 @@
                 </el-form-item>
                 <el-form-item v-if="form.provider !== 'aliyun'" label="路径式访问">
                   <el-switch v-model="form.pathStyle" :disabled="locatorReadOnly" aria-label="S3 路径式访问" />
-                  <div class="form-tip">SeaweedFS、MinIO 通常启用，AWS S3 通常关闭。</div>
+                  <div class="form-tip">SeaweedFS、Silo 通常启用，AWS S3 通常关闭。</div>
                 </el-form-item>
                 <el-form-item label="备注" class="grid-wide">
                   <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="255" show-word-limit />
@@ -282,14 +283,15 @@ const formRef = ref<FormInstance>();
 const settingsTab = ref('basic');
 const busyKey = ref('');
 const busyAction = ref('');
-const providers: { value: Exclude<StorageProvider, 'local'>; label: string }[] = [
-  { value: 'minio', label: 'MinIO' },
+const providers: { value: Exclude<StorageProvider, 'local' | 'minio'>; label: string }[] = [
+  { value: 'silo', label: 'Silo' },
   { value: 'seaweedfs', label: 'SeaweedFS' },
   { value: 'aliyun', label: '阿里云 OSS' },
   { value: 's3', label: '其他 S3 服务' },
 ];
 const providerPresets = {
   seaweedfs: { endpoint: 'http://127.0.0.1:18333', region: 'us-east-1', pathStyle: true },
+  silo: { endpoint: 'http://127.0.0.1:9000', region: 'us-east-1', pathStyle: true },
   minio: { endpoint: 'http://127.0.0.1:9000', region: 'us-east-1', pathStyle: true },
   aliyun: { endpoint: 'https://oss-cn-hangzhou.aliyuncs.com', region: 'cn-hangzhou', pathStyle: false },
   s3: { endpoint: 'https://s3.us-east-1.amazonaws.com', region: 'us-east-1', pathStyle: false },
@@ -367,7 +369,7 @@ const canOperate = (operation: string) => userStore.isSuperAdmin
 
 const providerLabel = (provider: StorageProvider) => provider === 'local'
   ? '本地存储'
-  : providers.find(item => item.value === provider)?.label || provider;
+  : provider === 'minio' ? 'MinIO（历史配置）' : providers.find(item => item.value === provider)?.label || provider;
 
 const configName = (row: StorageConfigVO) => row.provider === 'local' ? '本地存储' : row.name;
 
@@ -584,6 +586,14 @@ onMounted(loadConfigs);
 
 .card-title {
   color: var(--el-color-primary);
+}
+
+.storage-actions .el-button {
+  margin: 0;
+}
+
+.storage-actions > span {
+  display: flex;
 }
 
 .storage-description {
