@@ -1,6 +1,12 @@
 import request from "./request";
 import type { AxiosResponse } from 'axios';
 import type { AnnouncementPageQuery, AnnouncementPageResult } from '@/type/announcement';
+import type {
+  AdminContestProblemVO,
+  ContestProblemPageQuery,
+  AvailableProblemPageVO,
+  ContestResult,
+} from '@/type/contest';
 import type { TagDTO, TagClassificationDTO, TagClassification, TagsWithClassification, TagResult } from '@/type/tag';
 import type {
   LoginDTO,
@@ -1035,7 +1041,7 @@ export function cloneAdminContest(id: number, title: string, visibility: number,
  * @param contestId 比赛ID
  * @returns 比赛题目列表
  */
-export function getAdminContestProblems(contestId: number) {
+export function getAdminContestProblems(contestId: number): Promise<AxiosResponse<ContestResult<AdminContestProblemVO[]>>> {
   return request({
     url: `/admin/contest/${contestId}/problems`,
     method: "GET"
@@ -1045,10 +1051,13 @@ export function getAdminContestProblems(contestId: number) {
 /**
  * 获取可添加到比赛的题目列表（管理员）
  * @param contestId 比赛ID
- * @param params 查询参数
- * @returns 可添加的题目列表
+ * @param params 题目标题或题号、难度及分页条件
+ * @returns 排除比赛已有题目的分页结果
  */
-export function getAvailableProblemsForContest(contestId: number, params: any) {
+export function getAvailableProblemsForContest(
+  contestId: number,
+  params: ContestProblemPageQuery
+): Promise<AxiosResponse<ContestResult<AvailableProblemPageVO>>> {
   return request({
     url: `/admin/contest/${contestId}/available-problems`,
     method: "GET",
@@ -1059,10 +1068,10 @@ export function getAvailableProblemsForContest(contestId: number, params: any) {
 /**
  * 批量添加题目到比赛（管理员）
  * @param contestId 比赛ID
- * @param problemIds 题目ID列表
+ * @param problemIds 原题ID或原题ID列表
  * @returns 操作结果
  */
-export function addProblemsToContest(contestId: number, problemIds: number | number[]) {
+export function addProblemsToContest(contestId: number, problemIds: number | number[]): Promise<AxiosResponse<ContestResult<null>>> {
   return request({
     url: `/admin/contest/${contestId}/problems/${problemIds}`,
     method: "POST"
@@ -1070,16 +1079,20 @@ export function addProblemsToContest(contestId: number, problemIds: number | num
 }
 
 /**
- * 更新比赛题目信息（管理员）
+ * 更新比赛题目的标题和气球颜色（管理员），展示ID由调整顺序功能管理
  * @param contestId 比赛ID
- * @param problemId 题目ID
- * @param displayId 展示ID
+ * @param problemId 比赛题目关联ID
  * @param displayTitle 在比赛中显示的题目标题
  * @param color 气球颜色
  * @returns 操作结果
  */
-export function updateContestProblem(contestId: number, problemId: number, displayId: string, displayTitle: string, color: string) {
-  const params = { displayId, displayTitle, color };
+export function updateContestProblem(
+  contestId: number,
+  problemId: number,
+  displayTitle: string,
+  color: string
+): Promise<AxiosResponse<ContestResult<null>>> {
+  const params = { displayTitle, color };
   return request({
     url: `/admin/contest/${contestId}/problems/${problemId}`,
     method: "PUT",
@@ -1090,12 +1103,26 @@ export function updateContestProblem(contestId: number, problemId: number, displ
 /**
  * 从比赛中移除题目（管理员）
  * @param contestId 比赛ID
- * @param problemIds 题目ID列表
+ * @param problemIds 比赛题目关联ID或关联ID列表
  * @returns 操作结果
  */
-export function removeContestProblems(contestId: number, problemIds: number | number[]) {
+export function removeContestProblems(contestId: number, problemIds: number | number[]): Promise<AxiosResponse<ContestResult<null>>> {
   return request({
     url: `/admin/contest/${contestId}/problems/${problemIds}`,
     method: "DELETE"
+  })
+}
+
+/**
+ * 保存比赛题目的完整顺序（管理员）
+ * @param contestId 比赛ID
+ * @param ids 按目标顺序排列的完整比赛题目关联ID列表
+ * @returns 操作结果
+ */
+export function reorderContestProblems(contestId: number, ids: number[]): Promise<AxiosResponse<ContestResult<null>>> {
+  return request({
+    url: `/admin/contest/${contestId}/problem-order`,
+    method: "PUT",
+    data: ids
   })
 }

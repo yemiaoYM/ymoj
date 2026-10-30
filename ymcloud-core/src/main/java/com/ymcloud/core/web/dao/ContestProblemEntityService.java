@@ -4,12 +4,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.vo.oj.ContestProblemTableVO;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.core.web.dao
- * @ClassName: ContestProblemEntityService
  * @Author: Yemiao
  * @CreateTime: 2025-08-14  22:47
  * @Description: ContestProblemEntityService
@@ -23,5 +20,12 @@ public interface ContestProblemEntityService extends IService<ContestProblem> {
      * @return 比赛题目列表
      */
     List<ContestProblemTableVO> getContestProblemList(Long contestId, Long userId);
+
+    /**
+     * 一次更新指定比赛的题目展示编号，调用方已锁定比赛并校验完整集合
+     * @param contestId 比赛ID
+     * @param problems 非空的题目关联ID及目标展示编号列表
+     */
+    void updateDisplayIds(Long contestId, List<ContestProblem> problems);
 
 }

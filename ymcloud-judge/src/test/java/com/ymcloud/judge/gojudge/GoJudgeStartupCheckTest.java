@@ -13,6 +13,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.doReturn;
@@ -82,6 +83,29 @@ class GoJudgeStartupCheckTest {
         GoJudgeClient client = readyClient();
         doReturn(List.of(response("javac 21.0.1"))).when(client).execute(anyMap(), anyLong());
         assertThrows(GoJudgeException.class, () -> check(client).verify());
+    }
+
+    /**
+     * 旧版输出限制程序须阻止消费，并明确提示升级沙箱而非仅重启 Worker。
+     * @throws Exception 探针响应构造失败
+     */
+    @Test
+    void oldLauncherReportsExpectedAndActualVersionWithUpgradeAction() throws Exception {
+        GoJudgeClient client = readyClient();
+        doReturn(List.of(response("openjdk version \"17.0.19\"")),
+                 List.of(response("javac 17.0.19")),
+                 List.of(response("12.2.0")),
+                 List.of(response("12.2.0")),
+                 List.of(response("Python 3.11.2")),
+                 List.of(response("ymcloud-output-limit 1")))
+                .when(client).execute(anyMap(), anyLong());
+
+        GoJudgeException exception = assertThrows(GoJudgeException.class, () -> check(client).verify());
+
+        assertTrue(exception.getMessage().contains("预期匹配：ymcloud-output-limit 2"));
+        assertTrue(exception.getMessage().contains("实际输出：ymcloud-output-limit 1"));
+        assertTrue(exception.getMessage().contains("重新构建 go-judge 镜像并重建容器"));
+        verify(client, times(6)).execute(anyMap(), anyLong());
     }
 
     @Test

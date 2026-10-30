@@ -6,17 +6,19 @@ import ch.qos.logback.core.read.ListAppender;
 import com.alibaba.druid.pool.DruidDataSource;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ymcloud.common.exception.contest.ContestException;
 import com.ymcloud.common.exception.judge.JudgeException;
+import com.ymcloud.common.exception.submission.SubmissionException;
 import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.storage.TestDataService;
-import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.ContestEntityService;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import org.springframework.core.io.ClassPathResource;
+import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
@@ -37,13 +39,13 @@ import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
 import com.ymcloud.pojo.contract.judge.TestCaseResult;
 import com.ymcloud.pojo.dto.JudgeDTO;
-import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.dto.SubmissionStatusDTO;
-import com.ymcloud.common.exception.submission.SubmissionException;
+import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeDispatch;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.JudgeStatus;
+import com.ymcloud.web.controller.admin.contest.AdminContestController;
 import com.ymcloud.web.judge.JudgeDispatchIdAllocator;
 import com.ymcloud.web.judge.JudgeDispatchProperties;
 import com.ymcloud.web.judge.JudgeDispatchPublisher;
@@ -51,8 +53,12 @@ import com.ymcloud.web.judge.JudgeDispatchState;
 import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
+import com.ymcloud.web.service.admin.AdminContestService;
+import com.ymcloud.web.service.admin.impl.AdminContestServiceImpl;
+import com.ymcloud.web.service.common.PublicImageService;
 import com.ymcloud.web.service.oj.JudgeService;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
+import javax.sql.DataSource;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -70,6 +76,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.EncodedResource;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -77,6 +84,7 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
@@ -100,11 +108,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * @Author: Yemiao
@@ -206,6 +215,184 @@ class JudgeDispatchDatabaseIT {
         TestDataService testData = context.getBean(TestDataService.class);
         reset(testData, context.getBean(RedisCache.class));
         when(testData.getCurrentVersion(10L)).thenReturn(77L);
+    }
+
+    /**
+     * 验证重排状态及集合限制，编辑接口即使收到展示 ID 也只更新标题和颜色
+     * @throws Exception 编辑接口请求失败
+     */
+    @Test
+    void contestProblemOrderChecksStateAndMembership() throws Exception {
+        AdminContestService admin = context.getBean(AdminContestService.class);
+        jdbc.update("INSERT INTO contest (id,title,start_time,end_time,creator_id,creator_username) "
+                + "VALUES (98766,'Order IT','2099-01-01','2099-01-02',1,'admin')");
+        jdbc.update("INSERT INTO contest_problem (id,contest_id,problem_id,display_id,display_title,color) "
+                + "VALUES (987661,98766,10,'A','First','#123456'),(987662,98766,11,'B','Second','#654321')");
+        try {
+            long statementsBefore = prepared.getExecuteCount2();
+            admin.reorderProblems(98766L, List.of(987662L, 987661L));
+            assertEquals(4, prepared.getExecuteCount2() - statementsBefore,
+                         "重排仅执行锁定、提交检查、集合查询和一次批量更新");
+            assertEquals("A", jdbc.queryForObject("SELECT display_id FROM contest_problem WHERE id=987662", String.class));
+            assertEquals("First", jdbc.queryForObject("SELECT display_title FROM contest_problem WHERE id=987661", String.class));
+            assertThrows(ContestException.class, () -> admin.reorderProblems(98766L, List.of(987661L)));
+            assertThrows(ContestException.class, () -> admin.reorderProblems(98766L, List.of(987661L, 987661L)));
+            assertThrows(ContestException.class, () -> admin.reorderProblems(98766L, List.of(987661L, 999L)));
+            jdbc.update("UPDATE contest SET start_time='2020-01-01' WHERE id=98766");
+            assertThrows(ContestException.class, () -> admin.reorderProblems(98766L, List.of(987661L, 987662L)));
+            AdminContestController controller = new AdminContestController();
+            ReflectionTestUtils.setField(controller, "adminContestService", admin);
+            var mvc = MockMvcBuilders.standaloneSetup(controller).build();
+            mvc.perform(put("/admin/contest/98766/problems/987661")
+                    .param("displayId", "Z")
+                    .param("displayTitle", "Renamed")
+                    .param("color", "#234567"))
+                    .andExpect(status().isOk());
+            assertEquals("B", jdbc.queryForObject("SELECT display_id FROM contest_problem WHERE id=987661", String.class));
+            assertEquals("Renamed", jdbc.queryForObject("SELECT display_title FROM contest_problem WHERE id=987661", String.class));
+            assertEquals("#234567", jdbc.queryForObject("SELECT color FROM contest_problem WHERE id=987661", String.class));
+            admin.updateContestProblem(98766L, 987661L, "Renamed again", "#123456");
+            jdbc.update("UPDATE contest SET start_time='2099-01-01' WHERE id=98766");
+            formal(987660L);
+            jdbc.update("UPDATE judge SET contest_id=98766 WHERE id=987660");
+            assertThrows(ContestException.class, () -> admin.reorderProblems(98766L, List.of(987661L, 987662L)));
+            assertEquals("B", jdbc.queryForObject("SELECT display_id FROM contest_problem WHERE id=987661", String.class));
+        } finally {
+            jdbc.update("DELETE FROM contest_problem WHERE contest_id=98766");
+            jdbc.update("DELETE FROM contest WHERE id=98766");
+        }
+    }
+
+    /**
+     * 十五题重排仍仅执行一次写入，重复保存及其他比赛均不受影响
+     */
+    @Test
+    void contestProblemOrderUsesOneUpdateAtLimit() {
+        AdminContestService admin = context.getBean(AdminContestService.class);
+        jdbc.update("INSERT INTO contest (id,title,start_time,end_time,creator_id,creator_username) "
+                + "VALUES (98770,'Batch IT','2099-01-01','2099-01-02',1,'admin')");
+        List<Long> ids = new ArrayList<>();
+        List<Object> parameters = new ArrayList<>();
+        List<String> rows = new ArrayList<>();
+        for (int i = 0; i < 15; i++) {
+            ids.add(987700L + i);
+            rows.add("(?,98770,?,?,?)");
+            parameters.add(987700L + i);
+            parameters.add(1000 + i);
+            parameters.add(String.valueOf((char) ('A' + i)));
+            parameters.add("Problem " + i);
+        }
+        jdbc.update("INSERT INTO contest_problem (id,contest_id,problem_id,display_id,display_title) VALUES "
+                + String.join(",", rows), parameters.toArray());
+        jdbc.update("INSERT INTO contest_problem (id,contest_id,problem_id,display_id,display_title) "
+                + "VALUES (987715,98771,1000,'Z','Untouched')");
+        java.util.Collections.reverse(ids);
+        try {
+            long statementsBefore = prepared.getExecuteCount2();
+            admin.reorderProblems(98770L, ids);
+            assertEquals(4, prepared.getExecuteCount2() - statementsBefore);
+            assertEquals(ids, jdbc.queryForList("SELECT id FROM contest_problem WHERE contest_id=98770 ORDER BY display_id", Long.class));
+            assertEquals("O", jdbc.queryForObject("SELECT display_id FROM contest_problem WHERE id=987700", String.class));
+            assertEquals("Problem 0", jdbc.queryForObject("SELECT display_title FROM contest_problem WHERE id=987700", String.class));
+            assertEquals("Z", jdbc.queryForObject("SELECT display_id FROM contest_problem WHERE id=987715", String.class));
+            admin.reorderProblems(98770L, ids);
+            assertEquals(ids, jdbc.queryForList("SELECT id FROM contest_problem WHERE contest_id=98770 ORDER BY display_id", Long.class));
+        } finally {
+            jdbc.update("DELETE FROM contest_problem WHERE contest_id IN (98770,98771)");
+            jdbc.update("DELETE FROM contest WHERE id=98770");
+        }
+    }
+
+    /**
+     * 并发添加共享最后一个名额时只允许一次成功，不改变被拒绝题目的权限
+     * @throws Exception 并发任务执行失败时报告测试失败
+     */
+    @Test
+    void contestProblemLimitSerializesConcurrentAdds() throws Exception {
+        AdminContestService admin = context.getBean(AdminContestService.class);
+        jdbc.update("INSERT INTO contest (id,title,start_time,end_time,creator_id,creator_username) "
+                + "VALUES (98767,'Limit IT','2099-01-01','2099-01-02',1,'admin')");
+        for (int i = 0; i < 14; i++) {
+            jdbc.update("INSERT INTO contest_problem (contest_id,problem_id,display_id,display_title) VALUES (98767,?,?,?)",
+                        1000 + i, String.valueOf((char) ('A' + i)), "Existing");
+        }
+        jdbc.update("INSERT INTO problem (id,problem_id,title,judge_mode,visibility) VALUES (11,'LIMIT-11','Other','default',2)");
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<Boolean>> attempts = new ArrayList<>();
+            for (long id : List.of(10L, 11L)) {
+                attempts.add(executor.submit(() -> {
+                    start.await();
+                    try {
+                        admin.addProblemsToContest(98767L, List.of(id));
+                        return true;
+                    } catch (ContestException expected) {
+                        assertTrue(expected.getMessage().contains("15"));
+                        return false;
+                    }
+                }));
+            }
+            start.countDown();
+            int successful = 0;
+            for (Future<Boolean> attempt : attempts) {
+                if (attempt.get(10, TimeUnit.SECONDS)) {
+                    successful++;
+                }
+            }
+            assertEquals(1, successful);
+            assertEquals(15, jdbc.queryForObject("SELECT COUNT(*) FROM contest_problem WHERE contest_id=98767", Integer.class));
+            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM problem WHERE id IN (10,11) AND visibility=3", Integer.class));
+        } finally {
+            executor.shutdownNow();
+            jdbc.update("DELETE FROM contest_problem WHERE contest_id=98767");
+            jdbc.update("DELETE FROM contest WHERE id=98767");
+        }
+    }
+
+    /**
+     * 标题命中不能绕过难度条件或排除已添加题目的条件
+     */
+    @Test
+    void contestProblemSearchCombinesKeywordAndFilters() {
+        AdminContestService admin = context.getBean(AdminContestService.class);
+        jdbc.update("INSERT INTO contest (id,title,start_time,end_time,creator_id,creator_username) "
+                + "VALUES (98768,'Search IT','2099-01-01','2099-01-02',1,'admin')");
+        jdbc.update("INSERT INTO problem (id,problem_id,title,difficulty,judge_mode,visibility) "
+                + "VALUES (11,'FILTER-11','Isolated match',2,'default',2),(12,'FILTER-12','Isolated match',2,'default',3)");
+        jdbc.update("INSERT INTO contest_problem (contest_id,problem_id,display_id,display_title) VALUES (98768,12,'A','Added')");
+        try {
+            var query = new com.ymcloud.pojo.query.admin.AdminProblemPageQuery();
+            query.setKeyword("Isolated");
+            query.setDifficulty(2);
+            var page = admin.getAvailableProblems(98768L, query);
+            assertEquals(List.of(11L), page.getRecords().stream().map(Problem::getId).toList());
+        } finally {
+            jdbc.update("DELETE FROM contest_problem WHERE contest_id=98768");
+            jdbc.update("DELETE FROM contest WHERE id=98768");
+        }
+    }
+
+    /**
+     * 批量重排中途写入失败时回滚所有题号
+     */
+    @Test
+    void contestProblemOrderRollsBackAsOneTransaction() {
+        AdminContestService admin = context.getBean(AdminContestService.class);
+        jdbc.update("INSERT INTO contest (id,title,start_time,end_time,creator_id,creator_username) "
+                + "VALUES (98769,'Rollback IT','2099-01-01','2099-01-02',1,'admin')");
+        jdbc.update("INSERT INTO contest_problem (id,contest_id,problem_id,display_id,display_title) "
+                + "VALUES (987691,98769,10,'A','One'),(987692,98769,11,'B','Two')");
+        jdbc.execute("CREATE TRIGGER contest_order_it_fail BEFORE UPDATE ON contest_problem FOR EACH ROW "
+                + "BEGIN IF OLD.id=987692 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated failure'; END IF; END");
+        try {
+            assertThrows(RuntimeException.class, () -> admin.reorderProblems(98769L, List.of(987692L, 987691L)));
+            assertEquals(List.of("A", "B"), jdbc.queryForList("SELECT display_id FROM contest_problem WHERE contest_id=98769 ORDER BY id", String.class));
+        } finally {
+            jdbc.execute("DROP TRIGGER contest_order_it_fail");
+            jdbc.update("DELETE FROM contest_problem WHERE contest_id=98769");
+            jdbc.update("DELETE FROM contest WHERE id=98769");
+        }
     }
 
     @AfterAll
@@ -1002,6 +1189,7 @@ class JudgeDispatchDatabaseIT {
             UserEntityServiceImpl.class, UserAcproblemEntityServiceImpl.class, ProblemEntityServiceImpl.class,
             LanguageEntityServiceImpl.class, TestDataVersionEntityServiceImpl.class, ContestEntityServiceImpl.class,
             ContestProblemEntityServiceImpl.class, ContestUserEntityServiceImpl.class, JudgeServiceImpl.class,
+            AdminContestServiceImpl.class,
             JudgeResultService.class, JudgeMessageCodec.class, JudgeStatusCache.class, JudgeDispatchIdAllocator.class})
     static class DatabaseConfiguration {
 
@@ -1029,7 +1217,8 @@ class JudgeDispatchDatabaseIT {
             MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
             factory.setDataSource(dataSource);
             factory.setConfiguration(configuration);
-            factory.setMapperLocations(new ClassPathResource("mapper/ContestMapper.xml"));
+            factory.setMapperLocations(new ClassPathResource("mapper/ContestMapper.xml"),
+                                       new ClassPathResource("mapper/ContestProblemMapper.xml"));
             return factory.getObject();
         }
 
@@ -1056,6 +1245,24 @@ class JudgeDispatchDatabaseIT {
         @Bean
         RedisTemplate<String, Object> redisTemplate() {
             return mock(RedisTemplate.class);
+        }
+
+        /**
+         * 隔离比赛封面上传，不调用外部存储
+         * @return 图片服务桩
+         */
+        @Bean
+        PublicImageService publicImages() {
+            return mock(PublicImageService.class);
+        }
+
+        /**
+         * 隔离比赛封面引用校验
+         * @return 文件服务桩
+         */
+        @Bean
+        StoredFileService storedFiles() {
+            return mock(StoredFileService.class);
         }
 
         @Bean

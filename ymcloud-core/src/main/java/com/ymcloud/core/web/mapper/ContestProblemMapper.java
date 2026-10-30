@@ -6,12 +6,9 @@ import com.ymcloud.pojo.vo.oj.ContestProblemTableVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.core.web.mapper
- * @ClassName: ContestProblemMapper
  * @Author: Yemiao
  * @CreateTime: 2025-08-14  22:46
  * @Description: ContestProblemMapper
@@ -26,5 +23,13 @@ public interface ContestProblemMapper extends BaseMapper<ContestProblem> {
      * @return 比赛题目列表
      */
     List<ContestProblemTableVO> getContestProblemList(@Param("contestId") Long contestId, @Param("userId") Long userId);
+
+    /**
+     * 使用单条CASE更新比赛内指定题目的展示编号
+     * @param contestId 比赛ID
+     * @param problems 已校验的非空题目关联ID及目标展示编号列表
+     */
+    void updateDisplayIds(@Param("contestId") Long contestId,
+                          @Param("problems") List<ContestProblem> problems);
 
 }

@@ -80,14 +80,19 @@
             <span>测试点详情</span>
           </div>
         </template>
-        <x-flex>
-          <div v-for="(judgeCase, index) in submissionData.judgeCases" :key="judgeCase.caseIndex" class="test-case-box"
-            :class="getTestCaseClass(judgeCase.status)">
-            <x-flex :size="0" justify="center" align="center" vertical>
+        <x-flex class="test-case-list" style="display: grid">
+          <div
+            v-for="judgeCase in submissionData.judgeCases"
+            :key="judgeCase.caseIndex"
+            class="test-case-box"
+            :class="getTestCaseClass(judgeCase.status)"
+          >
+            <x-flex justify="center" align="center" vertical :size="0">
               <span style="font-weight: bold">Test #{{ judgeCase.caseIndex }}</span>
               <span style="font-size: 20px; font-weight: bold">{{ judgeCase.status }}</span>
               <span style="font-size: 15px; font-weight: bold; color: #666">
-                {{ formatSubmissionTime(judgeCase.time) }} / {{ formatSubmissionMemory(judgeCase.memory) }}</span>
+                {{ formatSubmissionTime(judgeCase.time) }} / {{ formatSubmissionMemory(judgeCase.memory) }}
+              </span>
               <x-flex align="center">
                 <span>{{ judgeCase.score !== null ? judgeCase.score : "- -" }}</span>
                 <el-icon v-if="judgeCase.status === 'Accepted'" size="25"><component :is="CheckmarkCircleOutline" /></el-icon>
@@ -197,13 +202,19 @@ export default defineComponent({
 </script>
 
 <style scoped>
+.test-case-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+}
+
 .test-case-box {
+  min-width: 0;
   border: 1px solid #f56c6c;
   border-left: 3px solid #f56c6c;
   border-radius: 5px;
-  padding: 15px 50px;
+  padding: 15px 16px;
   color: #f56c6c;
   background-color: #fff;
+  text-align: center;
 }
 
 .test-case-box.AC {

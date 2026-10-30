@@ -107,7 +107,7 @@ public class GoJudgeStartupCheck {
     }
 
     /**
-     * 在真实沙箱执行探针并校验输出版本。
+     * 在真实沙箱执行探针并校验输出版本，失败时说明预期、实际输出及更新方式。
      * @param args 固定探针命令
      * @param expression 预期输出的完整匹配表达式
      * @param deadline 启动截止时间，UTC epoch 毫秒
@@ -118,7 +118,9 @@ public class GoJudgeStartupCheck {
         String output = (result.path("files").path("stdout").asText() + "\n"
                 + result.path("files").path("stderr").asText()).trim();
         if (!Pattern.matches(expression, output)) {
-            throw new GoJudgeException("go-judge 沙箱工具链版本检查失败：" + args.get(0));
+            throw new GoJudgeException("go-judge 沙箱工具链版本检查失败：" + args.get(0)
+                    + "，预期匹配：" + expression + "，实际输出：" + output
+                    + "。请使用当前项目源码重新构建 go-judge 镜像并重建容器，仅重启 Worker 不会更新沙箱工具链");
         }
     }
 

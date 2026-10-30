@@ -14,12 +14,14 @@ import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
+import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.ContestUser;
 import com.ymcloud.pojo.entity.File;
+import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
@@ -31,12 +33,16 @@ import com.ymcloud.web.service.admin.AdminContestService;
 import com.ymcloud.web.service.common.PublicImageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -47,8 +53,13 @@ import java.util.stream.Collectors;
 @Service
 public class AdminContestServiceImpl implements AdminContestService {
 
+    private static final int MAX_CONTEST_PROBLEMS = 15;
+
     @Autowired
     private ContestEntityService contestEntityService;
+
+    @Autowired
+    private JudgeEntityService judges;
 
     @Autowired
     private ContestUserEntityService contestUserEntityService;
@@ -326,6 +337,9 @@ public class AdminContestServiceImpl implements AdminContestService {
         List<ContestProblem> sourceProblems = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, id)
                 .list();
+        if (sourceProblems.size() > MAX_CONTEST_PROBLEMS) {
+            throw new ContestException("一场比赛最多15道题目，无法克隆", HttpStatus.BAD_REQUEST);
+        }
         if (CollUtil.isNotEmpty(sourceProblems)) {
             List<ContestProblem> newProblems = sourceProblems.stream()
                     .map(problem -> {
@@ -414,9 +428,10 @@ public class AdminContestServiceImpl implements AdminContestService {
         Page<Problem> page = Page.of(pageQuery.getPageNo(), pageQuery.getPageSize());
         //构建查询条件
         Page<Problem> result = problemEntityService.lambdaQuery()
-                .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Problem::getTitle, pageQuery.getKeyword())
-                .or(StrUtil.isNotBlank(pageQuery.getKeyword()))
-                .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Problem::getProblemId, pageQuery.getKeyword())
+                .and(StrUtil.isNotBlank(pageQuery.getKeyword()), query -> query
+                        .like(Problem::getTitle, pageQuery.getKeyword())
+                        .or()
+                        .like(Problem::getProblemId, pageQuery.getKeyword()))
                 .eq(pageQuery.getDifficulty() != null, Problem::getDifficulty, pageQuery.getDifficulty())
                 .notIn(CollUtil.isNotEmpty(existingProblemIds), Problem::getId, existingProblemIds) //排除已添加的题目
                 .orderByDesc(Problem::getCreatedTime)
@@ -430,19 +445,22 @@ public class AdminContestServiceImpl implements AdminContestService {
      * @param problemIds 题目ID列表
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public void addProblemsToContest(Long contestId, List<Long> problemIds) {
         //参数验证
         if (CollUtil.isEmpty(problemIds)) {
             throw new ContestException("题目ID列表不能为空", HttpStatus.BAD_REQUEST);
         }
-        if (problemIds.size() > 20) {
-            throw new ContestException("一次最多只能添加20道题目", HttpStatus.BAD_REQUEST);
+        if (problemIds.size() > MAX_CONTEST_PROBLEMS) {
+            throw new ContestException("一场比赛最多15道题目", HttpStatus.BAD_REQUEST);
         }
         //检查比赛是否存在
-        Contest contest = contestEntityService.getById(contestId);
-        if (contest == null) {
-            throw new ContestNotExistException();
+        lockContest(contestId);
+        long count = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .count();
+        if (count + problemIds.size() > MAX_CONTEST_PROBLEMS) {
+            throw new ContestException("一场比赛最多15道题目", HttpStatus.BAD_REQUEST);
         }
         //检查题目是否存在
         List<Problem> problems = problemEntityService.listByIds(problemIds);
@@ -511,23 +529,16 @@ public class AdminContestServiceImpl implements AdminContestService {
     }
 
     /**
-     * 更新比赛题目信息
+     * 更新比赛题目的标题和气球颜色，保留当前展示 ID
      * @param contestId 比赛ID
-     * @param problemId 题目ID
-     * @param displayId 展示ID（如：A, B, C）
+     * @param problemId 比赛题目关联 ID
      * @param displayTitle 在比赛中显示的题目标题
      * @param color 气球颜色
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updateContestProblem(Long contestId, Long problemId, String displayId, String displayTitle, String color) {
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
+    public void updateContestProblem(Long contestId, Long problemId, String displayTitle, String color) {
         //参数验证
-        if (StrUtil.isBlank(displayId)) {
-            throw new ContestException("展示ID不能为空", HttpStatus.BAD_REQUEST);
-        }
-        if (displayId.length() > 5) {
-            throw new ContestException("展示ID长度不能超过5个字符", HttpStatus.BAD_REQUEST);
-        }
         if (StrUtil.isBlank(displayTitle)) {
             throw new ContestException("题目标题不能为空", HttpStatus.BAD_REQUEST);
         }
@@ -541,10 +552,7 @@ public class AdminContestServiceImpl implements AdminContestService {
             throw new ContestException("气球颜色格式不正确，请使用十六进制颜色代码", HttpStatus.BAD_REQUEST);
         }
         //检查比赛是否存在
-        Contest contest = contestEntityService.getById(contestId);
-        if (contest == null) {
-            throw new ContestNotExistException();
-        }
+        lockContest(contestId);
         //检查比赛题目关联是否存在
         ContestProblem contestProblem = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contestId)
@@ -553,19 +561,9 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (contestProblem == null) {
             throw new ContestException("该题目不在比赛中");
         }
-        //检查展示ID是否与其他题目冲突
-        ContestProblem existingProblem = contestProblemEntityService.lambdaQuery()
-                .eq(ContestProblem::getContestId, contestId)
-                .eq(ContestProblem::getDisplayId, displayId)
-                .ne(ContestProblem::getId, contestProblem.getId())
-                .one();
-        if (existingProblem != null) {
-            throw new ContestException("展示ID已被其他题目使用，请选择其他ID");
-        }
         //更新题目信息
         boolean update = contestProblemEntityService.lambdaUpdate()
                 .eq(ContestProblem::getId, contestProblem.getId())
-                .set(ContestProblem::getDisplayId, displayId)
                 .set(ContestProblem::getDisplayTitle, displayTitle)
                 .set(ContestProblem::getColor, color)
                 .update();
@@ -580,17 +578,14 @@ public class AdminContestServiceImpl implements AdminContestService {
      * @param contestProblemIds 题目ID列表
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
     public void removeContestProblem(Long contestId, List<Long> contestProblemIds) {
         //参数验证
         if (CollUtil.isEmpty(contestProblemIds)) {
             throw new ContestException("题目ID列表不能为空", HttpStatus.BAD_REQUEST);
         }
         //检查比赛是否存在
-        Contest contest = contestEntityService.getById(contestId);
-        if (contest == null) {
-            throw new ContestNotExistException();
-        }
+        lockContest(contestId);
         //检查题目是否在比赛中
         List<ContestProblem> contestProblems = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contestId)
@@ -618,6 +613,69 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (!updateVisibility) {
             throw new ContestException("更新题目权限失败，请稍后再试");
         }
+    }
+
+    /**
+     * 将完整题目列表按指定顺序编号，仅允许未开始且没有提交的比赛
+     * @param contestId 比赛 ID
+     * @param ids 按目标顺序排列的比赛题目关联 ID
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
+    public void reorderProblems(Long contestId, List<Long> ids) {
+        if (ids == null || ids.isEmpty()
+                        || ids.size() > MAX_CONTEST_PROBLEMS
+                        || ids.stream().anyMatch(Objects::isNull)
+                        || new HashSet<>(ids).size() != ids.size()) {
+            throw new ContestException("题目顺序参数无效", HttpStatus.BAD_REQUEST);
+        }
+        Contest contest = lockContest(contestId);
+        requireOrderEditable(contest);
+        List<ContestProblem> current = contestProblemEntityService.lambdaQuery()
+                .eq(ContestProblem::getContestId, contestId)
+                .list();
+        if (!new HashSet<>(ids).equals(current.stream().map(ContestProblem::getId).collect(Collectors.toSet()))) {
+            throw new ContestException("比赛题目已变化，请刷新后调整", HttpStatus.CONFLICT);
+        }
+        List<ContestProblem> updates = new ArrayList<>(ids.size());
+        for (int i = 0; i < ids.size(); i++) {
+            ContestProblem problem = new ContestProblem();
+            problem.setId(ids.get(i));
+            problem.setDisplayId(String.valueOf((char) ('A' + i)));
+            updates.add(problem);
+        }
+        contestProblemEntityService.updateDisplayIds(contestId, updates);
+    }
+
+    /**
+     * 禁止比赛开始或产生提交后更改题号，调用方须先锁定比赛
+     * @param contest 已锁定的比赛
+     */
+    private void requireOrderEditable(Contest contest) {
+        if (!LocalDateTime.now().isBefore(contest.getStartTime())) {
+            throw new ContestException("比赛已开始，不能调整题目顺序", HttpStatus.BAD_REQUEST);
+        }
+        if (judges.lambdaQuery()
+                .eq(Judge::getContestId, contest.getId())
+                .exists()) {
+            throw new ContestException("比赛已有提交，不能调整题目顺序", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    /**
+     * 锁定比赛，串行化题目数量及展示编号的修改
+     * @param contestId 比赛 ID
+     * @return 已锁定的比赛
+     */
+    private Contest lockContest(Long contestId) {
+        Contest contest = contestEntityService.lambdaQuery()
+                .eq(Contest::getId, contestId)
+                .last("FOR UPDATE")
+                .one();
+        if (contest == null) {
+            throw new ContestNotExistException();
+        }
+        return contest;
     }
 
     /**

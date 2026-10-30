@@ -2,6 +2,21 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.ymcloud.core.web.mapper.ContestProblemMapper">
 
+    <update id="updateDisplayIds">
+        UPDATE contest_problem
+        SET display_id = CASE id
+            <foreach collection="problems" item="problem">
+                WHEN #{problem.id} THEN #{problem.displayId}
+            </foreach>
+            ELSE display_id
+        END
+        WHERE contest_id = #{contestId}
+        AND id IN
+        <foreach collection="problems" item="problem" open="(" separator="," close=")">
+            #{problem.id}
+        </foreach>
+    </update>
+
     <select id="getContestProblemList" resultType="com.ymcloud.pojo.vo.oj.ContestProblemTableVO">
         WITH contest_info AS (
             SELECT id, start_time, end_time

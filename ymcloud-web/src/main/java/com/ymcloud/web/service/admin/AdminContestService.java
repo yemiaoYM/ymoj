@@ -100,14 +100,13 @@ public interface AdminContestService {
     void addProblemsToContest(Long contestId, List<Long> problemIds);
 
     /**
-     * 更新比赛题目信息
+     * 更新比赛题目的标题和气球颜色，展示 ID 仅由调整顺序功能管理
      * @param contestId 比赛ID
-     * @param problemId 题目ID
-     * @param displayId 展示ID（如：A, B, C）
+     * @param problemId 比赛题目关联 ID
      * @param displayTitle 在比赛中显示的题目标题
      * @param color 气球颜色
      */
-    void updateContestProblem(Long contestId, Long problemId, String displayId, String displayTitle, String color);
+    void updateContestProblem(Long contestId, Long problemId, String displayTitle, String color);
 
     /**
      * 从比赛中移除题目（会将题目权限设置为私有）
@@ -115,4 +114,11 @@ public interface AdminContestService {
      * @param problemIds 题目ID列表
      */
     void removeContestProblem(Long contestId, List<Long> problemIds);
+
+    /**
+     * 保存完整题目顺序，按 A 起连续编号，仅限未开始且无提交的比赛
+     * @param contestId 比赛 ID
+     * @param ids 按目标顺序排列的比赛题目关联 ID
+     */
+    void reorderProblems(Long contestId, List<Long> ids);
 }

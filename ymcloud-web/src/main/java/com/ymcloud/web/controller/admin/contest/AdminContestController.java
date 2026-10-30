@@ -198,10 +198,9 @@ public class AdminContestController {
     }
 
     /**
-     * 更新比赛题目信息
+     * 更新比赛题目的标题和气球颜色，不接受展示 ID 修改
      * @param contestId 比赛ID
-     * @param problemId 题目ID
-     * @param displayId 展示ID（如：A, B, C）
+     * @param problemId 比赛题目关联 ID
      * @param displayTitle 在比赛中显示的题目标题
      * @param color 气球颜色
      * @return 操作结果
@@ -210,12 +209,10 @@ public class AdminContestController {
     @PutMapping("/{contestId}/problems/{problemId}")
     public Result<Void> updateContestProblem(@PathVariable("contestId") Long contestId,
                                              @PathVariable("problemId") Long problemId,
-                                             @RequestParam("displayId") String displayId,
                                              @RequestParam("displayTitle") String displayTitle,
                                              @RequestParam("color") String color) {
-        log.info("更新比赛题目信息: contestId={}, problemId={}, displayId={}, displayTitle={}, color={}", 
-                 contestId, problemId, displayId, displayTitle, color);
-        adminContestService.updateContestProblem(contestId, problemId, displayId, displayTitle, color);
+        log.info("更新比赛题目信息: contestId={}, problemId={}", contestId, problemId);
+        adminContestService.updateContestProblem(contestId, problemId, displayTitle, color);
         return Result.ok();
     }
 
@@ -231,6 +228,21 @@ public class AdminContestController {
                                              @PathVariable("problemIds") List<Long> problemIds) {
         log.info("从比赛中移除题目: contestId={}, problemId={}", contestId, problemIds);
         adminContestService.removeContestProblem(contestId, problemIds);
+        return Result.ok();
+    }
+
+    /**
+     * 保存比赛题目顺序
+     * @param contestId 比赛 ID
+     * @param ids 完整的有序比赛题目关联 ID
+     * @return 操作结果
+     */
+    @PreAuthorize("@ss.hasPermi('contest:problem:edit')")
+    @PutMapping("/{contestId}/problem-order")
+    public Result<Void> reorderProblems(@PathVariable("contestId") Long contestId,
+                                        @RequestBody List<Long> ids) {
+        log.info("调整比赛题目顺序: contestId={}", contestId);
+        adminContestService.reorderProblems(contestId, ids);
         return Result.ok();
     }
 

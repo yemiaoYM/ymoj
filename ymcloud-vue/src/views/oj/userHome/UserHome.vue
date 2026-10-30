@@ -97,7 +97,7 @@
                     v-for="problem in userForm.problemId"
                     :key="problem"
                     style="margin: 5px;"
-                    color="#67c23a"
+                    type="success"
                     @click="goToProblem(problem)"
                   >
                     {{ problem }}
