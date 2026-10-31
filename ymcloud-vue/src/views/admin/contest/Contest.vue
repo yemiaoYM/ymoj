@@ -148,7 +148,6 @@
             <el-button size="large" type="warning" :disabled="saving || uploading">清空</el-button>
           </template>
         </el-popconfirm>
-        <el-text v-if="saveFailed" type="danger">保存失败，内容已保留，请调整后重试。</el-text>
       </template>
     </el-card>
   </div>
@@ -160,6 +159,7 @@ import { computed, ref, defineAsyncComponent, watch, nextTick, onBeforeUnmount }
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { isDraftRecord, useLocalDraft } from "@/composables/useLocalDraft";
+import { useAsyncChange } from "@/composables/useAsyncChange";
 import { useRoute, useRouter } from "vue-router";
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 import defaultContest from '@/assets/image/defaultContest.jpg';
@@ -176,7 +176,7 @@ const MarkdownEidt = defineAsyncComponent(
 const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
-const saving = ref(false);
+const { pending: saving, beforeChange: saveContest } = useAsyncChange();
 const uploading = ref(false);
 const pendingUpload = ref<Blob | null>(null);
 const userStore = useUserStore();
@@ -184,7 +184,6 @@ const canEdit = computed(() => userStore.hasEveryPermission([
   mode.value === 'edit' ? 'contest:contest:edit' : 'contest:contest:add',
 ]));
 const loadFailed = ref(false);
-const saveFailed = ref(false);
 const formRef = ref<FormInstance>();
 const mode = ref('add');
 const contestId = ref<number | null>(null);
@@ -306,7 +305,6 @@ const localDraft = useLocalDraft<ContestDraft>(
 );
 
 function handleDiscardDraft() {
-  saveFailed.value = false;
   pendingUpload.value = null;
   contest.value = createForm();
   localDraft.clear();
@@ -335,33 +333,25 @@ function onResetImage() {
 }
 
 const handleSubmitContest = async () => {
-  if (!formRef.value || saving.value || uploading.value || loading.value || loadFailed.value) return;
+  const form = formRef.value;
+  if (!form || saving.value || uploading.value || loading.value || loadFailed.value) return;
   const current = revision;
-  saving.value = true;
-  saveFailed.value = false;
-  try {
-    const valid = await formRef.value.validate(valid => {
-      if (!valid) ElMessage.warning("请检查表单输入");
-    });
-    if (!valid || current !== revision) return;
+  await saveContest(async () => {
+    await form.validate();
+    if (current !== revision) return false;
     const { id, ...fields } = contest.value;
     const submitData = { ...fields, password: fields.visibility === 1 ? fields.password : null };
     const res = mode.value === 'edit' && id
       ? await updateAdminContest(id, submitData)
       : await addAdminContest(submitData);
-    if (current !== revision) return;
+    if (current !== revision) return false;
     ElMessage.success(res.data.msg);
     if (mode.value === 'edit') {
       await router.push('/admin/contest/list');
     } else {
       handleDiscardDraft();
     }
-  } catch {
-    // 请求层提示原因，页面保留输入和重试状态
-    if (current === revision) saveFailed.value = true;
-  } finally {
-    if (current === revision) saving.value = false;
-  }
+  });
 };
 
 const loadContestData = async () => {
@@ -407,10 +397,8 @@ watch(() => [route.name, route.params.id], () => {
   contestId.value = mode.value === 'edit' ? Number(route.params.id) : null;
   loading.value = false;
   loadFailed.value = false;
-  saving.value = false;
   uploading.value = false;
   pendingUpload.value = null;
-  saveFailed.value = false;
   contest.value = createForm();
   if (mode.value === 'edit') {
     loadContestData();

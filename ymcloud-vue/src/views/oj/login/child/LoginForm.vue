@@ -1,88 +1,95 @@
 <template>
-  <div class="login-form-container">
+  <div class="auth-form-view login-form">
     <div class="form-header">
-      <h2>登录你的账户</h2>
-      <p class="form-subtitle">欢迎回来！请输入您的详细信息</p>
+      <x-flex align="center" justify="space-between" :size="12">
+        <h2>登录</h2>
+        <x-flex v-if="registerEnabled" class="account-switch" align="center" :size="4">
+          <span>还没有账号？</span>
+          <el-button link type="primary" :disabled="loading" @click="$emit('switchTo', 'register')">注册账号</el-button>
+        </x-flex>
+      </x-flex>
+      <p class="form-subtitle">登录喵语云，继续你的编程之旅。</p>
     </div>
 
     <el-form
       ref="formRef"
+      class="auth-form"
+      size="large"
       :model="form"
       :rules="rules"
       :hide-required-asterisk="true"
-      class="auth-form"
-      size="large"
+      :disabled="loading"
       @submit.prevent="handleLogin"
     >
       <el-form-item prop="username">
         <el-input
-          v-model="form.username"
           name="username"
+          aria-label="用户名"
           placeholder="请输入用户名"
-          :prefix-icon="User"
           autocomplete="username"
+          v-model="form.username"
+          :prefix-icon="User"
         />
       </el-form-item>
 
-      <el-form-item prop="password" class="password-item">
+      <el-form-item prop="password">
         <el-input
-          v-model="form.password"
           name="password"
-          type="password"
+          aria-label="密码"
           placeholder="请输入密码"
-          :prefix-icon="Lock"
-          show-password
           autocomplete="current-password"
+          type="password"
+          show-password
+          v-model="form.password"
+          :prefix-icon="Lock"
         />
       </el-form-item>
 
-      <div class="password-options">
-        <el-link type="primary" :underline="false" @click="$emit('switchTo', 'forget')">
-          忘记密码？
-        </el-link>
-      </div>
-
-      <el-form-item prop="code" class="captcha-item">
-        <el-input
-          v-model="form.code"
-          placeholder="请输入验证码"
-          :prefix-icon="Key"
-          style="flex: 1; margin-right: 12px;"
-          @keydown.enter.prevent="handleCaptchaEnter"
-        />
-        <el-image :src="captchaImage" @click="refreshCaptcha" class="captcha-image" alt="验证码" />
+      <el-form-item prop="code" for="auth-captcha">
+        <x-flex class="captcha-row" align="center" :size="12" :wrap="false">
+          <el-input
+            id="auth-captcha"
+            aria-label="图形验证码"
+            placeholder="请输入验证码"
+            autocomplete="off"
+            v-model="form.code"
+            :prefix-icon="Key"
+            @keydown.enter.prevent="handleCaptchaEnter"
+          />
+          <el-button
+            class="captcha-button"
+            native-type="button"
+            aria-label="刷新图形验证码"
+            title="点击刷新验证码"
+            :disabled="loading"
+            @click="refreshCaptcha"
+          >
+            <img v-if="captchaImage" alt="图形验证码" :src="captchaImage" />
+            <span v-else>点击获取</span>
+          </el-button>
+        </x-flex>
       </el-form-item>
 
-      <div class="form-options">
-        <el-checkbox v-model="agree" :class="{ shake: !agree && shakeCheckbox }">
+      <x-flex justify="flex-end" :size="0">
+        <el-button link type="primary" @click="$emit('switchTo', 'forget')">忘记密码？</el-button>
+      </x-flex>
+
+      <x-flex class="form-options" align="center" :size="[0, 4]">
+        <el-checkbox :class="{ 'agreement-required': !agree && agreementRequired }" v-model="agree">
           我已阅读并同意
         </el-checkbox>
         <LegalAgreement />
-      </div>
+      </x-flex>
 
-      <div class="form-buttons">
-        <el-button type="primary" native-type="submit" class="auth-button" :loading="loading">
-          登录
-        </el-button>
-        <el-button class="auth-button secondary" :disabled="loading" @click="resetForm">
-          重置
-        </el-button>
-      </div>
+      <el-button class="auth-button" type="primary" native-type="submit" :loading="loading">登录</el-button>
     </el-form>
-
-    <div v-if="registerEnabled" class="form-footer">
-      <p>还没有账户？</p>
-      <el-link type="primary" @click="$emit('switchTo', 'register')">
-        立即注册
-      </el-link>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { User, Lock, Key } from '@element-plus/icons-vue';
-import { ElMessage, ElNotification } from 'element-plus';
+import { ElMessage, ElNotification, type FormInstance, type FormRules } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 import { getCaptcha } from '@/api/api';
 import type { LoginDTO } from '@/type/types';
@@ -99,14 +106,14 @@ const emit = defineEmits<{
 
 //数据
 const userStore = useUserStore();
-const formRef = ref();
+const formRef = ref<FormInstance>();
 const loading = ref(false);
-const shakeCheckbox = ref(false);
+const agreementRequired = ref(false);
 const captchaImage = ref('');
 const form = ref<LoginDTO>({ username: '', password: '', code: '', uuid: '' });
 const agree = ref(false);
 
-const rules = {
+const rules: FormRules<LoginDTO> = {
   username: [
     { required: true, message: '请输入账号', trigger: 'blur' },
     { min: 2, max: 20, message: '账号长度应在2到20个字符之间', trigger: 'blur' },
@@ -122,21 +129,10 @@ const rules = {
 
 //生命周期
 onMounted(() => {
-  loadCaptcha();
-  try {
-    localStorage.removeItem('RememberedUsername');
-  } catch {
-    // 清理旧功能的用户名记录；存储被禁用时仍允许登录。
-  }
+  refreshCaptcha();
 });
 //方法
-const resetForm = () => {
-  form.value = { username: '', password: '', code: '', uuid: form.value.uuid };
-  agree.value = false;
-  shakeCheckbox.value = false;
-};
-
-// 输入法确认文字时不提交登录表单。
+// 输入法确认文字时不提交登录表单
 const handleCaptchaEnter = (event: KeyboardEvent) => {
   if (event.isComposing || event.keyCode === 229) {
     return;
@@ -145,19 +141,20 @@ const handleCaptchaEnter = (event: KeyboardEvent) => {
 };
 
 const handleLogin = async () => {
-  if (loading.value) {
+  if (!formRef.value || loading.value) {
     return;
   }
   loading.value = true;
   try {
-    const valid = await formRef.value.validate();
+    let valid = false;
+    await formRef.value.validate((passed) => {
+      valid = passed;
+    });
     if (!valid) {
-      ElMessage.warning('请填写正确信息');
       return;
     }
     if (!agree.value) {
-      shakeCheckbox.value = true;
-      setTimeout(() => (shakeCheckbox.value = false), 500);
+      agreementRequired.value = true;
       ElMessage.warning('请阅读并同意用户协议和隐私政策');
       return;
     }
@@ -177,160 +174,15 @@ const handleLogin = async () => {
   }
 };
 
-const loadCaptcha = () => {
+const refreshCaptcha = () => {
   getCaptcha().then(res => {
     form.value.uuid = res.data.data.uuid;
     captchaImage.value = res.data.data.image;
-  }).catch(e => {
-    console.log(e);
+  }).catch(() => {
+    captchaImage.value = '';
   });
 };
 
-const refreshCaptcha = () => {
-  loadCaptcha();
-};
 </script>
 
-<style scoped>
-.login-form-container {
-  width: 100%;
-  max-width: 400px;
-}
-
-.form-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.form-header h2 {
-  font-size: 28px;
-  font-weight: 600;
-  color: #1a202c;
-  margin: 0 0 8px 0;
-}
-
-.form-subtitle {
-  color: #718096;
-  font-size: 16px;
-  margin: 0;
-}
-
-.auth-form {
-  margin-bottom: 24px;
-}
-
-.auth-form .el-form-item {
-  margin-bottom: 24px;
-}
-
-.auth-form .password-item {
-  margin-bottom: 8px;
-}
-
-.password-options {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.auth-form :deep(.el-input__inner) {
-  font-size: 16px;
-}
-
-.auth-form :deep(.el-checkbox__label) {
-  font-size: 15px;
-}
-
-.auth-form :deep(.el-input__wrapper) {
-  border-radius: 10px;
-}
-
-.captcha-item :deep(.el-form-item__content) {
-  display: flex;
-  align-items: center;
-}
-
-.captcha-image {
-  width: 100px;
-  height: 40px;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.3s;
-  object-fit: cover;
-}
-
-.captcha-image:hover {
-  border-color: #409EFF;
-}
-
-.form-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 24px;
-}
-
-.form-options .el-checkbox {
-  margin-right: 0;
-}
-
-.form-buttons {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.auth-button {
-  flex: 1;
-  height: 40px;
-  font-size: 16px;
-  border-radius: 10px;
-}
-
-.auth-button.secondary {
-  background: #f5f5f5;
-  border-color: #d9d9d9;
-  color: #666;
-}
-
-.form-footer {
-  text-align: center;
-  margin-top: 16px;
-}
-
-.form-footer p {
-  color: #718096;
-  font-size: 14px;
-  margin: 0 0 8px 0;
-}
-
-@keyframes shake {
-  0% {
-    transform: translateX(0);
-  }
-
-  25% {
-    transform: translateX(-5px);
-  }
-
-  50% {
-    transform: translateX(5px);
-  }
-
-  75% {
-    transform: translateX(-5px);
-  }
-
-  100% {
-    transform: translateX(0);
-  }
-}
-
-.shake {
-  animation: shake 0.5s ease;
-}
-</style>
+<style scoped src="../auth-form.css"></style>

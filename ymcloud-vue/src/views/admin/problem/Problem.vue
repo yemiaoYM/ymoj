@@ -220,7 +220,6 @@
             <el-button size="large" type="warning" :disabled="saving">清空</el-button>
           </template>
         </el-popconfirm>
-        <el-text v-if="saveFailed" type="danger">保存失败，内容已保留，请调整后重试。</el-text>
       </template>
     </el-card>
   </div>
@@ -235,6 +234,7 @@ import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/a
 import type { Tag, ProblemDTO } from "@/type/types";
 import { PROBLEM_DIFFICULTIES } from "@/constants/problem";
 import { isDraftRecord, useLocalDraft } from "@/composables/useLocalDraft";
+import { useAsyncChange } from "@/composables/useAsyncChange";
 import { useRemoteProblemStore } from "@/stores/remoteProblem";
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/MarkdownEidt.vue")
@@ -253,9 +253,8 @@ const remoteStore = useRemoteProblemStore();
 const media = window.matchMedia('(max-width: 767px)');
 const isNarrow = ref(media.matches);
 const loading = ref(false);
-const saving = ref(false);
+const { pending: saving, beforeChange: saveProblem } = useAsyncChange();
 const loadFailed = ref(false);
-const saveFailed = ref(false);
 const tagsFailed = ref(false);
 const formRef = ref<FormInstance>();
 const mode = ref('add');
@@ -285,7 +284,6 @@ const localDraft = useLocalDraft<ProblemDraft>(
 );
 
 function handleDiscardDraft() {
-  saveFailed.value = false;
   problem.value = handleCreateForm();
   localDraft.clear();
   nextTick(() => formRef.value?.clearValidate());
@@ -406,21 +404,18 @@ const onRemoveCase = (index: number) => {
 };
 //提交题目（新增或编辑）
 const onSubmitProblem = async () => {
-  if (!formRef.value || saving.value || loading.value || loadFailed.value) return;
+  const form = formRef.value;
+  if (!form || saving.value || loading.value || loadFailed.value) return;
   const current = revision;
-  saving.value = true;
-  saveFailed.value = false;
-  try {
-    const valid = await formRef.value.validate((valid) => {
-      if (!valid) ElMessage.warning("请检查表单输入");
-    });
-    if (!valid || current !== revision) return;
+  await saveProblem(async () => {
+    await form.validate();
+    if (current !== revision) return false;
     const { id, ...values } = problem.value;
     const submitData = { ...values, source: values.source.trim() || null };
     const res = mode.value === 'edit' && id
       ? await updateProblem(id, submitData)
       : await addProblem(submitData);
-    if (current !== revision) return;
+    if (current !== revision) return false;
     ElMessage.success(res.data.msg);
     if (mode.value === 'edit') {
       await router.push('/admin/problem/list');
@@ -430,13 +425,7 @@ const onSubmitProblem = async () => {
       await nextTick();
       formRef.value?.clearValidate();
     }
-  } catch {
-    // 请求层统一提示原因
-    // 保留当前输入，允许修正后重试
-    if (current === revision) saveFailed.value = true;
-  } finally {
-    if (current === revision) saving.value = false;
-  }
+  });
 };
 
 const handleLoadTags = async () => {
@@ -516,8 +505,6 @@ watch(() => [route.name, route.params.id], () => {
   problemId.value = mode.value === 'edit' ? Number(route.params.id) : null;
   loading.value = false;
   loadFailed.value = false;
-  saving.value = false;
-  saveFailed.value = false;
   problem.value = handleCreateForm();
   if (mode.value === 'edit') {
     handleLoadProblem();

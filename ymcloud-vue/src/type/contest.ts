@@ -1,5 +1,3 @@
-import type { AdminProblemVO } from './types';
-
 /**
  * 后台比赛题目列表项，id 为比赛题目关联 ID，problemId 为原题 ID
  */
@@ -22,19 +20,4 @@ export type ContestProblemPageQuery = {
   pageSize: number;
   keyword: string;
   difficulty?: number;
-};
-
-/**
- * 可添加到比赛的题目分页结果
- */
-export type AvailableProblemPageVO = {
-  records: AdminProblemVO[];
-  total: number;
-  pages: number;
-};
-
-export type ContestResult<T> = {
-  code: number;
-  msg: string;
-  data: T;
 };

@@ -661,9 +661,7 @@ export default {
               activeTabName.value="result";
               clearTimeoutTask();
             }
-          }).catch((err) => {
-            console.log(err);
-            ElMessage.warning("获取评测结果中途失败，已停止轮询");
+          }).catch(() => {
             judgeResult.value={ status:"No status" } as JudgeResult;
             judgeLoading.value=false;
             clearTimeoutTask();

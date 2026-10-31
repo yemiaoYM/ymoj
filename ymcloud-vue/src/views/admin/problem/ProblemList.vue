@@ -315,7 +315,6 @@ const handleQuery = () => {
     total.value = res.data.data.total;
   }).catch(err => {
     console.error('获取题目列表失败:', err);
-    ElMessage.error('获取题目列表失败，请稍后重试');
   }).finally(() => {
     loading.value = false;
   });

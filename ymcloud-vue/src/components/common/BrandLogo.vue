@@ -2,7 +2,7 @@
   <img
     class="brand-logo"
     alt="YMOJ"
-    :src="compact ? '/ymoj-icon.png' : logoImage"
+    :src="compact ? '/ymoj-icon.png' : dark ? darkLogoImage : logoImage"
     :width="compact ? 48 : 180"
     :height="compact ? 48 : 60"
   />
@@ -10,8 +10,9 @@
 
 <script setup lang="ts">
 import logoImage from '@/assets/image/ymoj-logo.png';
+import darkLogoImage from '@/assets/image/ymoj-logo-dark.png';
 
-withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
+withDefaults(defineProps<{ compact?: boolean; dark?: boolean }>(), { compact: false, dark: false });
 </script>
 
 <style scoped>

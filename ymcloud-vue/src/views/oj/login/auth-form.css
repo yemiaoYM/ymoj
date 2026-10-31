@@ -1,0 +1,167 @@
+.auth-form-view {
+  width: 100%;
+  margin-bottom: 20px;
+  --el-font-size-base: 14px;
+  --el-component-size-large: 44px;
+}
+
+.form-header {
+  margin-bottom: 20px;
+}
+
+.form-header h2 {
+  color: var(--el-text-color-primary);
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.account-switch,
+.account-switch .el-button {
+  font-size: 14px;
+}
+
+.account-switch,
+.form-subtitle,
+.form-hint {
+  color: var(--el-text-color-regular);
+}
+
+.form-subtitle {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.auth-form .el-form-item {
+  margin-bottom: 20px;
+}
+
+.auth-form :deep(.el-input__wrapper) {
+  background: #f5f7fb;
+}
+
+.auth-form :deep(.el-input__inner) {
+  font-size: 15px;
+}
+
+.auth-form :deep(.el-input__inner::placeholder) {
+  color: #858c97;
+  font-size: 14px;
+}
+
+.auth-form :deep(.el-input__prefix) {
+  color: #747c89;
+}
+
+.captcha-row,
+.email-code-row {
+  width: 100%;
+}
+
+.captcha-row .el-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.captcha-button {
+  width: 116px;
+  height: 44px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.captcha-button img {
+  width: 114px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.form-options {
+  margin: 16px 0;
+}
+
+.form-options .el-checkbox {
+  height: 28px;
+  margin-right: 0;
+}
+
+.form-options :deep(.el-checkbox__label),
+.form-options :deep(.legal-links),
+.form-options :deep(.el-link) {
+  font-size: 14px;
+}
+
+.agreement-required :deep(.el-checkbox__inner) {
+  border-color: var(--el-color-danger);
+}
+
+.auth-button {
+  width: 100%;
+  height: 44px;
+  font-size: 15px;
+}
+
+.auth-form .el-button.is-link {
+  font-size: 14px;
+  min-height: 28px;
+}
+
+.code-input {
+  flex: 1;
+  min-width: 0;
+  --el-input-otp-size: 44px;
+  --el-input-otp-font-size: 15px;
+  --el-input-otp-field-width: calc((100% - 30px) / 6);
+  --el-input-otp-gap: 6px;
+}
+
+.send-code-button {
+  width: 120px;
+  height: 44px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.form-hint {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.login-form .form-header {
+  margin-bottom: 32px;
+}
+
+.login-form .el-form-item {
+  margin-bottom: 28px;
+}
+
+.login-form .form-options {
+  margin: 24px 0;
+}
+
+@media (max-width: 760px) {
+  .auth-form-view {
+    margin-bottom: 0;
+  }
+
+  .email-code-row {
+    /* 窄屏覆盖 XFlex 的行内换行设置，保持六位验证码可读 */
+    flex-wrap: wrap !important;
+  }
+
+  .code-input {
+    flex-basis: 100%;
+  }
+
+  .send-code-button {
+    margin-left: auto;
+  }
+
+  .login-form .form-header,
+  .login-form .el-form-item {
+    margin-bottom: 20px;
+  }
+
+  .login-form .form-options {
+    margin: 16px 0;
+  }
+}

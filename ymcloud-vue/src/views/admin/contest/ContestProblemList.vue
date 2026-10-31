@@ -16,6 +16,7 @@
             type="primary"
             :icon="Plus"
             :disabled="loading || contestProblemList.length >= 15"
+            :loading="problemSearchLoading"
             @click="handleAddProblem"
           >
             添加题目
@@ -196,7 +197,7 @@
             :current-page="problemSearchParams.pageNo"
             :total="problemSearchTotal"
             :pager-count="5"
-            @update:current-page="handleProblemSearchPageChange"
+            @update:current-page="searchProblems"
           />
           <x-flex :size="10">
             <el-button :disabled="addAction.pending.value" @click="addProblemDialogVisible = false">取消</el-button>
@@ -385,10 +386,12 @@ const handleSelectionChange = (selection: AdminContestProblemVO[]) => {
   contestProblemIds.value = selection.map(item => item.id);
 };
 //添加题目
-const handleAddProblem = () => {
-  selectedProblems.value = [];
-  addProblemDialogVisible.value = true;
-  searchProblems(1);
+const handleAddProblem = async () => {
+  const loaded = await searchProblems(1);
+  if (loaded) {
+    selectedProblems.value = [];
+    addProblemDialogVisible.value = true;
+  }
 };
 //搜索可用题目
 const searchProblems = async (pageNo = problemSearchParams.value.pageNo) => {
@@ -397,13 +400,14 @@ const searchProblems = async (pageNo = problemSearchParams.value.pageNo) => {
   try {
     const res = await getAvailableProblemsForContest(contestId.value, { ...problemSearchParams.value, pageNo });
     if (generation !== searchGeneration) {
-      return;
+      return false;
     }
     availableProblems.value = res.data.data.records;
     problemSearchTotal.value = res.data.data.total;
     problemSearchParams.value.pageNo = pageNo;
-  } catch(e) {
-    console.log(e);
+    return true;
+  } catch {
+    return false;
   } finally {
     if (generation === searchGeneration) {
       problemSearchLoading.value = false;
@@ -432,8 +436,8 @@ const onOpenOrder = () => {
   orderDialogVisible.value = true;
 };
 const onMoveProblem = (index: number, offset: number) => {
-  const [problem] = orderedProblems.value.splice(index, 1);
-  orderedProblems.value.splice(index + offset, 0, problem!);
+  const movedProblems = orderedProblems.value.splice(index, 1);
+  orderedProblems.value.splice(index + offset, 0, ...movedProblems);
 };
 const onSaveOrder = async () => {
   const saved = await orderAction.beforeChange(async () => {
@@ -497,11 +501,6 @@ const handleDeleteProblem = async (row?: AdminContestProblemVO) => {
     handleQuery();
   }
 };
-//题目搜索分页
-const handleProblemSearchPageChange = (val: number) => {
-  searchProblems(val);
-};
-
 </script>
 
 <style scoped lang="css">

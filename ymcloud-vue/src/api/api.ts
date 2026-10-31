@@ -1,12 +1,7 @@
 import request from "./request";
 import type { AxiosResponse } from 'axios';
 import type { AnnouncementPageQuery, AnnouncementPageResult } from '@/type/announcement';
-import type {
-  AdminContestProblemVO,
-  ContestProblemPageQuery,
-  AvailableProblemPageVO,
-  ContestResult,
-} from '@/type/contest';
+import type { ContestProblemPageQuery } from '@/type/contest';
 import type { TagDTO, TagClassificationDTO, TagClassification, TagsWithClassification, TagResult } from '@/type/tag';
 import type {
   LoginDTO,
@@ -1041,7 +1036,7 @@ export function cloneAdminContest(id: number, title: string, visibility: number,
  * @param contestId 比赛ID
  * @returns 比赛题目列表
  */
-export function getAdminContestProblems(contestId: number): Promise<AxiosResponse<ContestResult<AdminContestProblemVO[]>>> {
+export function getAdminContestProblems(contestId: number) {
   return request({
     url: `/admin/contest/${contestId}/problems`,
     method: "GET"
@@ -1054,10 +1049,7 @@ export function getAdminContestProblems(contestId: number): Promise<AxiosRespons
  * @param params 题目标题或题号、难度及分页条件
  * @returns 排除比赛已有题目的分页结果
  */
-export function getAvailableProblemsForContest(
-  contestId: number,
-  params: ContestProblemPageQuery
-): Promise<AxiosResponse<ContestResult<AvailableProblemPageVO>>> {
+export function getAvailableProblemsForContest(contestId: number, params: ContestProblemPageQuery) {
   return request({
     url: `/admin/contest/${contestId}/available-problems`,
     method: "GET",
@@ -1071,7 +1063,7 @@ export function getAvailableProblemsForContest(
  * @param problemIds 原题ID或原题ID列表
  * @returns 操作结果
  */
-export function addProblemsToContest(contestId: number, problemIds: number | number[]): Promise<AxiosResponse<ContestResult<null>>> {
+export function addProblemsToContest(contestId: number, problemIds: number | number[]) {
   return request({
     url: `/admin/contest/${contestId}/problems/${problemIds}`,
     method: "POST"
@@ -1091,7 +1083,7 @@ export function updateContestProblem(
   problemId: number,
   displayTitle: string,
   color: string
-): Promise<AxiosResponse<ContestResult<null>>> {
+) {
   const params = { displayTitle, color };
   return request({
     url: `/admin/contest/${contestId}/problems/${problemId}`,
@@ -1106,7 +1098,7 @@ export function updateContestProblem(
  * @param problemIds 比赛题目关联ID或关联ID列表
  * @returns 操作结果
  */
-export function removeContestProblems(contestId: number, problemIds: number | number[]): Promise<AxiosResponse<ContestResult<null>>> {
+export function removeContestProblems(contestId: number, problemIds: number | number[]) {
   return request({
     url: `/admin/contest/${contestId}/problems/${problemIds}`,
     method: "DELETE"
@@ -1119,7 +1111,7 @@ export function removeContestProblems(contestId: number, problemIds: number | nu
  * @param ids 按目标顺序排列的完整比赛题目关联ID列表
  * @returns 操作结果
  */
-export function reorderContestProblems(contestId: number, ids: number[]): Promise<AxiosResponse<ContestResult<null>>> {
+export function reorderContestProblems(contestId: number, ids: number[]) {
   return request({
     url: `/admin/contest/${contestId}/problem-order`,
     method: "PUT",

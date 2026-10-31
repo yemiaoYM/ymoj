@@ -63,6 +63,10 @@ service.interceptors.response.use(
     if(res.code === 404 && showErrorMessage){
       ElMessage.error(res.msg);
     }
+    //并发操作冲突，提示刷新后重试
+    if(res.code === 409 && showErrorMessage){
+      ElMessage.warning(res.msg);
+    }
     return Promise.reject(response);
   },
   error => {

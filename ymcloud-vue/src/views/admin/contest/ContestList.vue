@@ -106,6 +106,7 @@
                   size="small" 
                   text 
                   :icon="CopyDocument"
+                  :disabled="cloning"
                   @click="handleClone(scope.row)"
                 >
                   克隆
@@ -147,6 +148,7 @@
 <script lang="ts" setup>
 //import
 import AsyncSelect from '@/components/common/AsyncSelect.vue';
+import { useAsyncChange } from '@/composables/useAsyncChange';
 import { useUserStore } from '@/stores/user';
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -166,6 +168,7 @@ const contestList = ref<any[]>([]);
 const contestIds = ref<number[]>([]);
 const total = ref<number>(0);
 const loading = ref<boolean>(false);
+const { pending: cloning, beforeChange: cloneContest } = useAsyncChange();
 
 //查询参数
 const queryParams = ref({
@@ -374,13 +377,11 @@ const handleClonePasswordDialog = (row: any, title: string, visibility: number) 
 };
 
 //执行克隆操作
-const executeClone = (id: number, title: string, visibility: number, password: string | null) => {
-  cloneAdminContest(id, title, visibility, password).then(res => {
+const executeClone = async (id: number, title: string, visibility: number, password: string | null) => {
+  await cloneContest(async () => {
+    const res = await cloneAdminContest(id, title, visibility, password);
     ElMessage.success(res.data.msg);
     handleQuery();
-  }).catch(e => {
-    console.log(e);
-    ElMessage.error('克隆失败');
   });
 };
 //删除比赛

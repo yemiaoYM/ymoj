@@ -54,14 +54,6 @@
             />
             <div class="setting-tip">开启时至少填写一项。链接自动指向官方备案查询网站，无需填写网址。</div>
           </el-form-item>
-          <el-alert
-            v-if="saveFailed"
-            class="setting-alert"
-            title="保存失败，输入已保留，请重试"
-            type="error"
-            show-icon
-            :closable="false"
-          />
         </el-form>
         <x-flex>
           <el-button
@@ -91,13 +83,13 @@ import { getAdminSystemSetting, updateSystemSetting } from "@/api/api";
 import { useUserStore } from "@/stores/user";
 import type { SystemSettingDTO } from "@/type/types";
 import CarouselSetting from "@/components/admin/CarouselSetting.vue";
+import { useAsyncChange } from "@/composables/useAsyncChange";
 
 //data
 const userStore = useUserStore();
 const loading = ref(false);
-const saving = ref(false);
+const { pending: saving, beforeChange: saveSetting } = useAsyncChange();
 const loaded = ref(false);
-const saveFailed = ref(false);
 const formRef = ref<FormInstance>();
 const form = ref<SystemSettingDTO>({
   registerEnabled: true,
@@ -130,7 +122,6 @@ const handleLoadSystemSetting = async () => {
   }
   loading.value = true;
   loaded.value = false;
-  saveFailed.value = false;
   try {
     const res = await getAdminSystemSetting();
     if (disposed) {
@@ -157,28 +148,15 @@ const onSaveSetting = async () => {
   if (!formInstance || !loaded.value || saving.value || !canEdit.value) {
     return;
   }
-  saving.value = true;
-  saveFailed.value = false;
-  try {
-    let valid = false;
-    await formInstance.validate((passed) => {
-      valid = passed;
-    });
-    if (!valid || disposed) {
-      return;
+  const saved = await saveSetting(async () => {
+    await formInstance.validate();
+    if (disposed) {
+      return false;
     }
     await updateSystemSetting({ ...form.value });
-    if (!disposed) {
-      ElMessage.success("保存成功，首页重新加载后生效");
-    }
-  } catch {
-    if (!disposed) {
-      saveFailed.value = true;
-    }
-  } finally {
-    if (!disposed) {
-      saving.value = false;
-    }
+  });
+  if (saved) {
+    ElMessage.success("保存成功，首页重新加载后生效");
   }
 };
 

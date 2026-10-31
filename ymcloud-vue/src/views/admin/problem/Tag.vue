@@ -7,7 +7,7 @@
           <el-text type="info">共 {{ tagCount }} 个标签 · {{ classifications.length }} 个分类，点击标签可编辑</el-text>
         </div>
         <x-flex class="tag-actions" align="center" :size="8">
-          <el-button :icon="Refresh" :loading="loading" :disabled="busy" @click="onRefresh">刷新</el-button>
+          <el-button :icon="Refresh" :loading="loading" :disabled="busy" @click="handleLoadTags">刷新</el-button>
           <el-button v-permission="['problem:tag:add']" :icon="FolderAdd" :disabled="busy" @click="onOpenClassification()">添加分类</el-button>
           <el-button v-permission="['problem:tag:add']" type="primary" :icon="Plus" :disabled="busy" @click="onOpenTag()">添加标签</el-button>
         </x-flex>
@@ -23,7 +23,6 @@
     </el-card>
 
     <el-alert v-if="loadFailed" title="标签列表加载失败，已显示的数据可能不是最新内容，请刷新重试。" type="error" show-icon :closable="false" />
-    <el-alert v-if="actionError" type="error" show-icon :title="actionError" :closable="false" />
     <div class="tag-groups" v-loading="loading">
       <el-empty v-if="loaded && !loadFailed && !filteredGroups.length" :description="search ? '没有匹配的标签或分类' : '暂无标签，点击「添加标签」开始整理题库'" />
       <el-card
@@ -100,7 +99,6 @@
           </el-select>
         </el-form-item>
       </el-form>
-      <el-alert v-if="tagSaveFailed" title="保存未完成，请检查输入或稍后重试。" type="error" :closable="false" />
       <template #footer>
         <el-button :disabled="savingTag" @click="onCloseTag">取消</el-button>
         <el-button type="primary" :loading="savingTag" @click="onSaveTag">保存</el-button>
@@ -124,7 +122,6 @@
         </el-form-item>
         <el-text type="info" size="small">数值越小越靠前。删除分类后，标签会移至「未分类」。</el-text>
       </el-form>
-      <el-alert v-if="classificationSaveFailed" title="保存未完成，请检查输入或稍后重试。" type="error" :closable="false" />
       <template #footer>
         <el-button :disabled="savingClassification" @click="onCloseClassification">取消</el-button>
         <el-button type="primary" :loading="savingClassification" @click="onSaveClassification">保存</el-button>
@@ -138,6 +135,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import { Plus, Edit, Delete, Folder, FolderAdd, Refresh, Search } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
+import { useAsyncChange } from '@/composables/useAsyncChange';
 import type { Tag } from '@/type/types';
 import type { TagDTO, TagClassification, TagClassificationDTO, TagsWithClassification } from '@/type/tag';
 import {
@@ -155,15 +153,12 @@ const search = ref('');
 const loading = ref(false);
 const loaded = ref(false);
 const loadFailed = ref(false);
-const actionError = ref('');
-const savingTag = ref(false);
-const savingClassification = ref(false);
-const deleting = ref(false);
+const { pending: savingTag, beforeChange: saveTag } = useAsyncChange();
+const { pending: savingClassification, beforeChange: saveClassification } = useAsyncChange();
+const { pending: deleting, beforeChange: deleteItem } = useAsyncChange();
 const busy = computed(() => savingTag.value || savingClassification.value || deleting.value);
 const tagDialogOpen = ref(false);
 const classificationDialogOpen = ref(false);
-const tagSaveFailed = ref(false);
-const classificationSaveFailed = ref(false);
 const tagFormRef = ref<FormInstance>();
 const classificationFormRef = ref<FormInstance>();
 const tag = reactive<TagDTO & { id: number | null }>({ id: null, name: '', color: '#409eff', parentId: null });
@@ -213,11 +208,6 @@ async function handleLoadTags() {
   }
 }
 
-function onRefresh() {
-  actionError.value = '';
-  return handleLoadTags();
-}
-
 async function onOpenTag(value: Tag | null = null, parent: TagClassification | null = null) {
   if (busy.value || !userStore.hasEveryPermission([value ? 'problem:tag:edit' : 'problem:tag:add'])) {
     return;
@@ -225,7 +215,6 @@ async function onOpenTag(value: Tag | null = null, parent: TagClassification | n
   Object.assign(tag, value
     ? { id: value.id, name: value.name, color: value.color, parentId: value.parentId }
     : { id: null, name: '', color: '#409eff', parentId: parent?.id ?? null });
-  tagSaveFailed.value = false;
   tagDialogOpen.value = true;
   await nextTick();
   tagFormRef.value?.clearValidate();
@@ -236,7 +225,6 @@ async function onOpenClassification(value: TagClassification | null = null) {
     return;
   }
   Object.assign(classification, value ?? { id: null, name: '', priority: 1 });
-  classificationSaveFailed.value = false;
   classificationDialogOpen.value = true;
   await nextTick();
   classificationFormRef.value?.clearValidate();
@@ -251,18 +239,14 @@ function onCloseClassification() {
 }
 
 async function onSaveTag() {
-  if (busy.value || !tagFormRef.value || !userStore.hasEveryPermission([tag.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
+  const form = tagFormRef.value;
+  if (busy.value || !form || !userStore.hasEveryPermission([tag.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
     return;
   }
-  savingTag.value = true;
-  tagSaveFailed.value = false;
-  try {
-    let valid = false;
-    await tagFormRef.value.validate(passed => {
-      valid = passed;
-    });
-    if (!valid) {
-      return;
+  await saveTag(async () => {
+    await form.validate();
+    if (disposed) {
+      return false;
     }
     const data: TagDTO = { name: tag.name.trim(), color: tag.color, parentId: tag.parentId ?? null };
     const response = tag.id === null ? await addAdminTag(data) : await updateAdminTag(tag.id, data);
@@ -271,30 +255,18 @@ async function onSaveTag() {
       tagDialogOpen.value = false;
       await handleLoadTags();
     }
-  } catch {
-    if (!disposed) {
-      tagSaveFailed.value = true;
-    }
-  } finally {
-    if (!disposed) {
-      savingTag.value = false;
-    }
-  }
+  });
 }
 
 async function onSaveClassification() {
-  if (busy.value || !classificationFormRef.value || !userStore.hasEveryPermission([classification.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
+  const form = classificationFormRef.value;
+  if (busy.value || !form || !userStore.hasEveryPermission([classification.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
     return;
   }
-  savingClassification.value = true;
-  classificationSaveFailed.value = false;
-  try {
-    let valid = false;
-    await classificationFormRef.value.validate(passed => {
-      valid = passed;
-    });
-    if (!valid) {
-      return;
+  await saveClassification(async () => {
+    await form.validate();
+    if (disposed) {
+      return false;
     }
     const data: TagClassificationDTO = { name: classification.name.trim(), priority: classification.priority };
     const response = classification.id === null
@@ -305,55 +277,30 @@ async function onSaveClassification() {
       classificationDialogOpen.value = false;
       await handleLoadTags();
     }
-  } catch {
-    if (!disposed) {
-      classificationSaveFailed.value = true;
-    }
-  } finally {
-    if (!disposed) {
-      savingClassification.value = false;
-    }
-  }
+  });
 }
 
 async function handleDelete(kind: 'tag' | 'classification', value: Tag | TagClassification) {
   if (busy.value || !canRemove.value) {
     return;
   }
-  deleting.value = true;
-  actionError.value = '';
-  try {
-    try {
-      await ElMessageBox.confirm(
-        kind === 'tag'
-          ? '确认删除标签「' + value.name + '」？关联题目将取消此标签。'
-          : '确认删除分类「' + value.name + '」？标签将保留并移至未分类。',
-        '删除确认',
-        { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
-      );
-    } catch (reason) {
-      if (reason === 'cancel' || reason === 'close') {
-        return;
-      }
-      throw reason;
-    }
+  await deleteItem(async () => {
+    await ElMessageBox.confirm(
+      kind === 'tag'
+        ? '确认删除标签「' + value.name + '」？关联题目将取消此标签。'
+        : '确认删除分类「' + value.name + '」？标签将保留并移至未分类。',
+      '删除确认',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    );
     if (disposed) {
-      return;
+      return false;
     }
     const response = kind === 'tag' ? await deleteAdminTag(value.id) : await deleteAdminTagClassification(value.id);
     if (!disposed) {
       ElMessage.success(response.data.msg);
       await handleLoadTags();
     }
-  } catch {
-    if (!disposed) {
-      actionError.value = '删除未完成，请刷新列表后重试。';
-    }
-  } finally {
-    if (!disposed) {
-      deleting.value = false;
-    }
-  }
+  });
 }
 
 function onDeleteTag(value: Tag) {

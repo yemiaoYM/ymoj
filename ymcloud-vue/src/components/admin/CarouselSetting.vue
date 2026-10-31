@@ -35,7 +35,6 @@
         {{ dirty ? '列表为空，保存后隐藏首页轮播。' : '尚无轮播图，首页轮播区域已隐藏。' }}
       </el-text>
       <el-text v-if="dirty" type="warning">列表有未保存的更改。移除仅取消首页展示，不删除存储文件。</el-text>
-      <el-alert v-if="saveFailed" title="保存失败，更改已保留，请重试" type="error" :closable="false" />
       <x-flex v-if="pendingUpload" align="center">
         <el-text type="warning">图片上传失败，裁剪结果已保留。</el-text>
         <el-button :disabled="busy || !canEdit" @click="onUpload(pendingUpload)">重试上传</el-button>
@@ -58,6 +57,7 @@ import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 import { getAdminCarousel, saveCarousel, uploadCarousel } from '@/api/carousel';
 import type { CarouselImage } from '@/type/carousel';
 import { useUserStore } from '@/stores/user';
+import { useAsyncChange } from '@/composables/useAsyncChange';
 
 const userStore = useUserStore();
 const canEdit = computed(() => userStore.hasEveryPermission(['system:setting:edit']));
@@ -65,10 +65,9 @@ const images = ref<CarouselImage[]>([]);
 const configured = ref(false);
 const loaded = ref(false);
 const loading = ref(false);
-const saving = ref(false);
+const { pending: saving, beforeChange: saveImages } = useAsyncChange();
 const uploading = ref(false);
 const failed = ref(false);
-const saveFailed = ref(false);
 const dirty = ref(false);
 const pendingUpload = ref<Blob | null>(null);
 const busy = computed(() => saving.value || uploading.value);
@@ -85,7 +84,6 @@ async function handleLoad() {
       configured.value = response.data.data.configured;
       loaded.value = true;
       dirty.value = false;
-      saveFailed.value = false;
       pendingUpload.value = null;
     }
   } catch {
@@ -161,23 +159,13 @@ async function onSave() {
   if (!canEdit.value || !loaded.value || busy.value) {
     return;
   }
-  saving.value = true;
-  saveFailed.value = false;
-  try {
+  const saved = await saveImages(async () => {
     await saveCarousel(images.value.map(image => image.id));
-    if (!disposed) {
-      configured.value = true;
-      dirty.value = false;
-      ElMessage.success('轮播图已保存，首页重新加载后生效');
-    }
-  } catch {
-    if (!disposed) {
-      saveFailed.value = true;
-    }
-  } finally {
-    if (!disposed) {
-      saving.value = false;
-    }
+  });
+  if (saved) {
+    configured.value = true;
+    dirty.value = false;
+    ElMessage.success('轮播图已保存，首页重新加载后生效');
   }
 }
 
