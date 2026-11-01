@@ -3,8 +3,10 @@ package com.ymcloud.web.controller.admin.common;
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.admin.CarouselSettingDTO;
+import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.vo.common.CarouselSettingVO;
 import com.ymcloud.web.service.common.CarouselSettingService;
+import com.ymcloud.web.service.common.PublicImageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
@@ -22,7 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-24
- * @Description: 系统配置中的轮播列表和图片上传入口，沿用系统设置权限
+ * @Description: 查询与发布首页轮播配置，沿用系统设置权限
  */
 @RestController
 @Slf4j
@@ -31,6 +33,22 @@ public class AdminCarouselController {
 
     @Autowired
     private CarouselSettingService service;
+
+    @Autowired
+    private PublicImageService publicImages;
+
+    /**
+     * 上传轮播候选图；文件保存后仍需另行发布轮播配置
+     * @param file 裁剪为 16:9 的 JPEG 或 PNG 图片
+     * @return 已登记文件的字符串 ID 和公开地址
+     */
+    @PostMapping("/image")
+    @PreAuthorize("@ss.hasPermi('system:setting:edit')")
+    public Result<CarouselSettingVO.Image> uploadCarousel(@RequestParam("file") MultipartFile file) {
+        log.info("上传首页轮播图片");
+        File image = publicImages.upload(file, "carousel", 16, 9);
+        return Result.ok(new CarouselSettingVO.Image(image.getId().toString(), image.getUrl()));
+    }
 
     /**
      * 查询当前轮播配置。
@@ -57,15 +75,4 @@ public class AdminCarouselController {
         return Result.ok();
     }
 
-    /**
-     * 上传已经裁剪的轮播图片，图片可公开访问，需另行保存列表后首页才展示。
-     * @param file 16:9 的 JPEG 或 PNG 图片
-     * @return 已校验的文件 ID 和公开 URL
-     */
-    @PostMapping("/image")
-    @PreAuthorize("@ss.hasPermi('system:setting:edit')")
-    public Result<CarouselSettingVO.Image> upload(@RequestParam("file") MultipartFile file) {
-        log.info("上传首页轮播图片");
-        return Result.ok(service.upload(file));
-    }
 }

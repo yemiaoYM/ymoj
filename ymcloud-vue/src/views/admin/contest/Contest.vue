@@ -128,7 +128,12 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt v-model:content="contest.description" :key="`description-${mode}-${contestId}`" />
+            <MarkdownEidt
+              ref="descriptionEditorRef"
+              :key="`description-${mode}-${contestId}`"
+              v-model:content="contest.description"
+              :disabled="saving || uploading"
+            />
           </el-form-item>
         </el-form>
       </x-flex>
@@ -185,6 +190,7 @@ const canEdit = computed(() => userStore.hasEveryPermission([
 ]));
 const loadFailed = ref(false);
 const formRef = ref<FormInstance>();
+const descriptionEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
 const mode = ref('add');
 const contestId = ref<number | null>(null);
 
@@ -334,11 +340,13 @@ function onResetImage() {
 
 const handleSubmitContest = async () => {
   const form = formRef.value;
-  if (!form || saving.value || uploading.value || loading.value || loadFailed.value) return;
+  const editor = descriptionEditorRef.value;
+  if (!form || !editor || saving.value || uploading.value || loading.value || loadFailed.value) return;
   const current = revision;
   await saveContest(async () => {
     await form.validate();
     if (current !== revision) return false;
+    if (await editor.uploadImages() === false || current !== revision) return false;
     const { id, ...fields } = contest.value;
     const submitData = { ...fields, password: fields.visibility === 1 ? fields.password : null };
     const res = mode.value === 'edit' && id

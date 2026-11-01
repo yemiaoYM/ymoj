@@ -9,6 +9,7 @@ import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.web.service.admin.AdminContestService;
+import com.ymcloud.web.service.common.PublicImageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,16 +40,19 @@ public class AdminContestController {
     @Autowired
     private AdminContestService adminContestService;
 
+    @Autowired
+    private PublicImageService publicImages;
+
     /**
-     * 上传比赛封面，仅允许具备比赛新增或编辑权限的管理员使用。
-     * @param file 待上传的公开图片
-     * @return 图片公开地址
+     * 上传比赛封面；文件保存后仍需另行保存比赛
+     * @param file 裁剪为 1:1 的 JPEG 或 PNG 图片
+     * @return 已登记文件的公开地址
      */
-    @PreAuthorize("@ss.hasAnyPermi('contest:contest:add', 'contest:contest:edit')")
     @PostMapping("/image")
-    public Result<String> uploadImage(@RequestParam("file") MultipartFile file) {
+    @PreAuthorize("@ss.hasAnyPermi('contest:contest:add', 'contest:contest:edit')")
+    public Result<String> uploadContest(@RequestParam("file") MultipartFile file) {
         log.info("上传比赛封面");
-        return Result.ok(adminContestService.uploadImage(file));
+        return Result.ok(publicImages.upload(file, "contest", 1, 1).getUrl());
     }
 
     /**

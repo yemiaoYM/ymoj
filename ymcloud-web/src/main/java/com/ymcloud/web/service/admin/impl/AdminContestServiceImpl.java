@@ -30,12 +30,10 @@ import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminContestService;
-import com.ymcloud.web.service.common.PublicImageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -71,20 +69,7 @@ public class AdminContestServiceImpl implements AdminContestService {
     private ProblemEntityService problemEntityService;
 
     @Autowired
-    private PublicImageService publicImages;
-
-    @Autowired
     private StoredFileService storedFiles;
-
-    /**
-     * 上传封面并返回统一公开地址，文件先独立保存供表单草稿引用。
-     * @param file 经过前端裁剪的 JPEG 或 PNG
-     * @return 已登记的公开图片地址
-     */
-    @Override
-    public String uploadImage(MultipartFile file) {
-        return publicImages.upload(file, "contest.png", 1, 1).getUrl();
-    }
 
     /**
      * 分页查询比赛列表

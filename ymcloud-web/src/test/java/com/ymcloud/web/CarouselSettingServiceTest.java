@@ -20,6 +20,7 @@ import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.SystemSetting;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
+import com.ymcloud.web.controller.admin.common.AdminCarouselController;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.impl.CarouselSettingServiceImpl;
 import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
@@ -71,8 +72,11 @@ class CarouselSettingServiceTest {
     private StoredFileService storage;
     private PlatformTransactionManager transactions;
     private CarouselSettingService service;
+    private AdminCarouselController imageController;
 
-    /** 配置真实条件构造器，替换数据库和对象存储边界。 */
+    /**
+     * 装配图片入口和轮播服务，替换数据库与对象存储边界
+     */
     @BeforeEach
     void setup() {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new Configuration(), ""), SystemSetting.class);
@@ -89,6 +93,8 @@ class CarouselSettingServiceTest {
         when(files.lambdaQuery()).thenAnswer(call -> new LambdaQueryChainWrapper<>(fileMapper, File.class));
         PublicImageServiceImpl publicImages = new PublicImageServiceImpl();
         ReflectionTestUtils.setField(publicImages, "storedFiles", storage);
+        imageController = new AdminCarouselController();
+        ReflectionTestUtils.setField(imageController, "publicImages", publicImages);
         service = new CarouselSettingServiceImpl();
         ReflectionTestUtils.setField(service, "publicImages", publicImages);
         ReflectionTestUtils.setField(service, "settings", settings);
@@ -223,7 +229,8 @@ class CarouselSettingServiceTest {
         for (byte[] bytes : List.of(new byte[0], "not png".getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 png(160, 100), new byte[5 * 1024 * 1024 + 1])) {
             var upload = new MockMultipartFile("file", "fake.png", "image/png", bytes);
-            assertEquals(HttpStatus.BAD_REQUEST, assertThrows(FileException.class, () -> service.upload(upload)).getCode());
+            assertEquals(HttpStatus.BAD_REQUEST,
+                         assertThrows(FileException.class, () -> imageController.uploadCarousel(upload)).getCode());
         }
         verifyNoInteractions(storage);
     }
@@ -244,11 +251,13 @@ class CarouselSettingServiceTest {
                 assertEquals(FileBizType.IMAGE, file.getBizType());
                 assertEquals(1, file.getIsPublic());
                 assertEquals("image/png", file.getFileType());
+                assertEquals("carousel.png", file.getFileName());
                 file.setId(17L);
                 file.setUrl("/files/public/test/image.png");
                 return file;
             });
-            assertEquals("17", service.upload(new MockMultipartFile("file", "photo.png", "image/png", png(160, 90))).id());
+            var upload = new MockMultipartFile("file", "photo.png", "image/png", png(160, 90));
+            assertEquals("17", imageController.uploadCarousel(upload).getData().id());
         }
     }
 

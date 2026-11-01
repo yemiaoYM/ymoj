@@ -187,6 +187,7 @@
     <!-- 新增/编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
+      destroy-on-close
       :title="dialogTitle"
       width="1300px"
       :before-close="handleClose"
@@ -233,8 +234,10 @@
         <el-form-item label="公告内容" prop="content">
           <div style="width: 100%">
             <MarkdownEidt
-              v-model:content="announcementForm.content"
+              ref="contentEditorRef"
               :key="`content-${currentAnnouncementId}`"
+              v-model:content="announcementForm.content"
+              :disabled="submitLoading"
             />
           </div>
         </el-form-item>
@@ -259,6 +262,7 @@
 <script lang="ts" setup>
 //import
 import AsyncSwitch from '@/components/common/AsyncSwitch.vue';
+import { useAsyncChange } from '@/composables/useAsyncChange';
 import { useUserStore } from "@/stores/user";
 import { ref, onMounted, reactive, nextTick, defineAsyncComponent } from "vue";
 import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";
@@ -284,11 +288,12 @@ const announcementList = ref<Announcement[]>([]);
 const announcementIds = ref<number[]>([]);
 const total = ref<number>(0);
 const loading = ref<boolean>(false);
-const submitLoading = ref<boolean>(false);
+const { pending: submitLoading, beforeChange: saveAnnouncement } = useAsyncChange();
 const dialogVisible = ref<boolean>(false);
 const dialogTitle = ref<string>("");
 const queryFormRef = ref();
 const announcementFormRef = ref<FormInstance>();
+const contentEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
 const currentAnnouncementId = ref<number | null>(null);
 //查询参数
 const queryParams = ref({
@@ -443,12 +448,12 @@ const handleDelete = (row: Announcement) => {
 };
 //校验和保存期间保持弹窗，只有成功后才关闭
 const submitForm = async () => {
-  if (submitLoading.value || !announcementFormRef.value) return;
-  submitLoading.value = true;
-  try {
-    let valid = false;
-    await announcementFormRef.value.validate((passed: boolean) => { valid = passed; });
-    if (!valid) return;
+  const form = announcementFormRef.value;
+  const editor = contentEditorRef.value;
+  if (submitLoading.value || !form || !editor) return;
+  await saveAnnouncement(async () => {
+    await form.validate();
+    if (await editor.uploadImages() === false) return false;
     const data = { ...announcementForm };
     const response = currentAnnouncementId.value === null
       ? await addAnnouncement(data)
@@ -456,12 +461,7 @@ const submitForm = async () => {
     ElMessage.success(response.data.msg);
     dialogVisible.value = false;
     handleQuery();
-  } catch {
-    //request 已提示失败，保留弹窗及用户输入以便重试
-    return;
-  } finally {
-    submitLoading.value = false;
-  }
+  });
 };
 //重置表单
 const reset = () => {

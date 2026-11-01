@@ -8,8 +8,6 @@ import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 
-import org.springframework.web.multipart.MultipartFile;
-
 import java.util.List;
 
 /**
@@ -18,13 +16,6 @@ import java.util.List;
  * @Description: 管理端比赛服务接口
  */
 public interface AdminContestService {
-
-    /**
-     * 上传经过内容校验的比赛封面，尚不关联或创建比赛。
-     * @param file 裁剪后的公开封面图片
-     * @return 统一存储返回的公开地址
-     */
-    String uploadImage(MultipartFile file);
 
     /**
      * 分页查询比赛列表

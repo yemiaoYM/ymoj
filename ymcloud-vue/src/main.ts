@@ -9,9 +9,13 @@ import { permission } from '@/directives/permission';
 import { config } from 'md-editor-v3';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { configureMarkdown } from '@/utils/markdown';
 
 // 题面公式随应用提供，编辑器和预览器共用同一个本地实例。
-config({ editorExtensions: { katex: { instance: katex } } });
+config({
+  editorExtensions: { katex: { instance: katex } },
+  markdownItConfig: configureMarkdown,
+});
 
 const app = createApp(App);
 app.use(createPinia());

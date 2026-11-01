@@ -25,7 +25,7 @@
             </div>
         </el-upload>
         <div class="section-title">资料设置</div>
-        <el-form :model="formProfile" label-position="top">
+        <el-form :model="formProfile" :disabled="loadingSaveBtn" label-position="top">
             <el-row :gutter="30" justify="space-around">
                 <el-col :md="10" :xs="24">
                     <el-form-item label="昵称 (非用户名)">
@@ -50,10 +50,14 @@
                 </el-col>
             </el-row>
 
-            <el-row v-if="!loadingSaveBtn">
+            <el-row>
                 <el-col :span="24">
                     <label class="el-form-item__label" style="float: none;">个性签名</label>
-                    <MarkdownEidt v-model:content="formProfile.signature" />
+                    <MarkdownEidt
+                        ref="signatureEditorRef"
+                        v-model:content="formProfile.signature"
+                        :disabled="loadingSaveBtn"
+                    />
                 </el-col>
                 <el-col :span="24" style="text-align: center;margin-top: 15px;">
                     <el-button
@@ -73,6 +77,7 @@
 import { onMounted, ref, defineAsyncComponent } from 'vue';
 import { useUserStore } from '@/stores/user';
 import { updateUserProfile } from '@/api/api';
+import { useAsyncChange } from '@/composables/useAsyncChange';
 import { ElMessage, ElNotification } from 'element-plus';
 const Avatar=defineAsyncComponent(() => import('@/components/common/Avatar.vue'));
 const MarkdownEidt=defineAsyncComponent(() => import('@/components/common/MarkdownEidt.vue'));
@@ -90,7 +95,8 @@ interface FormProfile {
 }
 //初始化表单数据 避免undefined
 const formProfile=ref<FormProfile>({} as FormProfile);
-const loadingSaveBtn=ref<boolean>(true);
+const { pending: loadingSaveBtn, beforeChange: saveProfile } = useAsyncChange();
+const signatureEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
 //后端接口地址
 const uploadUrl = '/api/user/upload-avatar';  
 const headers={
@@ -103,7 +109,6 @@ onMounted(()=>{
     const userInfo=userStore.user;
     //浅拷贝
     Object.assign(formProfile.value, userInfo);
-    loadingSaveBtn.value=false;
 })
 
 
@@ -151,21 +156,20 @@ const handleError = (err: any, file: any) => {
   ElMessage.error("上传失败");
 };
 //更新用户信息
-const handUpdateUserInfo=()=>{
-    loadingSaveBtn.value=true;
-    updateUserProfile({
-        nickname: formProfile.value.nickname,
-        school: formProfile.value.school,
-        blog: formProfile.value.blog,
-        sex: formProfile.value.sex,
-        signature: formProfile.value.signature
-    }).then(res=>{
+const handUpdateUserInfo=async ()=>{
+    const editor = signatureEditorRef.value;
+    if (!editor || loadingSaveBtn.value) return;
+    await saveProfile(async () => {
+        if (await editor.uploadImages() === false) return false;
+        const res = await updateUserProfile({
+            nickname: formProfile.value.nickname,
+            school: formProfile.value.school,
+            blog: formProfile.value.blog,
+            sex: formProfile.value.sex,
+            signature: formProfile.value.signature
+        });
         ElMessage.success(res.data.msg);
-    }).catch(err=>{
-        console.log(err);
-    }).finally(()=>{
-        loadingSaveBtn.value=false;
-    })
+    });
 }
 </script>
 

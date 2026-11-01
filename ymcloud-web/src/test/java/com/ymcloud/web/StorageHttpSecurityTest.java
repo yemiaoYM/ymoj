@@ -17,10 +17,16 @@ import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.web.controller.admin.common.AdminStorageMigrationController;
+import com.ymcloud.web.controller.admin.common.AdminCarouselController;
+import com.ymcloud.web.controller.admin.contest.AdminContestController;
 import com.ymcloud.web.controller.admin.problem.AdminProblemController;
+import com.ymcloud.web.controller.common.ImageController;
 import com.ymcloud.web.controller.oj.PublicFileController;
 import com.ymcloud.web.handler.GlobalExceptionHandler;
 import com.ymcloud.web.service.admin.AdminProblemService;
+import com.ymcloud.web.service.admin.AdminContestService;
+import com.ymcloud.web.service.common.CarouselSettingService;
+import com.ymcloud.web.service.common.PublicImageService;
 import com.ymcloud.web.service.oj.impl.FileServiceImpl;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -57,6 +63,7 @@ import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -81,8 +88,36 @@ class StorageHttpSecurityTest {
     @EnableWebMvc
     @Import({SecurityConfig.class, PublicFileController.class, FileServiceImpl.class, AdminStorageMigrationController.class,
             AdminProblemController.class, GlobalExceptionHandler.class, AuthenticationEntryPointImpl.class,
-            CustomAccessDeniedHandler.class, LogoutSuccessHandlerImpl.class})
+            CustomAccessDeniedHandler.class, LogoutSuccessHandlerImpl.class, ImageController.class,
+            AdminCarouselController.class, AdminContestController.class})
     static class TestConfig {
+
+        /**
+         * 模拟图片处理边界，鉴权仍通过实际过滤链和方法注解
+         * @return 不访问外部存储的图片服务
+         */
+        @Bean
+        PublicImageService publicImageService() {
+            return mock(PublicImageService.class);
+        }
+
+        /**
+         * 隔离轮播配置业务，上传仍使用真实 Controller
+         * @return 轮播配置模拟服务
+         */
+        @Bean
+        CarouselSettingService carouselSettingService() {
+            return mock(CarouselSettingService.class);
+        }
+
+        /**
+         * 隔离比赛保存业务，上传仍使用真实 Controller
+         * @return 比赛模拟服务
+         */
+        @Bean
+        AdminContestService adminContestService() {
+            return mock(AdminContestService.class);
+        }
 
         @Bean
         StoredFileService storedFileService() {
@@ -187,6 +222,103 @@ class StorageHttpSecurityTest {
                 .andExpect(content().contentType("image/png"))
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("inline")));
+    }
+
+    /**
+     * 正文插图共用登录入口，普通用户和题目管理员均可上传，匿名请求不能进入图片处理
+     * @throws Exception 请求或断言失败
+     */
+    @Test
+    void markdownUploadRequiresLoginAndReturnsOnlyUrl() throws Exception {
+        PublicImageService images = context.getBean(PublicImageService.class);
+        mvc.perform(multipart("/markdown/image").file(inputFile()))
+                .andExpect(jsonPath("$.code").value(401));
+        verifyNoInteractions(images);
+        File image = new File();
+        image.setUrl("/files/public/local/image.png");
+        when(images.upload(any(), eq("markdown"), eq(0), eq(0))).thenReturn(image);
+        for (String permissions : List.of("ROLE_USER", "admin:access,problem:problem:add")) {
+            mvc.perform(multipart("/markdown/image").file(inputFile()).header("Mock-Permissions", permissions))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(200))
+                    .andExpect(jsonPath("$.data").value("/files/public/local/image.png"));
+        }
+        verify(images, times(2)).upload(any(), eq("markdown"), eq(0), eq(0));
+    }
+
+    /**
+     * 各业务的管理员上传入口要求后台准入和对应动作权限，普通账号通配符无效
+     * @throws Exception 请求或断言失败
+     */
+    @Test
+    void adminImageUploadsRequireEntryAndActionPermissions() throws Exception {
+        PublicImageService images = context.getBean(PublicImageService.class);
+        for (String path : List.of("/admin/system-setting/carousel/image", "/admin/contest/image")) {
+            mvc.perform(multipart(path).file(inputFile()))
+                    .andExpect(jsonPath("$.code").value(401));
+            for (String permissions : List.of("ROLE_USER", "admin:access", "admin:access,*:*:*",
+                    "system:setting:edit,contest:contest:add,contest:contest:edit")) {
+                mvc.perform(multipart(path).file(inputFile()).header("Mock-Permissions", permissions))
+                        .andExpect(jsonPath("$.code").value(403));
+            }
+        }
+        mvc.perform(multipart("/admin/system-setting/carousel/image").file(inputFile())
+                        .header("Mock-Permissions", "admin:access,contest:contest:add,contest:contest:edit"))
+                .andExpect(jsonPath("$.code").value(403));
+        mvc.perform(multipart("/admin/contest/image").file(inputFile())
+                        .header("Mock-Permissions", "admin:access,system:setting:edit"))
+                .andExpect(jsonPath("$.code").value(403));
+        verifyNoInteractions(images);
+    }
+
+    /**
+     * 合法权限按既有地址上传，轮播保留字符串 ID 与 URL，比赛仅返回 URL
+     * @throws Exception 请求或断言失败
+     */
+    @Test
+    void adminImageUploadsPreserveResponseContracts() throws Exception {
+        PublicImageService images = context.getBean(PublicImageService.class);
+        File image = new File();
+        image.setId(9007199254740993L);
+        image.setUrl("/files/public/local/image.png");
+        when(images.upload(any(), eq("carousel"), eq(16), eq(9))).thenReturn(image);
+        when(images.upload(any(), eq("contest"), eq(1), eq(1))).thenReturn(image);
+        mvc.perform(multipart("/admin/system-setting/carousel/image").file(inputFile())
+                        .header("Mock-Permissions", "admin:access,system:setting:edit"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.id").value("9007199254740993"))
+                .andExpect(jsonPath("$.data.url").value(image.getUrl()));
+        for (String permission : List.of("contest:contest:add", "contest:contest:edit")) {
+            mvc.perform(multipart("/admin/contest/image").file(inputFile())
+                            .header("Mock-Permissions", "admin:access," + permission))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value(200))
+                    .andExpect(jsonPath("$.data").value(image.getUrl()));
+        }
+        verify(images).upload(any(), eq("carousel"), eq(16), eq(9));
+        verify(images, times(2)).upload(any(), eq("contest"), eq(1), eq(1));
+    }
+
+    /**
+     * 用户 ID 为 1 的超级管理员仍可使用通配符调用两类管理员上传入口
+     * @throws Exception 请求或断言失败
+     */
+    @Test
+    void superAdminCanUploadCarouselAndContestImages() throws Exception {
+        PublicImageService images = context.getBean(PublicImageService.class);
+        File image = new File();
+        image.setId(17L);
+        image.setUrl("/files/public/local/image.png");
+        when(images.upload(any(), eq("carousel"), eq(16), eq(9))).thenReturn(image);
+        when(images.upload(any(), eq("contest"), eq(1), eq(1))).thenReturn(image);
+        for (String path : List.of("/admin/system-setting/carousel/image", "/admin/contest/image")) {
+            mvc.perform(multipart(path).file(inputFile())
+                            .header("Mock-User-Id", "1").header("Mock-Permissions", "*:*:*"))
+                    .andExpect(jsonPath("$.code").value(200));
+        }
+        verify(images).upload(any(), eq("carousel"), eq(16), eq(9));
+        verify(images).upload(any(), eq("contest"), eq(1), eq(1));
     }
 
     @Test

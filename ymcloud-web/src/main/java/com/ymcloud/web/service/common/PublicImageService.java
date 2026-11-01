@@ -9,17 +9,17 @@ import java.io.InputStream;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-28
- * @Description: 轮播与比赛封面的公开图片处理契约。
+ * @Description: 轮播、比赛封面与 Markdown 插图的公开图片处理契约
  */
 public interface PublicImageService {
 
     /**
-     * 按指定比例校验图片，重编码为 PNG 并登记到统一存储。
-     * @param upload 不超过 5 MiB 的 JPEG 或 PNG 图片
-     * @param fileName 业务指定的文件名
-     * @param ratioWidth 业务指定的宽度比例
-     * @param ratioHeight 业务指定的高度比例
-     * @return 已保存的公开图片
+     * 校验、重编码并保存公开图片；固定比例输出 PNG，自由比例图片等比压缩
+     * @param upload 不超过 5 MiB 的静态 JPEG 或 PNG，自由比例另支持 WebP
+     * @param fileName 服务端指定的不含扩展名的文件名
+     * @param ratioWidth 固定宽度比例；自由比例时与 ratioHeight 同为 0
+     * @param ratioHeight 固定高度比例；自由比例时与 ratioWidth 同为 0
+     * @return 已保存的公开图片；自由比例输出长边不超过 1920 像素且不超过 2 MiB
      */
     File upload(MultipartFile upload, String fileName, int ratioWidth, int ratioHeight);
 

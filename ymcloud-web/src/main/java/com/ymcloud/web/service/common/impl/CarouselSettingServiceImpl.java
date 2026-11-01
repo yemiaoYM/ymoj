@@ -22,7 +22,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -96,17 +95,6 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
                 .map(file -> new CarouselSettingVO.Image(file.getId().toString(), file.getUrl()))
                 .toList();
         return new CarouselSettingVO(true, images);
-    }
-
-    /**
-     * 上传轮播候选图；与比赛封面共用校验和存储，尚不改变轮播顺序。
-     * @param upload 不超过 5 MiB、16:9 的 JPEG 或 PNG 图片
-     * @return 文件 ID 与公开地址
-     */
-    @Override
-    public CarouselSettingVO.Image upload(MultipartFile upload) {
-        File file = publicImages.upload(upload, "carousel.png", 16, 9);
-        return new CarouselSettingVO.Image(file.getId().toString(), file.getUrl());
     }
 
     /**

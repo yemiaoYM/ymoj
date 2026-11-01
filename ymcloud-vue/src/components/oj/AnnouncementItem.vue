@@ -20,7 +20,7 @@
           preview-theme="cyanosis"
           :id="`announcement-${announcement.id}`"
           :model-value="announcement.content"
-          :sanitize="DOMPurify.sanitize"
+          :sanitize="sanitizeMarkdown"
         />
       </div>
     </div>
@@ -37,7 +37,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { MdPreview } from 'md-editor-v3';
-import DOMPurify from 'dompurify';
+import { sanitizeMarkdown } from '@/utils/markdown';
 import type { Announcement } from '@/type/announcement';
 import 'md-editor-v3/lib/preview.css';
 

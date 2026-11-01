@@ -15,6 +15,7 @@ import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.web.controller.admin.contest.AdminContestController;
 import com.ymcloud.web.service.admin.AdminContestService;
 import com.ymcloud.web.service.admin.impl.AdminContestServiceImpl;
+import com.ymcloud.web.service.common.PublicImageService;
 import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
@@ -74,8 +75,8 @@ class ContestImageTest {
         StoredFileService storage = mock(StoredFileService.class);
         PublicImageServiceImpl images = new PublicImageServiceImpl();
         ReflectionTestUtils.setField(images, "storedFiles", storage);
-        AdminContestServiceImpl service = new AdminContestServiceImpl();
-        ReflectionTestUtils.setField(service, "publicImages", images);
+        AdminContestController controller = new AdminContestController();
+        ReflectionTestUtils.setField(controller, "publicImages", images);
         doAnswer(call -> {
             BufferedImage image = ImageIO.read((InputStream) call.getArgument(0));
             assertEquals(1024, image.getWidth());
@@ -92,10 +93,10 @@ class ContestImageTest {
         user.setUsername("editor");
         try (var security = mockStatic(SecurityUtils.class)) {
             security.when(SecurityUtils::getUser).thenReturn(user);
-            assertEquals("/files/public/cover.png", service.uploadImage(picture(1024, 1024)));
+            assertEquals("/files/public/cover.png", controller.uploadContest(picture(1024, 1024)).getData());
         }
-        assertThrows(FileException.class, () -> service.uploadImage(picture(1600, 900)));
-        assertThrows(FileException.class, () -> service.uploadImage(
+        assertThrows(FileException.class, () -> controller.uploadContest(picture(1600, 900)));
+        assertThrows(FileException.class, () -> controller.uploadContest(
                 new MockMultipartFile("file", "fake.png", "image/png", "not an image".getBytes(StandardCharsets.UTF_8))));
         verify(storage, times(1)).save(any(InputStream.class), anyLong(), any(File.class));
     }
@@ -108,16 +109,16 @@ class ContestImageTest {
     void preservesFileErrorCodeAndCause() throws IOException {
         PublicImageServiceImpl images = new PublicImageServiceImpl();
         FileException empty = assertThrows(FileException.class, () -> images.upload(
-                new MockMultipartFile("file", new byte[0]), "contest.png", 1, 1));
+                new MockMultipartFile("file", new byte[0]), "contest", 1, 1));
         assertEquals(HttpStatus.BAD_REQUEST, empty.getCode());
         FileException large = assertThrows(FileException.class, () -> images.upload(
-                new MockMultipartFile("file", new byte[5 * 1024 * 1024 + 1]), "contest.png", 1, 1));
+                new MockMultipartFile("file", new byte[5 * 1024 * 1024 + 1]), "contest", 1, 1));
         assertEquals(HttpStatus.BAD_REQUEST, large.getCode());
         IOException cause = new IOException("test read failure");
         var unreadable = mock(org.springframework.web.multipart.MultipartFile.class);
         when(unreadable.getInputStream()).thenThrow(cause);
         FileException read = assertThrows(FileException.class,
-                () -> images.upload(unreadable, "contest.png", 1, 1));
+                () -> images.upload(unreadable, "contest", 1, 1));
         assertEquals(HttpStatus.BAD_REQUEST, read.getCode());
         assertSame(cause, read.getCause());
     }
@@ -173,25 +174,31 @@ class ContestImageTest {
         verify(contests, times(1)).updateById(any(Contest.class));
     }
 
-    /** 上传入口复用比赛写权限，只读账号不能调用。 */
+    /**
+     * 比赛封面入口保留比赛写权限，只读账号不能调用
+     */
     @Test
     void requiresContestWritePermission() {
-        AdminContestService service = mock(AdminContestService.class);
+        PublicImageService images = mock(PublicImageService.class);
+        File file = new File();
+        file.setUrl("/files/public/cover.png");
+        when(images.upload(null, "contest", 1, 1)).thenReturn(file);
         try (var context = new AnnotationConfigApplicationContext()) {
             context.register(SecurityConfig.class, AdminContestController.class, PermissionService.class);
-            context.getBeanFactory().registerSingleton("adminContestService", service);
+            context.getBeanFactory().registerSingleton("publicImageService", images);
+            context.getBeanFactory().registerSingleton("adminContestService", mock(AdminContestService.class));
             context.refresh();
             var controller = context.getBean(AdminContestController.class);
             SecurityContextHolder.getContext().setAuthentication(
                     new TestingAuthenticationToken("viewer", "", "contest:contest:list"));
-            assertThrows(AccessDeniedException.class, () -> controller.uploadImage(null));
-            verifyNoInteractions(service);
+            assertThrows(AccessDeniedException.class, () -> controller.uploadContest(null));
+            verifyNoInteractions(images);
             for (String permission : new String[]{"contest:contest:add", "contest:contest:edit"}) {
                 SecurityContextHolder.getContext().setAuthentication(
                         new TestingAuthenticationToken("editor", "", permission));
-                assertDoesNotThrow(() -> controller.uploadImage(null));
+                assertDoesNotThrow(() -> controller.uploadContest(null));
             }
-            verify(service, times(2)).uploadImage(null);
+            verify(images, times(2)).upload(null, "contest", 1, 1);
         } finally {
             SecurityContextHolder.clearContext();
         }

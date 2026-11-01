@@ -104,7 +104,12 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt :key="`content-${mode}-${problemId}`" v-model:content="problem.content" />
+            <MarkdownEidt
+              ref="contentEditorRef"
+              :key="`content-${mode}-${problemId}`"
+              v-model:content="problem.content"
+              :disabled="saving"
+            />
           </el-form-item>
           <!-- 输入描述（Markdown） -->
           <el-form-item
@@ -113,7 +118,12 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt :key="`input-${mode}-${problemId}`" v-model:content="problem.input" />
+            <MarkdownEidt
+              ref="inputEditorRef"
+              :key="`input-${mode}-${problemId}`"
+              v-model:content="problem.input"
+              :disabled="saving"
+            />
           </el-form-item>
           <!-- 输出描述（Markdown） -->
           <el-form-item
@@ -122,7 +132,12 @@
             label-position="top"
             style="width: 100%"
           >
-            <MarkdownEidt :key="`output-${mode}-${problemId}`" v-model:content="problem.output" />
+            <MarkdownEidt
+              ref="outputEditorRef"
+              :key="`output-${mode}-${problemId}`"
+              v-model:content="problem.output"
+              :disabled="saving"
+            />
           </el-form-item>
           <!-- 测试用例 -->
           <el-form-item
@@ -257,6 +272,9 @@ const { pending: saving, beforeChange: saveProblem } = useAsyncChange();
 const loadFailed = ref(false);
 const tagsFailed = ref(false);
 const formRef = ref<FormInstance>();
+const contentEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
+const inputEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
+const outputEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
 const mode = ref('add');
 const problemId = ref<number | null>(null);
 const tagList = ref<Tag[]>([]);
@@ -405,11 +423,17 @@ const onRemoveCase = (index: number) => {
 //提交题目（新增或编辑）
 const onSubmitProblem = async () => {
   const form = formRef.value;
-  if (!form || saving.value || loading.value || loadFailed.value) return;
+  const contentEditor = contentEditorRef.value;
+  const inputEditor = inputEditorRef.value;
+  const outputEditor = outputEditorRef.value;
+  if (!form || !contentEditor || !inputEditor || !outputEditor || saving.value || loading.value || loadFailed.value) return;
   const current = revision;
   await saveProblem(async () => {
     await form.validate();
     if (current !== revision) return false;
+    for (const editor of [contentEditor, inputEditor, outputEditor]) {
+      if (await editor.uploadImages() === false || current !== revision) return false;
+    }
     const { id, ...values } = problem.value;
     const submitData = { ...values, source: values.source.trim() || null };
     const res = mode.value === 'edit' && id

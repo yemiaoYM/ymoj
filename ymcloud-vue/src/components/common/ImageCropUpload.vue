@@ -14,6 +14,7 @@
     title="裁剪图片"
     width="min(760px, calc(100vw - 32px))"
     align-center
+    append-to-body
     destroy-on-close
     :model-value="visible"
     :close-on-click-modal="false"
@@ -41,7 +42,7 @@
           <div ref="previewRef" class="crop-result" aria-label="裁剪结果预览" :style="{ aspectRatio: ratio }" />
           <x-flex vertical :size="4">
             <el-text>预览</el-text>
-            <el-text type="info" size="small">{{ aspectRatio.join(':') }}</el-text>
+            <el-text type="info" size="small">{{ aspectRatio ? aspectRatio.join(':') : '自由比例' }}</el-text>
           </x-flex>
         </x-flex>
       </x-flex>
@@ -64,7 +65,7 @@ import 'cropperjs/dist/cropper.css';
 // 只处理本地选图和裁剪，emit PNG Blob；调用方负责上传、重试和业务保存。
 const props = withDefaults(defineProps<{
   disabled?: boolean;
-  aspectRatio?: [number, number];
+  aspectRatio?: [number, number] | null;
   outputWidth?: number;
   maxSizeMb?: number;
 }>(), {
@@ -82,15 +83,20 @@ const reading = ref(false);
 const ready = ref(false);
 const exporting = ref(false);
 const imageUrl = ref('');
-const ratio = computed(() => props.aspectRatio[0] / props.aspectRatio[1]);
-const outputHeight = computed(() => Math.round(props.outputWidth / ratio.value));
+const ratio = computed(() => props.aspectRatio ? props.aspectRatio[0] / props.aspectRatio[1] : undefined);
 let cropper: Cropper | null = null;
 let generation = 0;
 
 async function onSelectImage(file: UploadFile) {
   uploadRef.value?.clearFiles();
-  const raw = file.raw;
-  if (!raw || props.disabled || reading.value || visible.value) {
+  if (file.raw) {
+    await open(file.raw);
+  }
+}
+
+/** 选图、粘贴和拖入统一经过本地校验及裁剪确认。 */
+async function open(raw: File) {
+  if (props.disabled || reading.value || visible.value) {
     return;
   }
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(raw.type) || raw.size > props.maxSizeMb * 1024 * 1024) {
@@ -132,11 +138,11 @@ function handleInitCropper() {
     aspectRatio: ratio.value,
     viewMode: 1,
     dragMode: 'move',
-    autoCropArea: 0.8,
+    autoCropArea: props.aspectRatio ? 0.8 : 1,
     preview: previewRef.value,
     toggleDragModeOnDblclick: false,
     minCropBoxWidth: 40,
-    minCropBoxHeight: 40 / ratio.value,
+    minCropBoxHeight: ratio.value ? 40 / ratio.value : 40,
     ready() { ready.value = true; },
     error() {
       ready.value = false;
@@ -196,8 +202,9 @@ function onConfirm() {
   const current = generation;
   try {
     const canvas = cropper.getCroppedCanvas({
-      width: props.outputWidth,
-      height: outputHeight.value,
+      ...(ratio.value
+        ? { width: props.outputWidth, height: Math.round(props.outputWidth / ratio.value) }
+        : { maxWidth: props.outputWidth, maxHeight: props.outputWidth }),
       imageSmoothingQuality: 'high',
     });
     canvas.toBlob((blob) => {
@@ -224,6 +231,8 @@ onBeforeUnmount(() => {
   generation++;
   handleRelease();
 });
+
+defineExpose({ open });
 </script>
 
 <style scoped>
@@ -259,6 +268,7 @@ onBeforeUnmount(() => {
 }
 .crop-result {
   width: 112px;
+  aspect-ratio: 1;
   flex-shrink: 0;
   overflow: hidden;
   background: var(--el-fill-color-light);

@@ -2,7 +2,7 @@
   <div style="width: 100%;height: 100%;">
     <MdPreview 
       :model-value="content"
-      :sanitize="DOMPurify.sanitize"
+      :sanitize="sanitizeMarkdown"
       previewTheme="cyanosis"
     />
   </div>
@@ -11,7 +11,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import { MdPreview } from 'md-editor-v3';
-import DOMPurify from 'dompurify';
+import { sanitizeMarkdown } from '@/utils/markdown';
 import 'md-editor-v3/lib/preview.css';
 
 export default defineComponent({
@@ -26,7 +26,7 @@ export default defineComponent({
     }
   },
   setup() {
-    return { DOMPurify };
+    return { sanitizeMarkdown };
   }
 })
 </script>
