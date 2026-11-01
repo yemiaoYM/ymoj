@@ -20,13 +20,6 @@ const routes = [
   ...ojRoutes,
   ...adminRoutes,
   ...errorRoutes,
-  //测试
-  {
-    path: '/test',
-    name: 'Test',
-    component: () => import('@/views/test/test.vue'),
-    meta: { title: 'Test' }
-  },
 ]
 
 const router = createRouter({

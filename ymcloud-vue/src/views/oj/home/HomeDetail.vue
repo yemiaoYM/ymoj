@@ -86,8 +86,6 @@
                     class="user-nickname"
                     disable-transitions
                     effect="dark"
-                    color="#21c1c6"
-                    size="small"
                     :title="row.nickname"
                   >
                     {{ row.nickname }}
@@ -347,7 +345,9 @@ const handleGetUserAcRank = () => {
   max-width: 40%;
   flex-shrink: 0;
 }
+
 .user-nickname :deep(.el-tag__content) {
+  line-height: normal;
   overflow: hidden;
   text-overflow: ellipsis;
 }

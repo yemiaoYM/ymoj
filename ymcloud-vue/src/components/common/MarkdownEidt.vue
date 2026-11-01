@@ -1,5 +1,5 @@
 <template>
-  <div v-loading="uploading" element-loading-text="正在上传正文图片" style="width: 100%;height: 100%;">
+  <div class="markdown-editor" v-loading="uploading" element-loading-text="正在上传正文图片" style="width: 100%;height: 100%;">
     <MdEditor 
       ref="editorRef"
       v-model="modelValue" 
@@ -13,35 +13,44 @@
       @on-drop="onDropImage"
     >
       <template #defToolbars>
-        <NormalToolbar title="标记" aria-label="标记" :disabled="disabled || uploading" @on-click="onMark">
-          <Highlighter class="md-editor-icon" />
-          <span class="md-editor-toolbar-item-name">标记</span>
-        </NormalToolbar>
-        <NormalToolbar title="居左" aria-label="居左" :disabled="disabled || uploading" @on-click="onAlign('left')">
-          <svg class="md-editor-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 5h18 M3 10h12 M3 15h18 M3 20h12" fill="none" stroke="currentColor" stroke-width="1.8" />
-          </svg>
-          <span class="md-editor-toolbar-item-name">居左</span>
-        </NormalToolbar>
-        <NormalToolbar title="居中" aria-label="居中" :disabled="disabled || uploading" @on-click="onAlign('center')">
-          <svg class="md-editor-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 5h18 M6 10h12 M3 15h18 M6 20h12" fill="none" stroke="currentColor" stroke-width="1.8" />
-          </svg>
-          <span class="md-editor-toolbar-item-name">居中</span>
-        </NormalToolbar>
-        <NormalToolbar title="居右" aria-label="居右" :disabled="disabled || uploading" @on-click="onAlign('right')">
-          <svg class="md-editor-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M3 5h18 M9 10h12 M3 15h18 M9 20h12" fill="none" stroke="currentColor" stroke-width="1.8" />
-          </svg>
-          <span class="md-editor-toolbar-item-name">居右</span>
-        </NormalToolbar>
+        <MarkdownToolbarMenu
+          title="文字"
+          :icon="toolbarMenus.text.icon"
+          :items="toolbarMenus.text.items"
+          :disabled="disabled || uploading"
+          @command="$event === 'mark' ? onMark() : editorRef.execCommand($event)"
+        />
+        <MarkdownToolbarMenu
+          title="对齐"
+          :icon="toolbarMenus.align.icon"
+          :items="toolbarMenus.align.items"
+          :disabled="disabled || uploading"
+          @command="onAlign"
+        />
+        <MarkdownToolbarMenu
+          title="列表"
+          :icon="toolbarMenus.list.icon"
+          :items="toolbarMenus.list.items"
+          :disabled="disabled || uploading"
+          @command="editorRef.execCommand($event)"
+        />
+        <MarkdownToolbarMenu
+          title="代码"
+          :icon="toolbarMenus.code.icon"
+          :items="toolbarMenus.code.items"
+          :disabled="disabled || uploading"
+          @command="editorRef.execCommand($event)"
+        />
         <DropdownToolbar
           title="图片"
           :visible="imageMenuVisible"
           :disabled="disabled || uploading"
           @on-change="imageMenuVisible = $event"
         >
-          <ImageIcon class="md-editor-icon" />
+          <x-flex inline align="center" :wrap="false" :size="2">
+            <ImageIcon class="md-editor-icon" />
+            <ChevronDown :size="12" aria-hidden="true" />
+          </x-flex>
           <span class="md-editor-toolbar-item-name">图片</span>
           <template #overlay>
             <ul class="md-editor-menu" role="menu" @click="imageMenuVisible = false">
@@ -66,6 +75,13 @@
             </ul>
           </template>
         </DropdownToolbar>
+        <MarkdownToolbarMenu
+          title="视图"
+          :icon="toolbarMenus.view.icon"
+          :items="toolbarMenus.view.items"
+          :disabled="disabled || uploading"
+          @command="onView"
+        />
       </template>
     </MdEditor>
   </div>
@@ -73,9 +89,14 @@
 
 <script>
 import { ref,defineComponent,watch,onBeforeUnmount,nextTick } from 'vue';
-import { DropdownToolbar, MdEditor, NormalToolbar } from 'md-editor-v3';
-import { Highlighter, Image as ImageIcon } from '@lucide/vue';
+import { DropdownToolbar, MdEditor } from 'md-editor-v3';
+import {
+  AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Code, CodeXml,
+  Columns2, Eye, Highlighter, Image as ImageIcon, Italic, List, ListChecks,
+  ListOrdered, Pencil, Strikethrough, Subscript, Superscript, Underline
+} from '@lucide/vue';
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
+import MarkdownToolbarMenu from '@/components/common/MarkdownToolbarMenu.vue';
 import { createMarkdownSanitizer } from '@/utils/markdown';
 import { uploadMarkdownImage } from '@/api/markdown';
 import { ElMessage } from 'element-plus';
@@ -85,11 +106,11 @@ export default defineComponent({
   name: 'MarkdownEidt',
   components: {
     MdEditor,
-    NormalToolbar,
     DropdownToolbar,
-    Highlighter,
     ImageIcon,
-    ImageCropUpload
+    ChevronDown,
+    ImageCropUpload,
+    MarkdownToolbarMenu
   },
   props: {
     content: {
@@ -105,25 +126,13 @@ export default defineComponent({
   setup(props, { emit }) {
     //配置
     const toolbars = [
-      'bold',
-      'underline',
-      'italic',
       0,
-      '-',
       'title',
-      'strikeThrough',
-      'sub',
-      'sup',
       'quote',
       1,
       2,
-      3,
-      'unorderedList',
-      'orderedList',
-      'task',
       '-',
-      'codeRow',
-      'code',
+      3,
       'link',
       4,
       'table',
@@ -134,9 +143,54 @@ export default defineComponent({
       '=',
       'pageFullscreen',
       'fullscreen',
-      'preview',
-      'previewOnly',
+      5,
     ];
+
+    const toolbarMenus = {
+      text: {
+        icon: Bold,
+        items: [
+          { label: '加粗', command: 'bold', icon: Bold },
+          { label: '斜体', command: 'italic', icon: Italic },
+          { label: '下划线', command: 'underline', icon: Underline },
+          { label: '删除线', command: 'strikeThrough', icon: Strikethrough },
+          { label: '标记', command: 'mark', icon: Highlighter },
+          { label: '下标', command: 'sub', icon: Subscript },
+          { label: '上标', command: 'sup', icon: Superscript },
+        ],
+      },
+      align: {
+        icon: AlignLeft,
+        items: [
+          { label: '居左', command: 'left', icon: AlignLeft },
+          { label: '居中', command: 'center', icon: AlignCenter },
+          { label: '居右', command: 'right', icon: AlignRight },
+        ],
+      },
+      list: {
+        icon: List,
+        items: [
+          { label: '无序列表', command: 'unorderedList', icon: List },
+          { label: '有序列表', command: 'orderedList', icon: ListOrdered },
+          { label: '任务列表', command: 'task', icon: ListChecks },
+        ],
+      },
+      code: {
+        icon: CodeXml,
+        items: [
+          { label: '行内代码', command: 'codeRow', icon: CodeXml },
+          { label: '代码块', command: 'code', icon: Code },
+        ],
+      },
+      view: {
+        icon: Eye,
+        items: [
+          { label: '仅编辑', command: 'edit', icon: Pencil },
+          { label: '分屏预览', command: 'split', icon: Columns2 },
+          { label: '仅预览', command: 'preview', icon: Eye },
+        ],
+      },
+    };
     
     const modelValue = ref(props.content);
     const editorRef = ref();
@@ -160,6 +214,11 @@ export default defineComponent({
         targetValue: `\n\n<div style="text-align: ${align}">\n\n${selected || '请输入内容'}\n\n</div>\n\n`,
         select: false,
       }));
+    };
+
+    const onView = (mode) => {
+      editorRef.value.togglePreview(mode !== 'edit');
+      editorRef.value.togglePreviewOnly(mode === 'preview');
     };
 
     const onUploadImg = (files) => {
@@ -250,12 +309,14 @@ export default defineComponent({
       sanitizeMarkdown,
       modelValue,
       toolbars,
+      toolbarMenus,
       editorRef,
       cropUploadRef,
       imageMenuVisible,
       uploading,
       onMark,
       onAlign,
+      onView,
       onUploadImg,
       onDropImage,
       onPreviewImage,
@@ -264,3 +325,45 @@ export default defineComponent({
   }
 })
 </script>
+
+<style scoped>
+.markdown-editor {
+  min-width: 0;
+}
+
+.markdown-editor :deep(.md-editor-toolbar-wrapper) {
+  overflow: visible;
+}
+
+.markdown-editor :deep(.md-editor-toolbar) {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.markdown-editor :deep(.md-editor-toolbar-left),
+.markdown-editor :deep(.md-editor-toolbar-right) {
+  max-width: 100%;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.markdown-editor :deep(.md-editor-toolbar-right) {
+  margin-inline-start: auto;
+}
+
+.markdown-editor :deep(.md-editor-toolbar-item svg.md-editor-icon) {
+  width: 16px;
+  height: 16px;
+  padding: 4px;
+}
+
+.markdown-editor :deep(.md-editor-footer) {
+  height: auto;
+  min-height: 24px;
+  flex-wrap: wrap;
+}
+
+.markdown-editor :deep(.md-editor-footer-right) {
+  margin-inline-start: auto;
+}
+</style>

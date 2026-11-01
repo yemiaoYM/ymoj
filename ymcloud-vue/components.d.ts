@@ -96,6 +96,7 @@ declare module 'vue' {
     LegalAgreement: typeof import('./src/components/common/LegalAgreement.vue')['default']
     MarkdownEidt: typeof import('./src/components/common/MarkdownEidt.vue')['default']
     MarkdownPreview: typeof import('./src/components/common/MarkdownPreview.vue')['default']
+    MarkdownToolbarMenu: typeof import('./src/components/common/MarkdownToolbarMenu.vue')['default']
     PlainTextViewer: typeof import('./src/components/common/PlainTextViewer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

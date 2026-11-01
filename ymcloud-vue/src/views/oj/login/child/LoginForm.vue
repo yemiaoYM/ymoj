@@ -185,4 +185,4 @@ const refreshCaptcha = () => {
 
 </script>
 
-<style scoped src="../auth-form.css"></style>
+<style scoped src="@/assets/styles/auth-form.css"></style>

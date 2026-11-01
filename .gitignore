@@ -93,6 +93,10 @@ logs/
 **/logs/
 
 ### 临时文件 ###
+# Python 执行缓存；临时产物仍须按规范用后清理。
+__pycache__/
+*.py[cod]
+
 # 测试生成的临时文件
 **/test-output/
 **/tmp/
