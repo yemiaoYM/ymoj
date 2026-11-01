@@ -9,22 +9,33 @@
       <el-card>
         <!-- 标题 -->
         <template #header>
-          <x-flex justify="center" align="center">
-            <h1 style="font-weight: bold; font-size: 30px">
-              {{ contestData.title }}
-            </h1>
-            <!-- 创建者或主办方 -->
-            <el-tag
-              v-if="contestData.creatorUsername"
-              @click="toUserInfo(contestData.creatorUsername)"
-              size="large"
-              disable-transitions
-              effect="dark"
-              style="margin-left: 10px; cursor: pointer"
-              color="#21c1c6"
+          <x-flex class="contest-header" justify="center" align="center" :size="16">
+            <x-flex class="contest-heading" justify="center" align="center" :size="12">
+              <h1>{{ contestData.title }}</h1>
+              <!-- 创建者或主办方 -->
+              <el-tag
+                v-if="contestData.creatorUsername"
+                @click="toUserInfo(contestData.creatorUsername)"
+                size="large"
+                disable-transitions
+                effect="dark"
+                style="cursor: pointer"
+                color="#21c1c6"
+              >
+                <span style="font-weight: bold">{{ contestData.creatorUsername }}</span>
+              </el-tag>
+            </x-flex>
+            <el-button
+              v-if="contestData.canClone"
+              v-permission="['contest:contest:add']"
+              class="contest-clone-button"
+              type="primary"
+              plain
+              :icon="CopyDocument"
+              @click="cloneVisible = true"
             >
-              <span style="font-weight: bold">{{ contestData.creatorUsername }}</span>
-            </el-tag>
+              克隆比赛
+            </el-button>
           </x-flex>
         </template>
         <!-- 信息 -->
@@ -56,7 +67,7 @@
               color="#25bb9b"
               style="color: white"
             >
-              {{ contestData.sourceId === 0 ? "原创" : "重建赛" }}
+              {{ contestData.sourceId === ORIGINAL_CONTEST_SOURCE ? "原创" : "重建赛" }}
             </el-tag>
             <el-tag
               size="large"
@@ -114,6 +125,12 @@
         </x-flex>
       </el-card>
 
+      <CloneContestDialog
+        v-model="cloneVisible"
+        :source-id="contestID"
+        :title="contestData.title"
+      />
+
       <!-- 选项卡 -->
       <el-tabs
         v-if="Object.keys(contestData).length > 0"
@@ -121,7 +138,7 @@
         v-model="routeName"
       >
         <!-- 简介 -->
-        <el-tab-pane name="ContestDetail" lazy :disabled="contestMenuDisabled">
+        <el-tab-pane name="ContestDetail" lazy>
           <template #label>
             <el-icon style="margin-right: 5px">
               <Notebook />
@@ -134,8 +151,8 @@
           >
             <el-result
               icon="warning"
-              title="需要密码才能加入比赛"
-              sub-title="请输入密码"
+              title="需要验证比赛密码"
+              sub-title="比赛结束后也可输入正确密码进行只读复盘"
             >
               <template #extra>
                 <el-input
@@ -200,10 +217,13 @@
 </template>
 
 <script setup lang="ts">
+import { ORIGINAL_CONTEST_SOURCE } from '@/constants/contest';
 //import
 import { onMounted, ref, watch, defineAsyncComponent } from "vue";
+import CloneContestDialog from "@/components/admin/CloneContestDialog.vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
+import { CopyDocument } from "@element-plus/icons-vue";
 import {
   Alarm,
   HourglassOutline,
@@ -221,6 +241,7 @@ const MarkdownPreview = defineAsyncComponent(
 const router = useRouter();
 const route = useRoute();
 const isLoading = ref<boolean>(true);
+const cloneVisible = ref(false);
 const contestMenuDisabled = ref<boolean>(false);
 const active = ref<boolean>(true);
 const countdownDeadline = ref(0);
@@ -251,6 +272,7 @@ const initContestInfo = (contestID: number) => {
     .then((res) => {
       contestData.value = res.data.data;
       active.value = contestData.value.status === "进行中";
+      contestMenuDisabled.value = !contestData.value.access;
       // 以服务端剩余时间换算本地截止点，避免客户端时钟偏差。
       const remaining = new Date(contestData.value.endTime).getTime()
         - new Date(contestData.value.now).getTime();
@@ -260,7 +282,7 @@ const initContestInfo = (contestID: number) => {
         routeName.value = "ContestDetail";
         contestMenuDisabled.value = true;
       }
-      if (contestData.value.status === "未开始") {
+      if (contestData.value.status === "未开始" && !contestData.value.canManage) {
         ElMessage.warning("比赛还未开始");
         routeName.value = "ContestDetail";
         contestMenuDisabled.value = true;
@@ -288,7 +310,8 @@ const handleRegisterContest = () => {
   })
     .then((res) => {
       ElMessage.success(res.data.msg);
-      contestData.value.access = true;
+      contestPassword.value = "";
+      initContestInfo(contestID.value);
     })
     .catch((e) => {
       console.log(e);
@@ -316,6 +339,32 @@ watch(
   height: 100%;
 }
 
+.contest-header {
+  position: relative;
+  padding-inline: 140px;
+  min-height: 32px;
+}
+
+.contest-heading {
+  min-width: 0;
+  max-width: 100%;
+  text-align: center;
+}
+
+.contest-heading h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+
+.contest-clone-button {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
 :deep(.status-list-container) {
   padding: 0px;
 }
@@ -331,6 +380,22 @@ watch(
 
 :deep(.router-view .status-list-container){
   padding: 0px;
+}
+
+@media screen and (max-width: 640px) {
+  .contest-header {
+    padding-inline: 0;
+  }
+
+  .contest-heading {
+    flex-basis: 100%;
+  }
+
+  .contest-clone-button {
+    position: static;
+    margin-left: auto;
+    transform: none;
+  }
 }
 
 @media screen and (min-width: 1024px) {

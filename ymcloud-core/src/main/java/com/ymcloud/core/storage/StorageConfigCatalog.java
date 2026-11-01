@@ -17,9 +17,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-11
- * @Description: 数据库是动态配置和默认选择的唯一来源；上传事务锁定状态，避免定位字段竞态。
+ * @Description: 数据库是动态配置和默认选择的唯一来源
+ * 上传事务锁定状态，避免定位字段竞态
  */
 @Service
 public class StorageConfigCatalog {
@@ -44,19 +45,22 @@ public class StorageConfigCatalog {
         return state == null || state.getActiveKey() == null ? properties.getActive() : state.getActiveKey();
     }
 
+    /**
+     * 按配置名读取存储配置，业务事务中持有共享锁以稳定对象定位
+     * @param key 存储配置名
+     * @return 动态配置，不存在时返回空
+     */
     public StorageConfig find(String key) {
         StorageConfigValidation.validateKey(key);
         boolean transaction = TransactionSynchronizationManager.isActualTransactionActive();
-        // 上传事务共持共享锁，后台写入取独占锁；普通历史读取只需读取单条配置 revision。
+        // 上传事务共持共享锁，后台写入取独占锁
+        // 普通历史读取只需读取单条配置 revision
         if (transaction) {
             readState(true, true);
         }
         try {
             if (transaction) {
-                return exactKey(configs.lambdaQuery()
-                        .eq(StorageConfig::getId, key)
-                        .last("LOCK IN SHARE MODE")
-                        .one(), key);
+                return exactKey(configs.getByIdForShare(key), key);
             }
             return exactKey(configs.lambdaQuery()
                     .eq(StorageConfig::getId, key)
@@ -82,18 +86,28 @@ public class StorageConfigCatalog {
         }
     }
 
-    /** 配置状态锁不依赖密钥，密钥缺失时仍可切回本地并删除无引用的旧配置。 */
+    /**
+     * 配置状态锁不依赖密钥，密钥缺失时仍可切回本地并删除无引用的旧配置
+     * @return 已锁定的存储配置状态
+     */
     public StorageConfigState lockForWrite() {
         return readState(true, false, true);
     }
 
+    /**
+     * 检查存储配置是否仍被文件登记引用
+     * @param key 已校验的配置名
+     * @return 是否仍被业务文件引用
+     */
     public boolean referenced(String key) {
         return files.lambdaQuery()
                 .eq(File::getStorageProfile, key)
                 .exists();
     }
 
-    /** 恢复缺失配置前读取全部引用，调用方持有配置状态独占锁。 */
+    /**
+     * 恢复缺失配置前读取全部引用，调用方持有配置状态独占锁
+     */
     public List<File> referencedFiles(String key) {
         StorageConfigValidation.validateKey(key);
         return files.lambdaQuery()
@@ -162,18 +176,28 @@ public class StorageConfigCatalog {
         }
     }
 
+    /**
+     * 读取状态，事务读取按需获取共享锁
+     * @param lock 是否加锁
+     * @param allowMissing 是否允许尚未配置动态存储
+     * @return 配置状态，允许缺失时可为空
+     */
     private StorageConfigState readState(boolean lock, boolean allowMissing) {
         return readState(lock, allowMissing, false);
     }
 
+    /**
+     * 按读写用途锁定配置状态，保证配置切换和文件登记互斥
+     * @param lock 是否加锁
+     * @param allowMissing 是否允许尚未配置动态存储
+     * @param exclusive 是否使用写入独占锁
+     * @return 配置状态，允许缺失时可为空
+     */
     private StorageConfigState readState(boolean lock, boolean allowMissing, boolean exclusive) {
         try {
             StorageConfigState state;
             if (lock) {
-                state = states.lambdaQuery()
-                        .eq(StorageConfigState::getId, 1)
-                        .last(exclusive ? "FOR UPDATE" : "LOCK IN SHARE MODE")
-                        .one();
+                state = states.getForLock(exclusive);
             } else {
                 state = states.lambdaQuery()
                         .eq(StorageConfigState::getId, 1)

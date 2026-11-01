@@ -21,3 +21,14 @@ export type ContestProblemPageQuery = {
   keyword: string;
   difficulty?: number;
 };
+
+/**
+ * 克隆只复制配置与题目关联，时间和密码由新创建者明确填写
+ */
+export type CloneContestRequest = {
+  title: string;
+  visibility: number;
+  password: string | null;
+  startTime: string;
+  endTime: string;
+};

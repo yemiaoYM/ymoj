@@ -10,8 +10,6 @@ import com.ymcloud.pojo.vo.oj.ContestRankVO;
 import org.springframework.stereotype.Service;
 
 /**
- * @PackageName: com.ymcloud.core.web.dao.impl
- * @ClassName: ContestEntityServiceImpl
  * @Author: Yemiao
  * @CreateTime: 2025-08-15  23:05
  * @Description: ContestEntityServiceImpl

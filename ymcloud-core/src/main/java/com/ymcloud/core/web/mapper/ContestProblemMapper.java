@@ -32,4 +32,11 @@ public interface ContestProblemMapper extends BaseMapper<ContestProblem> {
     void updateDisplayIds(@Param("contestId") Long contestId,
                           @Param("problems") List<ContestProblem> problems);
 
+    /**
+     * 获取比赛当前最大展示编号，用于新增题目编号
+     * @param contestId 比赛 ID
+     * @return 最后一个题目关联
+     * 空比赛为 null
+     */
+    ContestProblem getLastDisplayProblem(@Param("contestId") Long contestId);
 }

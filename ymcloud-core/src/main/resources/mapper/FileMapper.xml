@@ -1,4 +1,33 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.ymcloud.core.web.mapper.FileMapper">
+    <resultMap id="authorizedEntityMap" type="com.ymcloud.pojo.entity.File" autoMapping="true">
+        <id column="id" property="id"/>
+        <result column="biz_type" property="bizType" javaType="com.ymcloud.pojo.enums.FileBizType"
+                typeHandler="com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler"/>
+    </resultMap>
+
+    <select id="pageAuthorized" resultMap="authorizedEntityMap">
+        <bind name="problemAttachment" value="@com.ymcloud.pojo.enums.FileBizType@PROBLEM_ATTACHMENT.getCode()"/>
+        <bind name="contestAttachment" value="@com.ymcloud.pojo.enums.FileBizType@CONTEST_ATTACHMENT.getCode()"/>
+        <bind name="testData" value="@com.ymcloud.pojo.enums.FileBizType@TEST_DATA.getCode()"/>
+        <bind name="publicAccess" value="@com.ymcloud.common.constant.FileConstants@ACCESS_PUBLIC"/>
+        <bind name="privateAccess" value="@com.ymcloud.common.constant.FileConstants@ACCESS_PRIVATE"/>
+        SELECT f.* FROM file f
+        WHERE (f.biz_type IS NULL OR f.biz_type NOT IN (#{problemAttachment}, #{contestAttachment}, #{testData})
+            OR (f.biz_type IN (#{problemAttachment}, #{testData}) AND EXISTS (SELECT 1 FROM problem p WHERE p.id = f.biz_id
+                AND (#{scope.administrator} = TRUE OR (#{scope.problemManager} = TRUE AND p.author_id = #{scope.userId}))))
+            OR (f.biz_type = #{contestAttachment} AND EXISTS (SELECT 1 FROM contest c WHERE c.id = f.biz_id
+                AND (#{scope.administrator} = TRUE OR (#{scope.contestManager} = TRUE AND c.creator_id = #{scope.userId})))))
+        AND ((#{scope.generalFiles} = TRUE AND (f.biz_type IS NULL OR f.biz_type != #{testData})
+                AND (#{scope.privateFiles} = TRUE OR f.is_public = #{publicAccess}))
+            OR (#{scope.testData} = TRUE AND f.biz_type = #{testData}))
+        <if test="query.fileName != null and query.fileName.trim() != ''">AND f.file_name LIKE CONCAT('%', #{query.fileName}, '%')</if>
+        <if test="query.bizType != null">AND f.biz_type = #{query.bizType}</if>
+        <if test="query.storageProfile != null and query.storageProfile.trim() != ''">AND f.storage_profile = #{query.storageProfile}</if>
+        <if test="query.isPublic != null and query.isPublic == publicAccess">AND f.is_public = #{publicAccess} AND (f.biz_type IS NULL OR f.biz_type != #{testData})</if>
+        <if test="query.isPublic != null and query.isPublic == privateAccess">AND (f.is_public IS NULL OR f.is_public != #{publicAccess} OR f.biz_type = #{testData})</if>
+        ORDER BY f.id DESC
+    </select>
+
 </mapper>

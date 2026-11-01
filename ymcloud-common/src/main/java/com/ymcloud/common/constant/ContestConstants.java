@@ -10,6 +10,12 @@ package com.ymcloud.common.constant;
 public class ContestConstants {
 
     /**
+     * 原创比赛没有源比赛
+     * 克隆比赛保存实际源比赛 ID
+     */
+    public static final long ORIGINAL_SOURCE_ID = 0L;
+
+    /**
      * 比赛状态
      */
     public static final String STATUS_NOT_STARTED = "未开始";
@@ -23,13 +29,12 @@ public class ContestConstants {
     public static final int MODE_OI = 1;
     public static final int MODE_IOI = 2;
 
-
     /**
      * 比赛权限
      */
     public static final int VISIBILITY_PUBLIC = 0;     // 公开
-    public static final int VISIBILITY_PRIVATE = 1;    // 私有（进入需密码）
-    public static final int VISIBILITY_PROTECTED = 2;  // 保护（提交需密码）
+    public static final int VISIBILITY_PASSWORD = 1;  // 密码比赛
+    public static final int VISIBILITY_PRIVATE = 2;   // 仅创建者及普通管理员以上可访问
 
     /**
      * Rating
@@ -41,8 +46,4 @@ public class ContestConstants {
      */
     public static final int OPEN_RANK = 1;
 
-    /**
-     * 是否允许赛后提交
-     */
-    public static final int ALLOW_POST_SUBMIT = 1;
 }

@@ -36,13 +36,6 @@ public class ContestDTO {
     private String description;
     
     /**
-     * 来源比赛ID（0表示原创，其它为克隆赛ID）
-     */
-    @NotNull(message = "来源比赛ID不能为空")
-    @Min(value = 0, message = "来源比赛ID不能小于0")
-    private Long sourceId;
-    
-    /**
      * 是否计入Rating积分（0=否，1=是）
      */
     @NotNull(message = "Rating积分设置不能为空")
@@ -67,15 +60,15 @@ public class ContestDTO {
     private Integer style;
     
     /**
-     * 访问权限：0=公开，1=私有（进入需密码）
+     * 访问权限：0=公开，1=密码，2=私有
      */
     @NotNull(message = "访问权限不能为空")
     @Min(value = 0, message = "访问权限参数错误")
-    @Max(value = 1, message = "访问权限参数错误")
+    @Max(value = 2, message = "访问权限参数错误")
     private Integer visibility;
     
     /**
-     * 比赛密码（私有模式时使用）
+     * 比赛密码（密码模式时使用）
      */
     @Size(min = 5, max = 20, message = "比赛密码长度必须在5-20个字符之间")
     private String password;
@@ -92,10 +85,4 @@ public class ContestDTO {
     @NotNull(message = "比赛结束时间不能为空")
     private LocalDateTime endTime;
     
-    /**
-     * 是否允许比赛结束后进行提交
-     */
-    @NotNull(message = "结束后提交设置不能为空")
-    private Boolean allowEndSubmit;
-
 }

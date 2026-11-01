@@ -4,12 +4,13 @@ import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapp
 import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.constant.ProblemConstants;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
-import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.LanguageEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.Judge;
@@ -54,6 +55,7 @@ class LocalProblemLanguageTest {
         when(languages.getByStatusAndOj(LanguageConstants.ABLE, LanguageConstants.LOCAL_PLATFORM))
                 .thenReturn(enabled);
         ProblemServiceImpl service = new ProblemServiceImpl();
+        ReflectionTestUtils.setField(service, "resourceAccess", mock(ResourceAccessService.class));
         ReflectionTestUtils.setField(service, "problemEntityService", problems);
         ReflectionTestUtils.setField(service, "languageEntityService", languages);
         ReflectionTestUtils.setField(service, "judgeEntityService", judges());
@@ -97,6 +99,7 @@ class LocalProblemLanguageTest {
         when(languages.getByStatusAndOj(LanguageConstants.ABLE, LanguageConstants.LOCAL_PLATFORM))
                 .thenReturn(enabled);
         ContestServiceImpl service = new ContestServiceImpl();
+        ReflectionTestUtils.setField(service, "resourceAccess", mock(ResourceAccessService.class));
         ReflectionTestUtils.setField(service, "problemEntityService", problems);
         ReflectionTestUtils.setField(service, "contestEntityService", contests);
         ReflectionTestUtils.setField(service, "contestProblemEntityService", mappings);

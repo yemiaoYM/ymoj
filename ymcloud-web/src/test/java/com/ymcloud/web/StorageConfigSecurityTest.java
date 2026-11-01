@@ -71,7 +71,9 @@ class StorageConfigSecurityTest {
     private AdminStorageConfigServiceImpl service;
     private AnnotationConfigApplicationContext context;
 
-    /** 初始化隔离依赖，由 Spring 注入存储配置服务。 */
+    /**
+     * 初始化隔离依赖，由 Spring 注入存储配置服务
+     */
     @BeforeEach
     void setup() {
         properties = new StorageProperties();
@@ -95,7 +97,9 @@ class StorageConfigSecurityTest {
         authenticate(1L, "*:*:*");
     }
 
-    /** 清理认证状态并关闭隔离的 Spring 上下文。 */
+    /**
+     * 清理认证状态并关闭隔离的 Spring 上下文
+     */
     @AfterEach
     void clearAuthentication() {
         SecurityContextHolder.clearContext();

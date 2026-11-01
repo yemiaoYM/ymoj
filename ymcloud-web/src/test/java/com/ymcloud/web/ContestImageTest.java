@@ -1,9 +1,11 @@
 package com.ymcloud.web;
 
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.service.PermissionService;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.ContestEntityService;
@@ -29,13 +31,13 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import javax.imageio.ImageIO;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -124,18 +127,25 @@ class ContestImageTest {
     }
 
     /**
-     * 新增保存封面，编辑可以清空封面回到默认图；未知或非图片引用不能写入比赛。
+     * 新增保存封面，编辑可以清空封面回到默认图
+     * 未知或非图片引用不能写入比赛
      */
     @Test
+    @SuppressWarnings("unchecked")
     void persistsCoverAndCanRestoreDefault() {
         ContestEntityService contests = mock(ContestEntityService.class);
         StoredFileService storage = mock(StoredFileService.class);
         AdminContestServiceImpl service = new AdminContestServiceImpl();
+        ReflectionTestUtils.setField(service, "resourceAccess", mock(ResourceAccessService.class));
         ReflectionTestUtils.setField(service, "contestEntityService", contests);
         ReflectionTestUtils.setField(service, "storedFiles", storage);
         Contest existing = new Contest();
         existing.setImage("/files/public/cover.png");
-        when(contests.getById(9L)).thenReturn(existing);
+        LambdaQueryChainWrapper<Contest> query = mock(LambdaQueryChainWrapper.class, RETURNS_SELF);
+        when(query.eq(any(), any())).thenReturn(query);
+        when(query.last("FOR UPDATE")).thenReturn(query);
+        when(query.one()).thenReturn(existing);
+        when(contests.lambdaQuery()).thenReturn(query);
         when(contests.save(any())).thenReturn(true);
         when(contests.updateById(any(Contest.class))).thenReturn(true);
         File file = new File();
@@ -157,6 +167,10 @@ class ContestImageTest {
         ArgumentCaptor<Contest> saved = ArgumentCaptor.forClass(Contest.class);
         verify(contests).save(saved.capture());
         assertEquals(request.getImage(), saved.getValue().getImage());
+        existing.setStartTime(request.getStartTime());
+        existing.setEndTime(request.getEndTime());
+        existing.setMode(request.getMode());
+        existing.setSourceId(0L);
         request.setImage(null);
         service.updateContest(9L, request);
         verify(contests).updateById(saved.capture());

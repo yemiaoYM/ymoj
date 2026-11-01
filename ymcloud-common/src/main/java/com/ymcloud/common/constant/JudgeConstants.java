@@ -9,6 +9,10 @@ package com.ymcloud.common.constant;
  */
 public class JudgeConstants {
     /**
+     * 普通练习提交不属于任何比赛
+     */
+    public static final long PRACTICE_CONTEST_ID = 0L;
+    /**
      * 评测策略
      */
     public static final Integer DEFAULT_JUDGE = 0;
@@ -42,7 +46,5 @@ public class JudgeConstants {
      * 失败
      */
     public static final String FAILURE="FAILURE";
-
-
 
 }

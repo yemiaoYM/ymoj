@@ -10,7 +10,9 @@ import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.config.RedisConfig;
 import com.ymcloud.core.storage.StoredFileService;
+import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.SystemSettingEntityService;
 import com.ymcloud.core.web.mapper.FileMapper;
 import com.ymcloud.core.web.mapper.SystemSettingMapper;
@@ -90,7 +92,10 @@ class CarouselCacheTest {
     static class CacheConfig {
     }
 
-    /** 装配真实业务和 RedisCacheManager；模拟字节传输、DAO 及存储边界。 */
+    /**
+     * 装配真实业务和 RedisCacheManager
+     * 模拟字节传输、DAO 及存储边界
+     */
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
@@ -139,11 +144,15 @@ class CarouselCacheTest {
         context.registerBean("transactionManager", TestTransactionManager.class, () -> transactions);
         context.register(CacheConfig.class, PublicImageServiceImpl.class, CarouselSettingServiceImpl.class, FileServiceImpl.class,
                 PublicCarouselController.class, AdminCarouselController.class);
+        context.getBeanFactory().registerSingleton("problemEntityService", mock(ProblemEntityService.class));
+        context.getBeanFactory().registerSingleton("contestEntityService", mock(ContestEntityService.class));
         context.refresh();
         service = context.getBean(CarouselSettingService.class);
     }
 
-    /** 关闭本次缓存代理和事务上下文。 */
+    /**
+     * 关闭本次缓存代理和事务上下文
+     */
     @AfterEach
     void tearDown() {
         if (context != null) {
@@ -151,7 +160,10 @@ class CarouselCacheTest {
         }
     }
 
-    /** 缓存命中不查库；record 图片经过项目序列化仍保持 ID 和顺序。 */
+    /**
+     * 缓存命中不查库
+     * record 图片经过项目序列化仍保持 ID 和顺序
+     */
     @Test
     void cachesPublicResultUsingExistingSerializerAndPhysicalKey() {
         when(settingMapper.selectOne(any(Wrapper.class))).thenReturn(setting("[2,1]"));
@@ -164,7 +176,10 @@ class CarouselCacheTest {
         verify(fileMapper).selectList(any(Wrapper.class));
     }
 
-    /** 缺失和明确清空分别缓存；清空不能恢复内置图片。 */
+    /**
+     * 缺失和明确清空分别缓存
+     * 清空不能恢复内置图片
+     */
     @Test
     void cachesMissingAndExplicitlyEmptyConfiguration() {
         when(settingMapper.selectOne(any(Wrapper.class))).thenReturn(null);
@@ -177,7 +192,9 @@ class CarouselCacheTest {
         verify(settingMapper, times(4)).selectOne(any(Wrapper.class));
     }
 
-    /** 后台直读数据库，Controller 通过业务接口命中公开缓存。 */
+    /**
+     * 后台直读数据库，Controller 通过业务接口命中公开缓存
+     */
     @Test
     void adminReadsDatabaseWhilePublicControllerUsesCache() {
         readPublic();
@@ -186,7 +203,9 @@ class CarouselCacheTest {
         verify(settingMapper, times(2)).selectOne(any(Wrapper.class));
     }
 
-    /** Controller 注解在 Service 短事务提交后清理，下次请求重新装载。 */
+    /**
+     * Controller 注解在 Service 短事务提交后清理，下次请求重新装载
+     */
     @Test
     void successfulSaveEvictsAfterServiceTransactionCommits() {
         readPublic();
@@ -198,7 +217,10 @@ class CarouselCacheTest {
         assertTrue(values.containsKey(REDIS_KEY));
     }
 
-    /** 图片删除加入外层事务时，回滚保留原缓存；不模拟数据库回滚能力。 */
+    /**
+     * 图片删除加入外层事务时，回滚保留原缓存
+     * 不模拟数据库回滚能力
+     */
     @Test
     void outerRollbackKeepsPreviousCache() {
         File file = image(1);
@@ -212,7 +234,9 @@ class CarouselCacheTest {
         verify(redisCache, never()).deleteObject(REDIS_KEY);
     }
 
-    /** 写入失败保留旧缓存，失败不转成功。 */
+    /**
+     * 写入失败保留旧缓存，失败不转成功
+     */
     @Test
     void failedSaveKeepsPreviousCache() {
         readPublic();
@@ -223,7 +247,9 @@ class CarouselCacheTest {
         verify(redisCache, never()).deleteObject(REDIS_KEY);
     }
 
-    /** 图片删除成功提交才清缓存，删除异常保留旧值。 */
+    /**
+     * 图片删除成功提交才清缓存，删除异常保留旧值
+     */
     @Test
     void deletingImageInvalidatesThroughBusinessService() {
         File file = image(1);
@@ -242,7 +268,9 @@ class CarouselCacheTest {
         verify(redisCache).deleteObject(REDIS_KEY);
     }
 
-    /** 损坏配置和 Redis 故障保持失败语义，不以空列表掩盖。 */
+    /**
+     * 损坏配置和 Redis 故障保持失败语义，不以空列表掩盖
+     */
     @Test
     void dependencyAndConfigurationFailuresAreNotHidden() {
         when(settingMapper.selectOne(any(Wrapper.class))).thenReturn(setting("broken"));
@@ -253,7 +281,9 @@ class CarouselCacheTest {
         verify(settingMapper).selectOne(any(Wrapper.class));
     }
 
-    /** 提交后 Redis 清理失败向调用方暴露，不能声称缓存已更新。 */
+    /**
+     * 提交后 Redis 清理失败向调用方暴露，不能声称缓存已更新
+     */
     @Test
     void evictionFailureIsReported() {
         readPublic();
@@ -262,7 +292,9 @@ class CarouselCacheTest {
         assertTrue(values.containsKey(REDIS_KEY));
     }
 
-    /** 通过后台 Controller 代理保存，实际执行 CacheEvict。 */
+    /**
+     * 通过后台 Controller 代理保存，实际执行 CacheEvict
+     */
     private void saveFromAdmin() {
         context.getBean(AdminCarouselController.class).save(emptyRequest());
     }

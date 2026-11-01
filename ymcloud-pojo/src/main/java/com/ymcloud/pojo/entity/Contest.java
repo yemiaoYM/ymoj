@@ -1,8 +1,8 @@
 package com.ymcloud.pojo.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 
@@ -48,10 +48,15 @@ public class Contest {
     /** 比赛类型：0=其他，1=周赛，2=月赛，3=娱乐赛，4=挑战赛 */
     private Integer style;
 
-    /** 访问权限：0=公开，1=私有（进入需密码） */
+    /**
+     * 访问权限：0=公开，1=密码，2=私有
+     */
     private Integer visibility;
 
-    /** 比赛密码（私有模式时使用） */
+    /**
+     * 比赛密码（密码模式时使用）
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String password;
 
     /** 比赛开始时间 */
@@ -62,9 +67,6 @@ public class Contest {
 
     /** 比赛时长（单位：分钟） */
     private Long duration;
-
-    /** 是否允许比赛结束后进行提交 */
-    private Boolean allowEndSubmit;
 
     /** 创建时间 */
     private LocalDateTime createdTime;

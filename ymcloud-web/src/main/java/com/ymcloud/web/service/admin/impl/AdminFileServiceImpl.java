@@ -1,14 +1,14 @@
 package com.ymcloud.web.service.admin.impl;
 
-import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.pojo.bo.FileAccessScope;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
@@ -44,58 +44,38 @@ public class AdminFileServiceImpl implements AdminFileService {
     @Autowired
     private FileAccessPolicy access;
 
+    @Autowired
+    private ResourceAccessService resourceAccess;
+
+    /**
+     * 在分页及总数查询前过滤功能权限和业务资源归属
+     * @param query 已校验的文件筛选条件
+     * @return 已授权文件列表
+     */
     @Override
     public PageVO<AdminFileVO> queryList(AdminFilePageQuery query) {
-        boolean general = access.canListGeneralFiles();
-        boolean privateFiles = access.canAccessPrivateFiles();
-        boolean testData = access.canAccessTestData();
-        if (!general && !testData) {
+        FileAccessScope scope = new FileAccessScope();
+        scope.setUserId(SecurityUtils.getUserId());
+        scope.setAdministrator(SecurityUtils.isAdmin());
+        scope.setProblemManager(resourceAccess.isProblemManager());
+        scope.setContestManager(resourceAccess.isContestManager());
+        scope.setGeneralFiles(access.canListGeneralFiles());
+        scope.setPrivateFiles(access.canAccessPrivateFiles());
+        scope.setTestData(access.canAccessTestData());
+        if (!scope.isGeneralFiles() && !scope.isTestData()) {
             throw new AccessDeniedException("访问权限不足");
         }
-        FileBizType bizType = resolveBizType(query.getBizType());
+        resolveBizType(query.getBizType());
         Page<File> page = Page.of(query.getPageNum(), query.getPageSize());
-        LambdaQueryChainWrapper<File> chain = files.lambdaQuery()
-                .like(StrUtil.isNotBlank(query.getFileName()), File::getFileName, query.getFileName())
-                .eq(bizType != null, File::getBizType, bizType)
-                .eq(StrUtil.isNotBlank(query.getStorageProfile()), File::getStorageProfile, query.getStorageProfile());
-        if (Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(query.getIsPublic())) {
-            chain.eq(File::getIsPublic, FileConstants.ACCESS_PUBLIC)
-                    .and(business -> business.ne(File::getBizType, FileBizType.TEST_DATA)
-                            .or()
-                            .isNull(File::getBizType));
-        } else if (Integer.valueOf(FileConstants.ACCESS_PRIVATE).equals(query.getIsPublic())) {
-            chain.and(visibility -> visibility.ne(File::getIsPublic, FileConstants.ACCESS_PUBLIC)
-                    .or()
-                    .isNull(File::getIsPublic)
-                    .or()
-                    .eq(File::getBizType, FileBizType.TEST_DATA));
-        }
-        // 可见性条件在 SQL 分页和总数查询前执行，避免泄露私有记录或总数。
-        if (!(general && privateFiles && testData)) {
-            chain.and(visible -> {
-                if (general) {
-                    visible.nested(ordinary -> {
-                        ordinary.and(business -> business.ne(File::getBizType, FileBizType.TEST_DATA)
-                                .or()
-                                .isNull(File::getBizType));
-                        if (!privateFiles) {
-                            ordinary.eq(File::getIsPublic, FileConstants.ACCESS_PUBLIC);
-                        }
-                    });
-                }
-                if (testData) {
-                    if (general) {
-                        visible.or();
-                    }
-                    visible.eq(File::getBizType, FileBizType.TEST_DATA);
-                }
-            });
-        }
-        Page<File> result = chain.orderByDesc(File::getId)
-                .page(page);
-        return PageVO.of(result, this::visibleMetadata);
+        Page<File> result = files.pageAuthorized(page, query, scope);
+        return PageVO.of(result, this::metadata);
     }
 
+    /**
+     * 校验文件下载权限并返回存储元数据
+     * @param id 文件 ID
+     * @return 已授权下载的文件
+     */
     @Override
     public File requireDownload(Long id) {
         File file = storedFiles.get(id);
@@ -103,10 +83,17 @@ public class AdminFileServiceImpl implements AdminFileService {
         return file;
     }
 
+    /**
+     * 根据文件权限上传通用文件，不接受题目测试数据关联
+     * @param upload 上传内容
+     * @param isPublic 文件公开状态
+     * @return 已保存文件的展示信息
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public AdminFileVO upload(MultipartFile upload, Integer isPublic) {
-        if (!Integer.valueOf(0).equals(isPublic) && !Integer.valueOf(1).equals(isPublic)) {
+        if (!Integer.valueOf(FileConstants.ACCESS_PRIVATE).equals(isPublic)
+                && !Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(isPublic)) {
             throw new FileException("公开状态必须为0或1", HttpStatus.BAD_REQUEST);
         }
         boolean publicAccess = Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(isPublic);
@@ -127,10 +114,14 @@ public class AdminFileServiceImpl implements AdminFileService {
         return metadata(file);
     }
 
+    /**
+     * 锁定文件并校验删除权限，实际文件由存储服务在事务提交后删除
+     * @param id 文件 ID
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
-        // 与存储层删除和迁移使用相同的行锁，鉴权后关联信息不会并发变化。
+        // 与存储层删除和迁移使用相同的行锁，鉴权后关联信息不会并发变化
         File file = files.lambdaQuery()
                 .eq(File::getId, id)
                 .last("FOR UPDATE")
@@ -142,6 +133,11 @@ public class AdminFileServiceImpl implements AdminFileService {
         storedFiles.delete(id);
     }
 
+    /**
+     * 解析可选的业务类型筛选条件
+     * @param code 业务类型编码，未筛选时为空
+     * @return 对应业务类型，未筛选时为空
+     */
     private FileBizType resolveBizType(Integer code) {
         if (code == null) {
             return null;
@@ -152,13 +148,11 @@ public class AdminFileServiceImpl implements AdminFileService {
                 .orElseThrow(() -> new FileException("文件业务类型不合法", HttpStatus.BAD_REQUEST));
     }
 
-    private AdminFileVO visibleMetadata(File file) {
-        if (!access.canList(file)) {
-            throw new AccessDeniedException("访问权限不足");
-        }
-        return metadata(file);
-    }
-
+    /**
+     * 组装已通过列表资源过滤或上传归属验证的文件元数据
+     * @param file 已授权文件
+     * @return 文件展示信息
+     */
     private AdminFileVO metadata(File file) {
         AdminFileVO view = new AdminFileVO();
         view.setId(file.getId());
@@ -173,7 +167,7 @@ public class AdminFileServiceImpl implements AdminFileService {
         view.setCreatedTime(file.getCreatedTime());
         view.setUrl(access.isPublic(file) ? file.getUrl() : null);
         view.setSha256(file.getSha256());
-        view.setCanDownload(access.canDownload(file));
+        view.setCanDownload(access.canDownloadAuthorizedFile(file));
         view.setCanDelete(access.canDelete(file));
         return view;
     }

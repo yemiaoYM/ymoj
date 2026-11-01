@@ -7,8 +7,6 @@ import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.vo.oj.ContestRankVO;
 
 /**
- * @PackageName: com.ymcloud.core.web.dao
- * @ClassName: ContestEntityService
  * @Author: Yemiao
  * @CreateTime: 2025-08-15  23:05
  * @Description: ContestEntityService
@@ -30,5 +28,4 @@ public interface ContestEntityService extends IService<Contest> {
      * @return 该比赛的排行榜数据
      */
     Page<ContestRankVO> getOIContestRank(IPage<ContestRankVO> page, Long contestId, String keyword);
-
 }

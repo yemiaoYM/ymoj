@@ -16,8 +16,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.web.controller.user
- * @ClassName: ContestController
  * @Author: Yemiao
  * @CreateTime: 2025-08-13  01:16
  * @Description: 比赛相关业务接口

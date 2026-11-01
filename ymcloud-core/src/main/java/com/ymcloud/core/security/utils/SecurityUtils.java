@@ -4,6 +4,7 @@ import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.RoleType;
 import com.ymcloud.pojo.enums.UserStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -27,11 +28,13 @@ public class SecurityUtils {
 
     /**
      * 获取登录用户
+     * @return 当前登录用户
+     * @throws ServiceException 当前请求未登录
      */
     public static LoginUser getLoginUser() {
-        try{
+        try {
             return (LoginUser) getAuthentication().getPrincipal();
-        }catch (Exception e){
+        } catch (Exception e) {
             throw new ServiceException("获取登录用户信息异常", HttpStatus.UNAUTHORIZED);
         }
     }
@@ -70,11 +73,12 @@ public class SecurityUtils {
     }
 
     /**
-     * 判断是否为管理员
+     * 判断当前登录用户是否为超级管理员或普通管理员
+     * @return 是否具有全站题目和比赛管理身份
      */
-    public static Boolean isAdmin(){
+    public static Boolean isAdmin() {
         LoginUser loginUser = getLoginUser();
-        return loginUser.getUser().getId() == 1L || loginUser.getRoles().contains("ADMIN");
+        return isSuperAdmin(loginUser.getUser().getId()) || loginUser.getRoles().contains(RoleType.ADMIN.getCode());
     }
 
     /**

@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-
 /**
  * @Author: Yemiao
  * @CreateTime: 2025-08-14  22:48
@@ -38,5 +37,16 @@ public class ContestProblemEntityServiceImpl extends ServiceImpl<ContestProblemM
     @Override
     public void updateDisplayIds(Long contestId, List<ContestProblem> problems) {
         baseMapper.updateDisplayIds(contestId, problems);
+    }
+
+    /**
+     * 获取比赛当前最大展示编号，用于新增题目编号
+     * @param contestId 比赛 ID
+     * @return 最后一个题目关联
+     * 空比赛为 null
+     */
+    @Override
+    public ContestProblem getLastDisplayProblem(Long contestId) {
+        return baseMapper.getLastDisplayProblem(contestId);
     }
 }

@@ -8,10 +8,9 @@ import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.exception.contest.ContestException;
-import com.ymcloud.common.exception.contest.ContestNotAccessException;
 import com.ymcloud.common.exception.contest.ContestNotExistException;
-import com.ymcloud.common.exception.contest.ContestNotStartException;
 import com.ymcloud.common.exception.contest.ContestProblemNotExistException;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
@@ -44,10 +43,13 @@ import com.ymcloud.pojo.vo.oj.ProblemVO;
 import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
 import com.ymcloud.web.service.oj.ContestService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationTrustResolverImpl;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -57,6 +59,9 @@ import java.util.stream.Collectors;
  */
 @Service
 public class ContestServiceImpl implements ContestService {
+
+    @Autowired
+    private ResourceAccessService resourceAccess;
 
     @Autowired
     private ContestEntityService contestEntityService;
@@ -85,7 +90,13 @@ public class ContestServiceImpl implements ContestService {
     public PageVO<ContestTableVO> pageQuery(ContestPageQuery query) {
         //创建分页实体
         Page<Contest> page = new Page<>(query.getPageNo(),query.getPageSize());
+        boolean loggedIn = new AuthenticationTrustResolverImpl().isAuthenticated(SecurityUtils.getAuthentication());
+        Long currentUserId = loggedIn ? SecurityUtils.getUserId() : null;
         Page<Contest> contestPage = contestEntityService.lambdaQuery()
+                .and(!(loggedIn && SecurityUtils.isAdmin()), wrapper -> wrapper
+                        .ne(Contest::getVisibility, ContestConstants.VISIBILITY_PRIVATE)
+                        .or(loggedIn)
+                        .eq(loggedIn, Contest::getCreatorId, currentUserId))
                 .like(StrUtil.isNotBlank(query.getKeyword()), Contest::getTitle, query.getKeyword())
                 .orderByDesc(Contest::getStartTime)
                 .page(page);
@@ -123,22 +134,21 @@ public class ContestServiceImpl implements ContestService {
         if(contest == null){
             throw new ContestNotExistException();
         }
+        if (contest.getVisibility() == ContestConstants.VISIBILITY_PRIVATE) {
+            resourceAccess.requireContestAccess(contest);
+        }
         //拷贝前端实体
         ContestVO contestVO = BeanUtil.copyProperties(contest, ContestVO.class);
         //查询当前用户的比赛权限
-        if (contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)) {
-            //公开比赛每个人都有权限访问
-            contestVO.setAccess(true);
-        }else {
-            //私有比赛需要用户注册报名该比赛
-            Long userId = SecurityUtils.getUserId();
-            contestVO.setAccess(isAccess(contestId, userId));
-            //查询参与人数
-            Long count = contestUserEntityService.lambdaQuery()
-                    .eq(ContestUser::getContestId, contestId)
-                    .count();
-            contestVO.setCount(count);
-        }
+        contestVO.setAccess(resourceAccess.canAccessContest(contest));
+        contestVO.setCanManage(resourceAccess.canManageContest(contest));
+        contestVO.setCanClone(resourceAccess.isContestManager()
+                && (resourceAccess.canManageContest(contest)
+                || (contestVO.getAccess() && !LocalDateTime.now().isBefore(contest.getEndTime()))));
+        Long count = contestUserEntityService.lambdaQuery()
+                .eq(ContestUser::getContestId, contestId)
+                .count();
+        contestVO.setCount(count);
         //设置now为当前时间
         contestVO.setNow(LocalDateTime.now());
         //设置比赛状态
@@ -152,19 +162,22 @@ public class ContestServiceImpl implements ContestService {
      * @param registerContestDTO 请求体
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void registerContest(RegisterContestDTO registerContestDTO) {
         //1.获取请求体信息
         Long contestId = registerContestDTO.getContestId();
         String password = registerContestDTO.getPassword();
         //2.根据id查询
-        Contest contest = contestEntityService.getById(contestId);
+        Contest contest = contestEntityService.lambdaQuery()
+                .eq(Contest::getId, contestId)
+                .last("FOR UPDATE")
+                .one();
         //判断是否存在
         if(contest == null){
             throw new ContestNotExistException();
         }
-        //3.公开赛不需要注册报名
-        if(contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
-            throw new ContestException("公开赛不需要注册报名");
+        if (contest.getVisibility() != ContestConstants.VISIBILITY_PASSWORD) {
+            throw new ContestException("仅密码比赛可以验证密码取得参赛或复盘资格");
         }
         //4.验证密码
         if(!contest.getPassword().equals(password)){
@@ -199,7 +212,7 @@ public class ContestServiceImpl implements ContestService {
     public List<ContestProblemTableVO> getContestProblemList(Long contestId) {
         //检查当前比赛状态
         Long userId = SecurityUtils.getUserId();
-        Contest contest = validateContest(contestId, userId);
+        Contest contest = validateContest(contestId);
         //查询比赛题目列表
         return contestProblemEntityService.getContestProblemList(contest.getId(),userId);
     }
@@ -214,7 +227,7 @@ public class ContestServiceImpl implements ContestService {
     public ProblemVO getContestProblem(Long contestId, String displayId) {
         //检查当前比赛状态
         Long userId = SecurityUtils.getUserId();
-        Contest contest = validateContest(contestId, userId);
+        Contest contest = validateContest(contestId);
         //查询比赛题目简单信息
         ContestProblem contestProblem = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contest.getId())
@@ -230,6 +243,9 @@ public class ContestServiceImpl implements ContestService {
         }
         // 按比赛展示白名单组装，原题来源不进入响应
         ProblemVO problemVO = new ProblemVO();
+        problemVO.setSubmissionStartTime(contest.getStartTime());
+        problemVO.setSubmissionEndTime(contest.getEndTime());
+        problemVO.setServerTime(LocalDateTime.now());
         problemVO.setContent(problem.getContent());
         problemVO.setInput(problem.getInput());
         problemVO.setOutput(problem.getOutput());
@@ -270,7 +286,7 @@ public class ContestServiceImpl implements ContestService {
     public PageVO<SubmissionTableVO> problemSubmissionList(ContestProblemSubmissionPageQuery query) {
         //检查当前比赛状态
         Long userId = SecurityUtils.getUserId();
-        Contest contest = validateContest(query.getContestId(), userId);
+        Contest contest = validateContest(query.getContestId());
         //查询比赛题目简单信息
         ContestProblem contestProblem = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contest.getId())
@@ -292,6 +308,7 @@ public class ContestServiceImpl implements ContestService {
         return PageVO.of(judgePage,judge->{
             SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
             vo.setSubmissionId(judge.getId());
+            vo.setCanRejudge(resourceAccess.canManageContest(contest));
             return vo;
         });
     }
@@ -306,7 +323,7 @@ public class ContestServiceImpl implements ContestService {
         //获取用户信息
         Long userId = SecurityUtils.getUserId();
         //检验比赛
-        Contest contest = validateContest(query.getContestId(), userId);
+        Contest contest = validateContest(query.getContestId());
         //构建分页实体
         Page<Judge> page=new Page<>(query.getPageNo(),query.getPageSize());
         //分页条件查询
@@ -327,14 +344,15 @@ public class ContestServiceImpl implements ContestService {
                 .page(page);
         //判断比赛是否结束
         LocalDateTime now = LocalDateTime.now();
-        boolean isEnd = now.isAfter(contest.getEndTime());
-        boolean isAdmin = SecurityUtils.isAdmin();
+        boolean isEnd = !now.isBefore(contest.getEndTime());
+        boolean canManage = resourceAccess.canManageContest(contest);
         //返回vo实体
         return PageVO.of(judgePage,judge->{
             SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
             vo.setSubmissionId(judge.getId());
             //如果为管理员或者比赛创建者则不限制
-            if(isAdmin || userId.equals(contest.getCreatorId())){
+            vo.setCanRejudge(canManage);
+            if (canManage) {
                 return vo;
             }
             //如果比赛没有结束则禁止查看其他人的提交时间，内存等等
@@ -359,7 +377,7 @@ public class ContestServiceImpl implements ContestService {
         //关键词匹配 匹配用户名，学校
         String keyword = query.getKeyword();
         //检查比赛比赛情况
-        Contest contest = validateContest(contestId, userId);
+        Contest contest = validateContest(contestId);
         //构造前端返回vo
         ContestRankTableVO tableVO = new ContestRankTableVO();
         //比赛模式
@@ -387,9 +405,11 @@ public class ContestServiceImpl implements ContestService {
     }
 
     /**
-     * 检验比赛
+     * 检验当前用户的比赛访问资格及题面开放阶段
+     * @param contestId 比赛 ID
+     * @return 可访问的比赛
      */
-    private Contest validateContest(Long contestId,Long userId) {
+    private Contest validateContest(Long contestId) {
         //简单校验
         if (contestId == null || contestId <= 0) {
             throw new ContestException("比赛id参数格式错误", HttpStatus.BAD_REQUEST);
@@ -399,42 +419,24 @@ public class ContestServiceImpl implements ContestService {
         if (contest == null) {
             throw new ContestNotExistException();
         }
-        //验证比赛当前状态
-        LocalDateTime now = LocalDateTime.now();
-        if(contest.getStartTime().isAfter(now)){
-            //比赛还未开始
-            throw new ContestNotStartException();
-        }
-        //如果比赛不是公共的，需验证用户的权限
-        if(!contest.getVisibility().equals(ContestConstants.VISIBILITY_PUBLIC)){
-            if(!isAccess(contestId, userId)){
-                throw new ContestNotAccessException();
-            }
-        }
+        resourceAccess.requireContestContent(contest);
         return contest;
     }
 
     /**
-     * 查询当前用户的比赛权限
-     * @param contestId 比赛id
-     * @param userId 用户id
-     * @return 是否具有权限
-     */
-    private Boolean isAccess(Long contestId, Long userId){
-        return contestUserEntityService.lambdaQuery()
-                .eq(ContestUser::getContestId, contestId)
-                .eq(ContestUser::getUserId, userId)
-                .exists();
-    }
-
-    /**
      * 获取比赛状态
+     * @param startTime 开始时间
+     * @param endTime 结束时间
+     * @param now 当前时间
+     * @return 未开始、进行中或已结束
      */
     private String getContestStatus(LocalDateTime startTime, LocalDateTime endTime, LocalDateTime now){
         if(now.isBefore(startTime)){
             return ContestConstants.STATUS_NOT_STARTED;
-        }else if(now.isAfter(endTime)){
+        }else if(!now.isBefore(endTime)){
             return ContestConstants.STATUS_ENDED;
-        }else return ContestConstants.STATUS_RUNNING;
+        } else {
+            return ContestConstants.STATUS_RUNNING;
+        }
     }
 }

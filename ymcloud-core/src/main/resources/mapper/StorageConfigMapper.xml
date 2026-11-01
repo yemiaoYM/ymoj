@@ -3,4 +3,7 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ymcloud.core.web.mapper.StorageConfigMapper">
+    <select id="getByIdForShare" resultType="com.ymcloud.pojo.entity.StorageConfig">
+        SELECT * FROM storage_config WHERE id = #{key} LOCK IN SHARE MODE
+    </select>
 </mapper>

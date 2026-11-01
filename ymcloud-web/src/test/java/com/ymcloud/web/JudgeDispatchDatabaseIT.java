@@ -14,6 +14,8 @@ import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.submission.SubmissionException;
 import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.core.security.domain.LoginUser;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.storage.TestDataService;
@@ -44,7 +46,9 @@ import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeDispatch;
 import com.ymcloud.pojo.entity.Problem;
+import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.JudgeStatus;
+import com.ymcloud.pojo.enums.RoleType;
 import com.ymcloud.web.controller.admin.contest.AdminContestController;
 import com.ymcloud.web.judge.JudgeDispatchIdAllocator;
 import com.ymcloud.web.judge.JudgeDispatchProperties;
@@ -54,11 +58,11 @@ import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.service.admin.AdminContestService;
+import com.ymcloud.web.service.admin.ResourceDeletionService;
 import com.ymcloud.web.service.admin.impl.AdminContestServiceImpl;
 import com.ymcloud.web.service.common.PublicImageService;
 import com.ymcloud.web.service.oj.JudgeService;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
-import javax.sql.DataSource;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -76,13 +80,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.EncodedResource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.IllegalTransactionStateException;
@@ -108,6 +113,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -228,7 +234,7 @@ class JudgeDispatchDatabaseIT {
                 + "VALUES (98766,'Order IT','2099-01-01','2099-01-02',1,'admin')");
         jdbc.update("INSERT INTO contest_problem (id,contest_id,problem_id,display_id,display_title,color) "
                 + "VALUES (987661,98766,10,'A','First','#123456'),(987662,98766,11,'B','Second','#654321')");
-        try {
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
             long statementsBefore = prepared.getExecuteCount2();
             admin.reorderProblems(98766L, List.of(987662L, 987661L));
             assertEquals(4, prepared.getExecuteCount2() - statementsBefore,
@@ -287,7 +293,7 @@ class JudgeDispatchDatabaseIT {
         jdbc.update("INSERT INTO contest_problem (id,contest_id,problem_id,display_id,display_title) "
                 + "VALUES (987715,98771,1000,'Z','Untouched')");
         java.util.Collections.reverse(ids);
-        try {
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
             long statementsBefore = prepared.getExecuteCount2();
             admin.reorderProblems(98770L, ids);
             assertEquals(4, prepared.getExecuteCount2() - statementsBefore);
@@ -324,7 +330,7 @@ class JudgeDispatchDatabaseIT {
             for (long id : List.of(10L, 11L)) {
                 attempts.add(executor.submit(() -> {
                     start.await();
-                    try {
+                    try (MockedStatic<SecurityUtils> security = superAdmin()) {
                         admin.addProblemsToContest(98767L, List.of(id));
                         return true;
                     } catch (ContestException expected) {
@@ -361,7 +367,7 @@ class JudgeDispatchDatabaseIT {
         jdbc.update("INSERT INTO problem (id,problem_id,title,difficulty,judge_mode,visibility) "
                 + "VALUES (11,'FILTER-11','Isolated match',2,'default',2),(12,'FILTER-12','Isolated match',2,'default',3)");
         jdbc.update("INSERT INTO contest_problem (contest_id,problem_id,display_id,display_title) VALUES (98768,12,'A','Added')");
-        try {
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
             var query = new com.ymcloud.pojo.query.admin.AdminProblemPageQuery();
             query.setKeyword("Isolated");
             query.setDifficulty(2);
@@ -385,7 +391,7 @@ class JudgeDispatchDatabaseIT {
                 + "VALUES (987691,98769,10,'A','One'),(987692,98769,11,'B','Two')");
         jdbc.execute("CREATE TRIGGER contest_order_it_fail BEFORE UPDATE ON contest_problem FOR EACH ROW "
                 + "BEGIN IF OLD.id=987692 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated failure'; END IF; END");
-        try {
+        try (MockedStatic<SecurityUtils> security = superAdmin()) {
             assertThrows(RuntimeException.class, () -> admin.reorderProblems(98769L, List.of(987692L, 987691L)));
             assertEquals(List.of("A", "B"), jdbc.queryForList("SELECT display_id FROM contest_problem WHERE contest_id=98769 ORDER BY id", String.class));
         } finally {
@@ -530,7 +536,7 @@ class JudgeDispatchDatabaseIT {
     void outboxInsertFailureRollsBackSubmissionCreation() {
         jdbc.execute("CREATE TRIGGER judge_it_fail_outbox BEFORE INSERT ON judge_dispatch FOR EACH ROW "
                 + "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated outbox failure'");
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        try (MockedStatic<SecurityUtils> security = authenticatedUser();
              MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
             security.when(SecurityUtils::getUser).thenReturn(context.getBean(UserEntityService.class).getById(2L));
             JudgeDTO request = new JudgeDTO();
@@ -554,7 +560,7 @@ class JudgeDispatchDatabaseIT {
         logger.addAppender(appender);
         jdbc.execute("CREATE TRIGGER judge_it_fail_submission BEFORE INSERT ON judge FOR EACH ROW "
                 + "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated submission failure'");
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        try (MockedStatic<SecurityUtils> security = authenticatedUser();
              MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
             security.when(SecurityUtils::getUser).thenReturn(context.getBean(UserEntityService.class).getById(2L));
             JudgeDTO request = new JudgeDTO();
@@ -586,7 +592,7 @@ class JudgeDispatchDatabaseIT {
     void snapshotUpdateFailureRollsBackTheReservedIdAndFormalSubmission() {
         jdbc.execute("CREATE TRIGGER judge_it_fail_snapshot BEFORE UPDATE ON judge_dispatch FOR EACH ROW "
                 + "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='isolated snapshot failure'");
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        try (MockedStatic<SecurityUtils> security = authenticatedUser();
              MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
             security.when(SecurityUtils::getUser)
                     .thenReturn(context.getBean(UserEntityService.class).getById(2L));
@@ -634,7 +640,7 @@ class JudgeDispatchDatabaseIT {
         request.setInput("  raw\n\n");
         request.setExpectedOutput("  raw\n");
         Long id;
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             security.when(SecurityUtils::getUser).thenReturn(context.getBean(UserEntityService.class).getById(2L));
             id = service.testJudge(request);
         }
@@ -650,7 +656,7 @@ class JudgeDispatchDatabaseIT {
         results.receive(result);
         when(context.getBean(RedisCache.class).getCacheObject(anyString()))
                 .thenThrow(new IllegalStateException("offline"));
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             security.when(SecurityUtils::getUserId).thenReturn(2L);
             assertEquals(request.getInput(), service.getStatus(id).getInput());
             assertEquals("  raw\n", service.getStatus(id).getOutput());
@@ -669,7 +675,7 @@ class JudgeDispatchDatabaseIT {
         request.setLanguage("Python");
         request.setCode("print(input())");
         request.setExpectedOutput("");
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             security.when(SecurityUtils::getUser).thenReturn(context.getBean(UserEntityService.class).getById(2L));
             for (String input : List.of("中".repeat(1024 * 1024), "\0".repeat(600 * 1024))) {
                 request.setInput(input);
@@ -747,7 +753,7 @@ class JudgeDispatchDatabaseIT {
                 final boolean formal = index % 2 == 0;
                 futures.add(executor.submit(() -> {
                     start.await();
-                    try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+                    try (MockedStatic<SecurityUtils> security = authenticatedUser();
                          MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
                         security.when(SecurityUtils::getUser)
                                 .thenReturn(context.getBean(UserEntityService.class).getById(2L));
@@ -801,7 +807,7 @@ class JudgeDispatchDatabaseIT {
     @Test
     void unsafeIdFailsWithoutPersistingAPartialTask() {
         jdbc.execute("ALTER TABLE judge_dispatch AUTO_INCREMENT=" + (JudgeDispatchIdAllocator.MAX_SAFE_ID + 1));
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             security.when(SecurityUtils::getUser).thenReturn(context.getBean(UserEntityService.class).getById(2L));
             TestJudgeDTO request = new TestJudgeDTO();
             request.setLanguage("Python");
@@ -1079,9 +1085,28 @@ class JudgeDispatchDatabaseIT {
      * @return 由调用方关闭的安全上下文桩
      */
     private MockedStatic<SecurityUtils> superAdmin() {
-        MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        MockedStatic<SecurityUtils> security = authenticatedUser();
+        LoginUser user = new LoginUser(context.getBean(UserEntityService.class).getById(1L), List.of(), List.of());
+        security.when(SecurityUtils::getLoginUser).thenReturn(user);
+        security.when(SecurityUtils::getAuthentication).thenReturn(
+                new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities()));
         security.when(SecurityUtils::getUserId).thenReturn(1L);
+        security.when(SecurityUtils::isAdmin).thenReturn(true);
         security.when(() -> SecurityUtils.isSuperAdmin(1L)).thenReturn(true);
+        return security;
+    }
+
+    /**
+     * 为当前测试线程提供普通用户的登录信息
+     * @return 由调用方关闭的安全工具桩
+     */
+    private MockedStatic<SecurityUtils> authenticatedUser() {
+        MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        User currentUser = context.getBean(UserEntityService.class).getById(2L);
+        security.when(SecurityUtils::getUser).thenReturn(currentUser);
+        security.when(SecurityUtils::getUserId).thenReturn(currentUser.getId());
+        security.when(SecurityUtils::getLoginUser)
+                .thenReturn(new LoginUser(currentUser, List.of(RoleType.USER.getCode()), List.of()));
         return security;
     }
 
@@ -1189,7 +1214,7 @@ class JudgeDispatchDatabaseIT {
             UserEntityServiceImpl.class, UserAcproblemEntityServiceImpl.class, ProblemEntityServiceImpl.class,
             LanguageEntityServiceImpl.class, TestDataVersionEntityServiceImpl.class, ContestEntityServiceImpl.class,
             ContestProblemEntityServiceImpl.class, ContestUserEntityServiceImpl.class, JudgeServiceImpl.class,
-            AdminContestServiceImpl.class,
+            AdminContestServiceImpl.class, ResourceAccessService.class,
             JudgeResultService.class, JudgeMessageCodec.class, JudgeStatusCache.class, JudgeDispatchIdAllocator.class})
     static class DatabaseConfiguration {
 
@@ -1217,8 +1242,7 @@ class JudgeDispatchDatabaseIT {
             MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
             factory.setDataSource(dataSource);
             factory.setConfiguration(configuration);
-            factory.setMapperLocations(new ClassPathResource("mapper/ContestMapper.xml"),
-                                       new ClassPathResource("mapper/ContestProblemMapper.xml"));
+            factory.setMapperLocations(new PathMatchingResourcePatternResolver().getResources("classpath*:mapper/*.xml"));
             return factory.getObject();
         }
 
@@ -1269,6 +1293,16 @@ class JudgeDispatchDatabaseIT {
         TestDataService testData() {
             return mock(TestDataService.class);
         }
+
+        /**
+         * 隔离判题事务测试未使用的资源删除入口
+         * @return 删除服务桩
+         */
+        @Bean
+        ResourceDeletionService resourceDeletion() {
+            return mock(ResourceDeletionService.class);
+        }
+
     }
 
     /**

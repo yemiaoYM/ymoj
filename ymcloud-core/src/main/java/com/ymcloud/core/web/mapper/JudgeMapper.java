@@ -1,8 +1,11 @@
 package com.ymcloud.core.web.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.ymcloud.pojo.entity.Judge;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.pojo.bo.ContestSubmissionRecord;
+import com.ymcloud.pojo.bo.ProblemAccessScope;
+import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.query.oj.SubmissionPageQuery;
 import com.ymcloud.pojo.vo.oj.ProblemCountVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -38,4 +41,22 @@ public interface JudgeMapper extends BaseMapper<Judge> {
                                                                  @Param("endTime") LocalDateTime endTime,
                                                                  @Param("keyword") String keyword);
 
+    /**
+     * 在分页前过滤无原题访问权的普通提交
+     * @param page 分页参数
+     * @param query 提交筛选条件
+     * @param scope 服务端生成的题目访问范围
+     * @return 授权的提交分页
+     */
+    Page<Judge> pagePublicSubmissions(@Param("page") Page<Judge> page,
+                                     @Param("query") SubmissionPageQuery query,
+                                     @Param("scope") ProblemAccessScope scope);
+
+    /**
+     * 仅查询管理范围内的提交时间与状态供后台统计
+     * @param since 统计开始时间
+     * @param scope 当前用户管理范围
+     * @return 提交统计基础数据
+     */
+    List<Judge> listDashboardSubmissions(@Param("since") LocalDateTime since, @Param("scope") ProblemAccessScope scope);
 }

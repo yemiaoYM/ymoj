@@ -6,8 +6,6 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * @PackageName: com.ymcloud.pojo.vo
- * @ClassName: ContestVO
  * @Author: Yemiao
  * @CreateTime: 2025-08-13  01:28
  * @Description: 比赛详情信息
@@ -65,9 +63,17 @@ public class ContestVO implements Serializable {
      */
     private Long duration;
     /**
-     * 是否允许比赛结束后继续提交（0=否，1=是）
+     * 访问类型：0公开、1密码、2私有
      */
-    private Integer allowEndSubmit;
+    private Integer visibility;
+    /**
+     * 当前用户是否可赛前预览及管理该比赛
+     */
+    private Boolean canManage;
+    /**
+     * 当前用户是否具备克隆源比赛的资格，选题另按原题状态检查
+     */
+    private Boolean canClone;
     /**
      * 参与人数
      */

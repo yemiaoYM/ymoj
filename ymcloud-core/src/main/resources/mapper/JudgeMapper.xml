@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.ymcloud.core.web.mapper.JudgeMapper">
+    <resultMap id="authorizedEntityMap" type="com.ymcloud.pojo.entity.Judge" autoMapping="true">
+        <id column="id" property="id"/>
+        <result column="status" property="status" javaType="com.ymcloud.pojo.enums.JudgeStatus"
+                typeHandler="com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler"/>
+    </resultMap>
+
 
     <select id="getProblemListCount" resultType="com.ymcloud.pojo.vo.oj.ProblemCountVO">
+        <bind name="practiceContestId" value="@com.ymcloud.common.constant.JudgeConstants@PRACTICE_CONTEST_ID"/>
         SELECT display_id AS problemId,
             COUNT(IF(STATUS=-3,STATUS,NULL)) AS pe,
             COUNT(IF(STATUS=-2,STATUS,NULL)) AS ce,
@@ -16,7 +23,7 @@
             COUNT(*) AS total
         FROM judge
         <where>
-            contest_id=0
+            contest_id = #{practiceContestId}
             <if test="problemIds!=null and problemIds.size > 0">
                 AND display_id in
                 <foreach collection="problemIds" item="problemId" open="(" separator="," close=")">
@@ -48,5 +55,29 @@
         ORDER BY u.username, j.display_id, j.created_time
     </select>
 
+
+    <select id="pagePublicSubmissions" resultMap="authorizedEntityMap">
+        <bind name="practiceContestId" value="@com.ymcloud.common.constant.JudgeConstants@PRACTICE_CONTEST_ID"/>
+        SELECT j.* FROM judge j JOIN problem p ON p.id = j.problem_id
+        WHERE j.contest_id = #{practiceContestId} AND <include refid="com.ymcloud.core.web.mapper.ProblemMapper.accessPredicate"/>
+        <if test="query.isMine">AND j.user_id = #{scope.userId}</if>
+        <if test="query.status != null">AND j.status = #{query.status}</if>
+        <if test="query.problemKey != null and query.problemKey.trim() != ''">
+            AND (j.display_id LIKE CONCAT('%', #{query.problemKey}, '%') OR j.problem_title LIKE CONCAT('%', #{query.problemKey}, '%'))
+        </if>
+        <if test="!query.isMine and query.username != null and query.username.trim() != ''">
+            AND j.username LIKE CONCAT('%', #{query.username}, '%')
+        </if>
+        ORDER BY j.created_time DESC
+    </select>
+
+    <select id="listDashboardSubmissions" resultMap="authorizedEntityMap">
+        <bind name="practiceContestId" value="@com.ymcloud.common.constant.JudgeConstants@PRACTICE_CONTEST_ID"/>
+        SELECT j.created_time, j.status FROM judge j WHERE j.created_time &gt;= #{since}
+        <if test="!scope.administrator">
+            AND ((j.contest_id = #{practiceContestId} AND EXISTS (SELECT 1 FROM problem p WHERE p.id = j.problem_id AND p.author_id = #{scope.userId}))
+                OR EXISTS (SELECT 1 FROM contest c WHERE c.id = j.contest_id AND c.creator_id = #{scope.userId}))
+        </if>
+    </select>
 
 </mapper>

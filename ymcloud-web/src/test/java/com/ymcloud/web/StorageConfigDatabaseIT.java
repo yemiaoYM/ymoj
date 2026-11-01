@@ -41,7 +41,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -57,6 +59,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -79,7 +82,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
-/** 真实数据库事务与多实例配置回归，网络驱动替身仅用于精确观察连接退休。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 真实数据库事务与多实例配置回归，网络驱动替身用于观察连接退休
+ */
 @EnabledIfEnvironmentVariable(named = "YMCLOUD_STORAGE_DB_IT", matches = "true")
 class StorageConfigDatabaseIT {
 
@@ -481,6 +488,12 @@ class StorageConfigDatabaseIT {
             return datasource;
         }
 
+        /**
+         * 装配真实查询与锁语句，所有表名映射到本次随机测试表
+         * @param dataSource 隔离表所在的数据源
+         * @return 同时支持 MP 和 XML 查询的会话工厂
+         * @throws Exception Mapper 资源加载失败
+         */
         @Bean
         SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
             MybatisConfiguration configuration = new MybatisConfiguration();
@@ -494,6 +507,19 @@ class StorageConfigDatabaseIT {
             factory.setDataSource(dataSource);
             factory.setConfiguration(configuration);
             factory.setGlobalConfig(globalConfig);
+            List<Resource> mapperResources = new ArrayList<>();
+            for (String mapper : List.of("StorageConfigMapper", "StorageConfigStateMapper")) {
+                String path = "mapper/" + mapper + ".xml";
+                String xml;
+                try (InputStream input = new ClassPathResource(path).getInputStream()) {
+                    xml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+                }
+                for (String name : TABLES) {
+                    xml = xml.replaceAll("\\b" + name + "\\b", table(name));
+                }
+                mapperResources.add(new ByteArrayResource(xml.getBytes(StandardCharsets.UTF_8), path));
+            }
+            factory.setMapperLocations(mapperResources.toArray(Resource[]::new));
             return factory.getObject();
         }
 

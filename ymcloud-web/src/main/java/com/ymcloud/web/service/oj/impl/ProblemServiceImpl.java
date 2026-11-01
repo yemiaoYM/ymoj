@@ -1,6 +1,5 @@
 package com.ymcloud.web.service.oj.impl;
 
-
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.RandomUtil;
@@ -8,11 +7,11 @@ import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.HttpStatus;
+import com.ymcloud.common.constant.JudgeConstants;
 import com.ymcloud.common.constant.LanguageConstants;
-import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
-import com.ymcloud.common.exception.problem.ProblemPermissionException;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.LanguageEntityService;
@@ -33,9 +32,9 @@ import com.ymcloud.web.service.oj.ProblemService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -47,6 +46,9 @@ import java.util.stream.Collectors;
 public class ProblemServiceImpl implements ProblemService {
 
     @Autowired
+    private ResourceAccessService resourceAccess;
+
+    @Autowired
     private ProblemEntityService problemEntityService;
 
     @Autowired
@@ -56,7 +58,7 @@ public class ProblemServiceImpl implements ProblemService {
     private LanguageEntityService languageEntityService;
 
     /**
-     * 按关键词、难度及所选标签分页查询公开题目并附带提交统计
+     * 按关键词、难度及所选标签分页查询当前用户可访问的题目并附带提交统计
      * @param query 已校验的查询条件，多标签须同时匹配
      * @return 题目分页结果
      */
@@ -64,12 +66,13 @@ public class ProblemServiceImpl implements ProblemService {
     public PageVO<ProblemTableVO> pageQuery(ProblemPageQuery query) {
         //使用sql优化查询
         Page<ProblemTableVO> page=new Page<>(query.getPageNo(),query.getPageSize());
-        //这里sql限制了只查询权限为公开的题目
+        // 授权过滤在分页和计数前执行
         Page<ProblemTableVO> pageResult=problemEntityService.pageQuery(
                 page,
                 query.getKeyword(),
                 query.getDifficulty(),
-                query.getTagIds());
+                query.getTagIds(),
+                resourceAccess.problemScope());
         //如果不为空则设置提交情况
         if(pageResult.getTotal()>0){
             //查询对应的题目的ac和总提交数量
@@ -102,15 +105,7 @@ public class ProblemServiceImpl implements ProblemService {
     public ProblemVO getProblemInfo(String problemId) {
         //校验参数
         Problem problem = validateProblem(problemId);
-        //私有题目查询权限
         Long userId = SecurityUtils.getUserId();
-        //管理员权限
-        Boolean admin = SecurityUtils.isAdmin();
-        if(problem.getVisibility() == ProblemConstants.PRIVATE
-                && !admin
-                && !Objects.equals(problem.getAuthorId(), userId)){
-            throw new ProblemPermissionException("私有题目，请联系题目创建者:"+problem.getAuthorUsername());
-        }
         //拷贝前端实体
         ProblemVO problemVO = BeanUtil.copyProperties(problem, ProblemVO.class);
         //查询题目的题面样例,将json转化为对象
@@ -126,7 +121,7 @@ public class ProblemServiceImpl implements ProblemService {
                 .eq(Judge::getProblemId, problem.getId())
                 .eq(Judge::getUserId, userId)
                 //不能查询比赛提交
-                .eq(Judge::getContestId, 0L)
+                .eq(Judge::getContestId, JudgeConstants.PRACTICE_CONTEST_ID)
                 .eq(Judge::getStatus, JudgeStatus.STATUS_ACCEPTED)
                 .exists();
         problemVO.setAccepted(isAccepted);
@@ -141,10 +136,7 @@ public class ProblemServiceImpl implements ProblemService {
     @Override
     public String randomProblem() {
         //只随机公共题目
-        List<String> list = problemEntityService.lambdaQuery()
-                .select(Problem::getProblemId)
-                .eq(Problem::getVisibility, ProblemConstants.PUBLIC)
-                .list().stream().map(Problem::getProblemId).toList();
+        List<String> list = problemEntityService.listPublicProblemIds(LocalDateTime.now());
         if(CollectionUtil.isEmpty(list)){
             throw new ProblemException("暂时没有公共题目");
         }
@@ -172,13 +164,14 @@ public class ProblemServiceImpl implements ProblemService {
                 .eq(Judge::getUserId, userId)
                 .eq(Judge::getProblemId, problem.getId())
                 //不能查询比赛提交
-                .eq(Judge::getContestId, 0L)
+                .eq(Judge::getContestId, JudgeConstants.PRACTICE_CONTEST_ID)
                 .orderByDesc(Judge::getCreatedTime)
                 .page(page);
         //返回提交vo
         return PageVO.of(judgePage,judge->{
             SubmissionTableVO vo= BeanUtil.copyProperties(judge,SubmissionTableVO.class);
             vo.setSubmissionId(judge.getId());
+            vo.setCanRejudge(SecurityUtils.isAdmin());
             return vo;
         });
     }
@@ -198,10 +191,7 @@ public class ProblemServiceImpl implements ProblemService {
             //题目不存在或者已删除
             throw new ProblemNotExistException();
         }
-        //校验题目是否是比赛题
-        if(problem.getVisibility() == ProblemConstants.CONTEST_PROBLEM){
-            throw new ProblemPermissionException("请从比赛官网查询题目");
-        }
+        resourceAccess.requireReadProblem(problem);
         return problem;
     }
 

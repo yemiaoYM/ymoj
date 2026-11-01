@@ -1,9 +1,9 @@
 package com.ymcloud.web;
 
-import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.query.oj.ProblemPageQuery;
@@ -18,10 +18,6 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -99,22 +95,23 @@ class ProblemTagFilterTest {
         ProblemServiceImpl service = new ProblemServiceImpl();
         ReflectionTestUtils.setField(service, "problemEntityService", problems);
         ReflectionTestUtils.setField(service, "judgeEntityService", judges);
+        ReflectionTestUtils.setField(service, "resourceAccess", new ResourceAccessService());
         ProblemPageQuery query = new ProblemPageQuery();
         query.setTagIds(Set.of(1L, 2L));
         query.setKeyword("排序");
         query.setDifficulty(2);
-        when(problems.pageQuery(any(), eq("排序"), eq(2), eq(Set.of(1L, 2L))))
+        when(problems.pageQuery(any(), eq("排序"), eq(2), eq(Set.of(1L, 2L)), any()))
                 .thenReturn(new Page<ProblemTableVO>(1, 15, 0));
         var result = service.pageQuery(query);
         assertEquals(0, result.getTotal());
         assertTrue(result.getRecords().isEmpty());
-        verify(problems).pageQuery(any(), eq("排序"), eq(2), eq(Set.of(1L, 2L)));
+        verify(problems).pageQuery(any(), eq("排序"), eq(2), eq(Set.of(1L, 2L)), any());
         verifyNoInteractions(judges);
     }
 
     /**
-     * 实际 Mapper 按标签生成参数化 EXISTS，计数优化保留全部条件，并导出可执行 SQL 供隔离数据集验证
-     * @throws Exception Mapper 解析或验证产物写入失败
+     * 实际 Mapper 按标签生成参数化 EXISTS，计数优化保留全部条件，并保留状态常量绑定
+     * @throws Exception Mapper 解析失败
      */
     @Test
     void generatesPublicIntersectionWithoutDuplicateRows() throws Exception {
@@ -125,37 +122,34 @@ class ProblemTagFilterTest {
         }
         var statement = configuration.getMappedStatement("com.ymcloud.core.web.mapper.ProblemMapper.pageQuery");
         var pagination = new PaginationInnerInterceptor(DbType.MYSQL);
-        List<Map<String, Object>> cases = new ArrayList<>();
         for (List<Long> tags : List.of(List.<Long>of(), List.of(1L), List.of(1L, 2L), List.of(999L))) {
             Map<String, Object> params = new HashMap<>();
             params.put("tagIds", new LinkedHashSet<>(tags));
             params.put("difficulty", -1);
+            params.put("scope", new ResourceAccessService().problemScope());
             var bound = statement.getBoundSql(params);
             String sql = bound.getSql();
-            assertTrue(sql.contains("p.visibility = 1"));
+            assertTrue(sql.contains("p.visibility = ?"));
+            assertEquals(1, bound.getAdditionalParameter("publicVisibility"));
+            assertEquals(0L, bound.getAdditionalParameter("originalSourceId"));
             assertEquals(tags.size(), sql.split("AND EXISTS", -1).length - 1);
             List<Object> values = bound.getParameterMappings().stream()
+                    .filter(mapping -> mapping.getProperty().startsWith("__frch_"))
                     .map(mapping -> bound.getAdditionalParameter(mapping.getProperty())).toList();
             assertEquals(tags, values);
             String countSql = pagination.autoCountSql(new Page<>(), sql);
             assertTrue(countSql.startsWith("SELECT COUNT(*) AS total FROM problem p"));
-            assertEquals(tags.size(), countSql.split("EXISTS", -1).length - 1);
-            cases.add(Map.of("sql", sql, "countSql", countSql, "values", values));
+            assertEquals(tags.size() + 1, countSql.split("EXISTS", -1).length - 1);
         }
         Map<String, Object> combined = new HashMap<>();
         combined.put("keyword", "排序");
         combined.put("difficulty", 2);
         combined.put("source", "洛谷");
         combined.put("tagIds", Set.of(1L, 2L));
+        combined.put("scope", new ResourceAccessService().problemScope());
         var bound = statement.getBoundSql(combined);
         assertTrue(bound.getSql().contains("p.difficulty = ?"));
         assertFalse(bound.getSql().contains("p.source = ?"));
         assertFalse(bound.getSql().contains("排序"));
-        List<Object> values = bound.getParameterMappings().stream().map(mapping ->
-                bound.hasAdditionalParameter(mapping.getProperty())
-                        ? bound.getAdditionalParameter(mapping.getProperty()) : combined.get(mapping.getProperty())).toList();
-        cases.add(Map.of("sql", bound.getSql(), "countSql", pagination.autoCountSql(new Page<>(), bound.getSql()),
-                "values", values));
-        Files.writeString(Path.of("target/tag-filter-sql.json"), JSON.toJSONString(cases), StandardCharsets.UTF_8);
     }
 }

@@ -34,7 +34,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 使用真实本地对象验证事务回调固定物理地址及历史迁移保留原件。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 使用真实本地对象验证事务回调固定物理地址及历史迁移保留原件
  */
 class StoredFileLifecycleRegressionTest {
 
@@ -45,6 +47,9 @@ class StoredFileLifecycleRegressionTest {
     private StoredFileService storedFiles;
     private StorageRegistry registry;
 
+    /**
+     * 装配临时目录存储及文件元数据依赖
+     */
     @BeforeEach
     void setup() {
         entities = mock(FileEntityService.class);
@@ -247,6 +252,10 @@ class StoredFileLifecycleRegressionTest {
         assertEquals(1, dynamic.closed().get());
     }
 
+    /**
+     * 主动文件删除在配置移除后仍使用固定客户端，不误删新配置中的同名对象
+     * @throws Exception 临时文件操作失败
+     */
     @Test
     void deleteCommitUsesFixedClientAfterLastReferenceConfigurationWasRemoved() throws Exception {
         DynamicStorage dynamic = dynamicStorage();
@@ -357,6 +366,10 @@ class StoredFileLifecycleRegressionTest {
         return file;
     }
 
+    /**
+     * 配置删除目标的行锁查询及元数据删除结果
+     * @param file 待删除文件
+     */
     @SuppressWarnings("unchecked")
     private void configureDelete(File file) {
         LambdaUpdateChainWrapper<File> update = mock(LambdaUpdateChainWrapper.class);
@@ -365,16 +378,23 @@ class StoredFileLifecycleRegressionTest {
         when(entities.lambdaUpdate()).thenReturn(update);
         LambdaQueryChainWrapper<File> query = mock(LambdaQueryChainWrapper.class);
         when(query.eq(any(), any())).thenReturn(query);
-        when(query.last(eq("FOR UPDATE"))).thenReturn(query);
+        when(query.last("FOR UPDATE")).thenReturn(query);
+        when(query.and(any())).thenReturn(query);
         when(query.one()).thenReturn(file);
         when(entities.lambdaQuery()).thenReturn(query);
     }
 
+    /**
+     * 配置迁移目标的锁定查询和更新边界
+     * @param file 待迁移文件
+     * @return 可模拟更新失败的条件更新桩
+     */
     @SuppressWarnings("unchecked")
     private LambdaUpdateChainWrapper<File> configureMigration(File file) {
         LambdaQueryChainWrapper<File> query = mock(LambdaQueryChainWrapper.class);
         when(query.eq(any(), any())).thenReturn(query);
-        when(query.last(eq("FOR UPDATE"))).thenReturn(query);
+        when(query.last("FOR UPDATE")).thenReturn(query);
+        when(query.and(any())).thenReturn(query);
         when(query.one()).thenReturn(file);
         when(entities.lambdaQuery()).thenReturn(query);
         LambdaUpdateChainWrapper<File> update = mock(LambdaUpdateChainWrapper.class);
@@ -385,6 +405,10 @@ class StoredFileLifecycleRegressionTest {
         return update;
     }
 
+    /**
+     * 触发事务完成回调，验证客户端释放和回滚保留文件
+     * @param status 事务提交或回滚状态
+     */
     private void complete(int status) {
         TransactionSynchronizationManager.getSynchronizations().forEach(synchronization ->
                 synchronization.afterCompletion(status));

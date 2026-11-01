@@ -3,8 +3,9 @@ package com.ymcloud.web;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
-import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.constant.HttpStatus;
+import com.ymcloud.common.exception.problem.ProblemException;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
@@ -13,9 +14,9 @@ import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
-import com.ymcloud.web.service.admin.impl.AdminProblemServiceImpl;
-import com.ymcloud.web.service.admin.AdminProblemService;
 import com.ymcloud.web.controller.admin.problem.AdminProblemController;
+import com.ymcloud.web.service.admin.AdminProblemService;
+import com.ymcloud.web.service.admin.impl.AdminProblemServiceImpl;
 import jakarta.validation.Validation;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -25,11 +26,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import java.util.List;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -138,7 +139,7 @@ class ProblemMetadataTest {
     }
 
     /**
-     * 清空来源和样例会实际保存，但保留历史题号和作者。
+     * 清空来源和样例会实际保存，但保留历史题号和作者
      * @param source 空来源输入
      */
     @ParameterizedTest
@@ -156,7 +157,11 @@ class ProblemMetadataTest {
         existing.setAuthorId(2L);
         existing.setSource("原题出处");
         existing.setExamples("[{\"input\":\"1 2\",\"output\":\"3\"}]");
-        when(problems.getById(10L)).thenReturn(existing);
+        LambdaQueryChainWrapper<Problem> query = mock(LambdaQueryChainWrapper.class, RETURNS_SELF);
+        when(query.eq(any(), any())).thenReturn(query);
+        when(query.last("FOR UPDATE")).thenReturn(query);
+        when(query.one()).thenReturn(existing);
+        when(problems.lambdaQuery()).thenReturn(query);
         when(problems.updateById(any(Problem.class))).thenReturn(true);
         ProblemDTO dto = request();
         dto.setProblemId("YMOJ-9999");
@@ -299,6 +304,7 @@ class ProblemMetadataTest {
      */
     private AdminProblemServiceImpl service(ProblemEntityService problems, ProblemTagEntityService tags) {
         AdminProblemServiceImpl service = new AdminProblemServiceImpl();
+        ReflectionTestUtils.setField(service, "resourceAccess", mock(ResourceAccessService.class));
         ReflectionTestUtils.setField(service, "problemEntityService", problems);
         ReflectionTestUtils.setField(service, "problemTagEntityService", tags);
         return service;

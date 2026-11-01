@@ -21,7 +21,9 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 菜单权限管理服务实现类
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-10
+ * @Description: 菜单权限定义，仅超级管理员可修改
  */
 @Service
 public class AdminAuthServiceImpl implements AdminAuthService {

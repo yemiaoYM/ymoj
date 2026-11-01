@@ -1,13 +1,19 @@
 package com.ymcloud.web.service.oj.impl;
 
 import com.ymcloud.common.constant.CacheConstants;
+import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
+import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.storage.StoredFileService;
+import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
+import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.File;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.web.service.oj.FileService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.LocalDateTime;
 
 /**
  * @Author: Yemiao
@@ -35,6 +42,12 @@ public class FileServiceImpl implements FileService {
 
     @Autowired
     private FileEntityService fileEntityService;
+
+    @Autowired
+    private ProblemEntityService problems;
+
+    @Autowired
+    private ContestEntityService contests;
 
     /**
      * 校验公开路径和文件记录，拒绝私有文件及测试数据。
@@ -66,6 +79,19 @@ public class FileServiceImpl implements FileService {
                 || file.getBizType() == FileBizType.TEST_DATA
                 || !Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())) {
             throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
+        }
+        if (file.getBizType() == FileBizType.PROBLEM_ATTACHMENT) {
+            Problem problem = problems.getById(file.getBizId());
+            if (problem == null || problem.getVisibility() != ProblemConstants.PUBLIC
+                    || problems.hasActiveContestReference(problem.getId(), LocalDateTime.now())) {
+                throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
+            }
+        } else if (file.getBizType() == FileBizType.CONTEST_ATTACHMENT) {
+            Contest contest = contests.getById(file.getBizId());
+            if (contest == null || contest.getVisibility() != ContestConstants.VISIBILITY_PUBLIC
+                    || LocalDateTime.now().isBefore(contest.getStartTime())) {
+                throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
+            }
         }
         return file;
     }
@@ -118,7 +144,9 @@ public class FileServiceImpl implements FileService {
         String key = CacheConstants.CACHE_NAME + ":" + CacheConstants.HOME_CAROUSEL_KEY;
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                /** 数据库成功提交后，删除与 Spring Cache 相同命名的键。 */
+                /**
+                 * 数据库成功提交后，删除与 Spring Cache 相同命名的键
+                 */
                 @Override
                 public void afterCommit() {
                     redisCache.deleteObject(key);

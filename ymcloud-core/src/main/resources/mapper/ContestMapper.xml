@@ -26,7 +26,7 @@
             SELECT j.*
             FROM judge j
             JOIN contest_info c ON j.contest_id = c.id
-            WHERE j.created_time BETWEEN c.start_time AND c.end_time
+            WHERE j.created_time &gt;= c.start_time AND j.created_time &lt; c.end_time
             AND j.contest_id = #{contestId}
         ),
         -- 每个用户每题的第一次 AC 时间（赛时内）
@@ -163,7 +163,7 @@
             SELECT j.*
             FROM judge j
             JOIN contest_info c ON j.contest_id = c.id
-            WHERE j.created_time BETWEEN c.start_time AND c.end_time
+            WHERE j.created_time &gt;= c.start_time AND j.created_time &lt; c.end_time
             AND j.contest_id = #{contestId}
         ),
         -- 每位用户每题的最高分（仅基于赛时内提交）

@@ -3,6 +3,7 @@ package com.ymcloud.pojo.vo.oj;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -14,6 +15,22 @@ import java.util.List;
 public class ProblemVO implements Serializable {
 
     private static final long serialVersionUID = 1L;
+
+    /**
+     * 比赛正式提交开始时间
+     * 普通练习为 null
+     */
+    private LocalDateTime submissionStartTime;
+    /**
+     * 比赛正式提交结束时间，不含结束时刻
+     * 普通练习为 null
+     */
+    private LocalDateTime submissionEndTime;
+    /**
+     * 服务端当前时间，用于比赛页面校准时段
+     * 普通练习为 null
+     */
+    private LocalDateTime serverTime;
 
     /**
      * 题目展示id 例如YMOJ-1000（本题库），P1005（洛谷）等等
@@ -36,7 +53,8 @@ public class ProblemVO implements Serializable {
      */
     private String output;
     /**
-     * 题目来源说明，最多255字符，可为空；不参与判题和题号生成
+     * 题目来源说明，最多255字符，可为空
+     * 不参与判题和题号生成
      */
     private String source;
     /**
@@ -44,7 +62,8 @@ public class ProblemVO implements Serializable {
      */
     private Integer difficulty;
     /**
-     * 判题方式：default=普通、spj=特殊、interactive=交互；当前仅支持 default
+     * 判题方式：default=普通、spj=特殊、interactive=交互
+     * 当前仅支持 default
      */
     private String judgeMode;
     /**

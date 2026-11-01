@@ -50,11 +50,11 @@
               <x-flex align="center" :size="8">
                 <el-tag size="large" disable-transitions type="warning" effect="dark">{{ formatContestMode(competition.mode) }}</el-tag>
                 <el-tag size="large" disable-transitions type="primary" effect="dark">{{ formatContestStyle(competition.style) }}</el-tag>
-                <el-tag size="large" disable-transitions type="success" effect="dark">{{ competition.sourceId === 0 ? '原创' : '重建赛' }}</el-tag>
+                <el-tag size="large" disable-transitions type="success" effect="dark">{{ competition.sourceId === ORIGINAL_CONTEST_SOURCE ? '原创' : '重建赛' }}</el-tag>
                 <el-tag v-if="competition.rated" size="large" disable-transitions type="danger" effect="dark">Rated</el-tag>
                 <x-flex class="contest-access" align="center" :size="4" :wrap="false">
-                  <el-icon v-if="competition.visibility !== 0"><Lock /></el-icon>
-                  <span>{{ competition.visibility === 0 ? '公开赛' : '私有赛' }}</span>
+                  <el-icon v-if="competition.visibility !== CONTEST_VISIBILITY.PUBLIC"><Lock /></el-icon>
+                  <span>{{ competition.visibility === CONTEST_VISIBILITY.PUBLIC ? '公开赛' : competition.visibility === CONTEST_VISIBILITY.PASSWORD ? '密码赛' : '私有赛' }}</span>
                 </x-flex>
               </x-flex>
               <x-flex class="contest-time" align="center" :size="8">
@@ -72,7 +72,7 @@
                   <el-icon><CollectionTag /></el-icon>
                   <span>主办方 <strong>{{ competition.creatorUsername }}</strong></span>
                 </x-flex>
-                <x-flex v-if="competition.visibility !== 0" align="center" :size="8" :wrap="false">
+                <x-flex v-if="competition.visibility !== CONTEST_VISIBILITY.PUBLIC" align="center" :size="8" :wrap="false">
                   <el-icon><User /></el-icon>
                   <span>已报名 <strong>{{ competition.participantCount }} 人</strong></span>
                 </x-flex>
@@ -103,6 +103,7 @@
 </template>
 
 <script setup lang="ts">
+import { CONTEST_VISIBILITY, ORIGINAL_CONTEST_SOURCE } from '@/constants/contest';
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { Search, Clock, Lock, AlarmClock, CollectionTag, User } from '@element-plus/icons-vue';

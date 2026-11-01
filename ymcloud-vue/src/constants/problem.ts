@@ -9,3 +9,12 @@ export const PROBLEM_DIFFICULTIES = [
 
 /** 判题方式与比赛计分模式分开；当前仅实现 default。 */
 export type ProblemJudgeMode = 'default' | 'spj' | 'interactive';
+
+/**
+ * 原题公开范围，与比赛访问类型分别维护
+ */
+export const PROBLEM_VISIBILITY = {
+  PUBLIC: 1,
+  PRIVATE: 2,
+  CONTEST_EXCLUSIVE: 3,
+} as const;

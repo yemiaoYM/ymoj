@@ -1,7 +1,7 @@
 import request from "./request";
 import type { AxiosResponse } from 'axios';
 import type { AnnouncementPageQuery, AnnouncementPageResult } from '@/type/announcement';
-import type { ContestProblemPageQuery } from '@/type/contest';
+import type { CloneContestRequest, ContestProblemPageQuery } from '@/type/contest';
 import type { TagDTO, TagClassificationDTO, TagClassification, TagsWithClassification, TagResult } from '@/type/tag';
 import type {
   LoginDTO,
@@ -636,7 +636,7 @@ export function deleteProblemByIds(ids: number | number[]) {
 /**
  * 修改题目可见性
  * @param id 题目ID
- * @param visibility 可见性：1=公开，2=私有，3=比赛专用
+ * @param visibility 手动可设置为公开或私有，比赛专属状态由引用关系维护
  */
 export function updateProblemVisibility(id: number, visibility: number) {
   return request({
@@ -968,7 +968,7 @@ export function deleteContestByIds(ids: number | number[]) {
  * 更新比赛可见性（管理员）
  * @param id 比赛ID
  * @param visibility 可见性
- * @param password 密码（私有比赛时必填）
+ * @param password 密码（密码比赛时必填）
  * @returns 操作结果
  */
 export function updateContestVisibility(id: number, visibility: number, password?: string | null) {
@@ -1014,20 +1014,14 @@ export function updateAdminContest(id: number, contest: any) {
 /**
  * 克隆比赛（管理员）
  * @param id 比赛ID
- * @param title 新比赛标题
- * @param visibility 访问权限
- * @param password 密码（私有比赛时必填）
+ * @param data 新比赛标题、访问类型、时间和独立密码
  * @returns 操作结果
  */
-export function cloneAdminContest(id: number, title: string, visibility: number, password?: string | null) {
-  const params: any = { title, visibility };
-  if (password !== undefined && password !== null) {
-    params.password = password;
-  }
+export function cloneAdminContest(id: number, data: CloneContestRequest) {
   return request({
     url: `/admin/contest/${id}/clone`,
     method: "POST",
-    params
+    data
   })
 }
 

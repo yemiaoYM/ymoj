@@ -5,8 +5,6 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
 /**
- * @PackageName: com.ymcloud.pojo.enums
- * @ClassName: UserStatus
  * @Author: Yemiao
  * @CreateTime: 2025-07-25  01:39
  * @Description: 用户状态

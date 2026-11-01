@@ -15,6 +15,8 @@ import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemPermissionException;
 import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.core.security.domain.LoginUser;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ContestEntityService;
@@ -43,6 +45,7 @@ import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.JudgeStatus;
+import com.ymcloud.pojo.enums.RoleType;
 import com.ymcloud.web.judge.JudgeDispatchIdAllocator;
 import com.ymcloud.web.judge.JudgeDispatchProperties;
 import com.ymcloud.web.judge.JudgeDispatchState;
@@ -99,6 +102,9 @@ class JudgeWebWorkflowTest {
     JudgeResultService results;
     JudgeServiceImpl service;
 
+    /**
+     * 装配判题服务及可控制的持久化依赖
+     */
     @BeforeEach
     void prepare() {
         judges = mock(JudgeEntityService.class);
@@ -139,9 +145,8 @@ class JudgeWebWorkflowTest {
             when(testData.getCurrentVersion(10L)).thenReturn(88L);
             return true;
         });
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        try (MockedStatic<SecurityUtils> security = authenticatedUser();
              MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
             ip.when(IpUtils::getIpAddr).thenReturn("127.0.0.1");
             Long id = service.submitJudge(request(false));
             ArgumentCaptor<Judge> record = ArgumentCaptor.forClass(Judge.class);
@@ -192,9 +197,8 @@ class JudgeWebWorkflowTest {
         when(testData.getCurrentVersion(problem.getId())).thenReturn(77L);
         doReturn(query(version())).when(versions).lambdaQuery();
         when(judges.save(any())).thenReturn(true);
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        try (MockedStatic<SecurityUtils> security = authenticatedUser();
              MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
             service.submitJudge(request(contestSubmission));
         }
         verify(languageQuery).eq(any(), eq(LanguageConstants.LOCAL_PLATFORM));
@@ -231,9 +235,8 @@ class JudgeWebWorkflowTest {
         when(testData.getCurrentVersion(10L)).thenReturn(77L);
         doReturn(query(version())).when(versions).lambdaQuery();
         when(judges.save(any())).thenReturn(true);
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        try (MockedStatic<SecurityUtils> security = authenticatedUser();
              MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
             service.submitJudge(request(true));
         }
         ArgumentCaptor<JudgeDispatch> dispatch = ArgumentCaptor.forClass(JudgeDispatch.class);
@@ -254,8 +257,7 @@ class JudgeWebWorkflowTest {
         Problem problem = problem();
         problem.setJudgeMode(judgeMode);
         doReturn(query(problem)).when(problems).lambdaQuery();
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             assertThrows(JudgeException.class, () -> service.submitJudge(request(false)));
         }
         verifyNoInteractions(testData, judges, dispatches, languages);
@@ -264,8 +266,7 @@ class JudgeWebWorkflowTest {
     @Test
     void missingVersionRejectsBeforeAnySubmissionTaskOrCacheWrite() {
         stubProblemAndLanguage();
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             assertThrows(JudgeException.class, () -> service.submitJudge(request(false)));
         }
         verifyNoInteractions(judges, dispatches, redis, versions);
@@ -277,8 +278,7 @@ class JudgeWebWorkflowTest {
         problem.setVisibility(ProblemConstants.PRIVATE);
         problem.setAuthorId(3L);
         doReturn(query(problem)).when(problems).lambdaQuery();
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             assertThrows(ProblemPermissionException.class, () -> service.submitJudge(request(false)));
         }
         verifyNoInteractions(testData, judges, dispatches);
@@ -292,8 +292,7 @@ class JudgeWebWorkflowTest {
         request.setLanguage("Python");
         request.setInput("  text\n\n");
         request.setExpectedOutput("  text\n");
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             service.testJudge(request);
             service.testJudge(request);
         }
@@ -321,8 +320,7 @@ class JudgeWebWorkflowTest {
         submissions.addAppender(appender);
         received.addAppender(appender);
         TransactionSynchronizationManager.initSynchronization();
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             TestJudgeDTO request = new TestJudgeDTO();
             request.setLanguage("Python");
             request.setCode("print('private-code-sentinel')");
@@ -364,8 +362,7 @@ class JudgeWebWorkflowTest {
         TestJudgeDTO request = new TestJudgeDTO();
         request.setCode("print(input())");
         request.setLanguage("Python");
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             service.testJudge(request);
             ArgumentCaptor<JudgeDispatch> created = ArgumentCaptor.forClass(JudgeDispatch.class);
             verify(dispatches).save(created.capture());
@@ -409,9 +406,8 @@ class JudgeWebWorkflowTest {
         JudgeDTO request = request(false);
         request.setLanguage(name);
 
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        try (MockedStatic<SecurityUtils> security = authenticatedUser();
              MockedStatic<IpUtils> ip = mockStatic(IpUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
             ip.when(IpUtils::getIpAddr).thenReturn("127.0.0.1");
             service.submitJudge(request);
         }
@@ -441,8 +437,7 @@ class JudgeWebWorkflowTest {
         problem.setMemoryLimit(2 * 1024 * 1024L + 1);
         doReturn(query(problem)).when(problems).lambdaQuery();
         doReturn(query(language())).when(languages).lambdaQuery();
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
-            security.when(SecurityUtils::getUser).thenReturn(user(2L));
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             assertThrows(JudgeException.class, () -> service.submitJudge(request(false)));
         }
         verifyNoInteractions(testData, judges, dispatches);
@@ -456,7 +451,7 @@ class JudgeWebWorkflowTest {
         doReturn(query(dispatch)).when(dispatches).lambdaQuery();
         when(dispatches.getById(dispatch.getId())).thenReturn(dispatch);
         when(redis.getCacheObject(anyString())).thenThrow(new IllegalStateException("Redis unavailable"));
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             security.when(SecurityUtils::getUserId).thenReturn(2L);
             assertEquals("  raw\n", service.getStatus(dispatch.getSubmissionId()).getInput());
             security.when(SecurityUtils::getUserId).thenReturn(3L);
@@ -589,10 +584,13 @@ class JudgeWebWorkflowTest {
         doReturn(query(null)).when(dispatches).lambdaQuery();
         Judge historical = new Judge();
         historical.setUserId(2L);
+        historical.setContestId(0L);
+        historical.setProblemId(10L);
+        when(problems.getById(10L)).thenReturn(problem());
         historical.setStatus(JudgeStatus.STATUS_ACCEPTED);
         historical.setTime(10L);
         doReturn(query(historical)).when(judges).lambdaQuery();
-        try (MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class)) {
+        try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             security.when(SecurityUtils::getUserId).thenReturn(2L);
             assertEquals(JudgeStatus.STATUS_ACCEPTED, service.getStatus(1L).getStatus());
             assertEquals(10L, service.getStatus(1L).getTime());
@@ -637,6 +635,20 @@ class JudgeWebWorkflowTest {
         version.setProblemId(10L);
         version.setManifestSha256("ab".repeat(32));
         return version;
+    }
+
+    /**
+     * 为判题请求提供已登录的普通用户身份
+     * @return 由调用方关闭的安全工具桩
+     */
+    private MockedStatic<SecurityUtils> authenticatedUser() {
+        MockedStatic<SecurityUtils> security = mockStatic(SecurityUtils.class);
+        User currentUser = user(2L);
+        security.when(SecurityUtils::getUser).thenReturn(currentUser);
+        security.when(SecurityUtils::getUserId).thenReturn(currentUser.getId());
+        security.when(SecurityUtils::getLoginUser)
+                .thenReturn(new LoginUser(currentUser, List.of(RoleType.USER.getCode()), List.of()));
+        return security;
     }
 
     private User user(Long id) {
@@ -800,13 +812,17 @@ class JudgeWebWorkflowTest {
             JudgeResultService results,
             JudgeDispatchIdAllocator allocator) {
         JudgeServiceImpl component = new JudgeServiceImpl();
+        ResourceAccessService access = new ResourceAccessService();
+        ReflectionTestUtils.setField(access, "problems", problems);
+        ReflectionTestUtils.setField(access, "contests", contests);
+        ReflectionTestUtils.setField(access, "contestUsers", contestUsers);
+        ReflectionTestUtils.setField(component, "resourceAccess", access);
         ReflectionTestUtils.setField(component, "judges", judges);
         ReflectionTestUtils.setField(component, "dispatches", dispatches);
         ReflectionTestUtils.setField(component, "problems", problems);
         ReflectionTestUtils.setField(component, "languages", languages);
         ReflectionTestUtils.setField(component, "contests", contests);
         ReflectionTestUtils.setField(component, "contestProblems", contestProblems);
-        ReflectionTestUtils.setField(component, "contestUsers", contestUsers);
         ReflectionTestUtils.setField(component, "testData", testData);
         ReflectionTestUtils.setField(component, "versions", versions);
         ReflectionTestUtils.setField(component, "properties", properties);

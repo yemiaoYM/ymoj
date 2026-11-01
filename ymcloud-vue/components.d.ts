@@ -22,6 +22,7 @@ declare module 'vue' {
     BrandLogo: typeof import('./src/components/common/BrandLogo.vue')['default']
     CalendarHeatMap: typeof import('./src/components/common/CalendarHeatMap.vue')['default']
     CarouselSetting: typeof import('./src/components/admin/CarouselSetting.vue')['default']
+    CloneContestDialog: typeof import('./src/components/admin/CloneContestDialog.vue')['default']
     CodeHighLight: typeof import('./src/components/common/CodeHighLight.vue')['default']
     Codemirror: typeof import('./src/components/common/Codemirror.vue')['default']
     CommonHeader: typeof import('./src/components/oj/CommonHeader.vue')['default']

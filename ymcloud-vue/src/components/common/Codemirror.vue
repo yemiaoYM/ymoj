@@ -251,9 +251,9 @@
           @click="handSubmitJudge"
           style="height: 40px;"
           :loading="judgeLoading"
-          :disabled="isSubmitDisabled"
+          :disabled="isSubmitDisabled || !submissionAllowed"
         >
-          <el-icon style="margin-right: 10px;"><Edit/></el-icon>提交测评
+          <el-icon style="margin-right: 10px;"><Edit/></el-icon>{{ submissionAllowed ? '提交测评' : '比赛当前仅可查看' }}
         </el-button>
       </x-flex>
     </x-flex>
@@ -331,6 +331,10 @@ export default {
       isContest: {
         type: Boolean,
         default: false
+      },
+      submissionAllowed: {
+        type: Boolean,
+        default: true
       },
       contestId: {
         //contestId是比赛的唯一标识，是表id
@@ -588,6 +592,10 @@ export default {
 
       //正式提交
       const handSubmitJudge=()=>{
+        if (!props.submissionAllowed) {
+          ElMessage.warning("比赛当前不可提交，请在比赛时段内提交");
+          return;
+        }
         if(!userStore.isLogin){
           ElMessage.error("请先登录");
           return;

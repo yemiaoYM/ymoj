@@ -1,6 +1,6 @@
 <template>
   <el-popover
-    v-if="userStore.isSuperAdmin"
+    v-if="userStore.isSuperAdmin || canRejudge"
     v-model:visible="actionsOpen"
     trigger="click"
     placement="bottom"
@@ -21,8 +21,8 @@
       >{{ submission.status }}</el-tag>
     </template>
     <x-flex class="status-actions" :size="10">
-      <el-button type="warning" :icon="Edit" @click="onCommand('status')">修改状态</el-button>
-      <el-button type="primary" :icon="Refresh" @click="onCommand('rejudge')">重新评测</el-button>
+      <el-button v-if="userStore.isSuperAdmin" type="warning" :icon="Edit" @click="onCommand('status')">修改状态</el-button>
+      <el-button v-if="canRejudge" type="primary" :icon="Refresh" @click="onCommand('rejudge')">重新评测</el-button>
     </x-flex>
   </el-popover>
   <el-tag
@@ -62,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Edit, Refresh } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
@@ -74,6 +74,8 @@ import type { SubmissionTableVO } from '@/type/types';
 const props = defineProps<{ submission: SubmissionTableVO }>();
 const emit = defineEmits<{ changed: [] }>();
 const userStore = useUserStore();
+const canRejudge = computed(() => props.submission.canRejudge
+  && userStore.hasEveryPermission(['system:submission:rejudge']));
 const { pending, beforeChange } = useAsyncChange();
 const editing = ref(false);
 const actionsOpen = ref(false);

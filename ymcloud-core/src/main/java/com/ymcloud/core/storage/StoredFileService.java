@@ -22,9 +22,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-11
- * @Description: 文件元数据与对象生命周期管理。业务权限由调用方检查。
+ * @Description: 文件元数据与对象生命周期管理
+ * 业务权限由调用方检查
  */
 @Service
 @Slf4j
@@ -130,6 +131,10 @@ public class StoredFileService {
         }
     }
 
+    /**
+     * 文件管理主动删除普通文件，数据库提交后删除固定位置的对象
+     * @param id 待删除文件 ID，业务授权及引用检查由调用方完成
+     */
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
         File file = files.lambdaQuery()
@@ -169,7 +174,11 @@ public class StoredFileService {
     }
 
     /**
-     * 保留原 ID、URL 和原始字节，迁移可重跑；历史路径写入 legacyPath。
+     * 保留原 ID、URL 和原始字节，迁移可重跑
+     * 历史路径写入 legacyPath
+     * @param id 待迁移文件 ID
+     * @param apply 是否执行迁移，false 时仅检查并返回文件
+     * @return 保留业务标识的文件元数据
      */
     @Transactional(rollbackFor = Exception.class)
     public File migrateLocal(Long id, boolean apply) {
@@ -365,7 +374,9 @@ public class StoredFileService {
     }
 
     /**
-     * 只有明确提交的普通文件删除才删除原始字节；迁移回滚绝不删除源文件。
+     * 清理主动删除的普通文件及历史本地副本，迁移回滚不调用此方法
+     * @param file 删除时固定的文件位置
+     * @param client 删除时租用的存储客户端，历史本地文件可为空
      */
     private void cleanupDeleted(File file, ObjectStorageService client) {
         cleanup(file, client);
@@ -379,9 +390,17 @@ public class StoredFileService {
         }
     }
 
+    /**
+     * 按既有文件删除流程在提交后清理对象，并在事务完成时释放固定客户端
+     * @param file 删除时固定的文件位置
+     * @param client 已租用的存储客户端，历史本地文件可为空
+     */
     private void registerDelete(File file, ObjectStorageService client) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                /**
+                 * 文件登记删除提交后清理实际对象
+                 */
                 @Override
                 public void afterCommit() {
                     try {
@@ -393,6 +412,10 @@ public class StoredFileService {
                     }
                 }
 
+                /**
+                 * 提交或回滚完成后释放固定客户端
+                 * @param status 事务完成状态
+                 */
                 @Override
                 public void afterCompletion(int status) {
                     if (client != null) {

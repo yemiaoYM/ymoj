@@ -114,6 +114,10 @@ export type UserProfile = {
  * 提交表单
  */
 export type SubmissionTableVO = {
+  /**
+   * 当前用户是否可重评该提交
+   */
+  canRejudge: boolean;
   /** 当前执行标识，历史提交为 null */
   executionId: string | null;
   /** 提交 ID，来自 submission 表 */
@@ -246,6 +250,13 @@ export type SubmissionVO = {
  * 题目详情视图对象
  */
 export type ProblemVO = {
+  /**
+   * 普通练习无时段限制
+   * 比赛由服务端返回开始、结束及校准时间
+   */
+  submissionStartTime: string | null;
+  submissionEndTime: string | null;
+  serverTime: string | null;
   /** 展示 ID，例如 YMOJ-1000、P1005 等 */
   problemId: string
   /** 题目标题 */
@@ -506,7 +517,9 @@ export type ContestVO={
     now: string;
     status: string;
     duration: number;
-    allowEndSubmit: number;
+    visibility: number;
+    canManage: boolean;
+    canClone: boolean;
     count: number;
     access: boolean;
 }
@@ -532,7 +545,9 @@ export type ContestTableVO = {
   mode: number;
   /** 比赛类型：0=其他，1=周赛，2=月赛，3=娱乐赛，4=挑战赛 */
   style: number;
-  /** 访问权限：0=公开，1=私有（进入需密码），2=保护（提交需密码） */
+  /**
+   * 访问权限：0=公开，1=密码，2=私有（仅创建者及管理员）
+   */
   visibility: number;
   /** 比赛开始时间 */
   startTime: string; // LocalDateTime 用 ISO 字符串

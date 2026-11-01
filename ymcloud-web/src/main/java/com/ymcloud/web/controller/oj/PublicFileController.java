@@ -2,6 +2,7 @@ package com.ymcloud.web.controller.oj;
 
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.pojo.entity.File;
+import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.web.service.oj.FileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,7 +55,10 @@ public class PublicFileController {
                 .filename(name, StandardCharsets.UTF_8)
                 .build());
         headers.set("X-Content-Type-Options", "nosniff");
-        headers.setCacheControl(CacheControl.maxAge(Duration.ofMinutes(30)).cachePublic());
+        boolean resourceAttachment = file.getBizType() == FileBizType.PROBLEM_ATTACHMENT
+                || file.getBizType() == FileBizType.CONTEST_ATTACHMENT;
+        headers.setCacheControl(resourceAttachment ? CacheControl.noStore()
+                : CacheControl.maxAge(Duration.ofMinutes(30)).cachePublic());
         if (file.getFileSize() != null) {
             headers.setContentLength(file.getFileSize());
         }

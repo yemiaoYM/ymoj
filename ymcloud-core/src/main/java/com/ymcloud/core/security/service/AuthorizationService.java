@@ -11,6 +11,8 @@ import com.ymcloud.core.web.mapper.UserMapper;
 import com.ymcloud.pojo.entity.Role;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.entity.UserRole;
+import com.ymcloud.pojo.enums.RoleStatus;
+import com.ymcloud.pojo.enums.RoleType;
 import com.ymcloud.pojo.enums.UserStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,7 +20,9 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 /**
- * 用户实时授权服务
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-10
+ * @Description: 用户实时授权服务
  */
 @Service
 public class AuthorizationService {
@@ -59,7 +63,7 @@ public class AuthorizationService {
      */
     public void loadAuthorities(LoginUser loginUser) {
         Long userId = loginUser.getUser().getId();
-        List<String> roles = userId.equals(1L) ? List.of("ADMIN") : roleMapper.selectRolesByUserId(userId);
+        List<String> roles = userId.equals(1L) ? List.of(RoleType.ADMIN.getCode()) : roleMapper.selectRolesByUserId(userId);
         loginUser.setRoles(roles.stream()
                 .sorted()
                 .toList());
@@ -76,8 +80,8 @@ public class AuthorizationService {
      */
     public void assignDefaultRole(Long userId) {
         Role role = roleEntityService.lambdaQuery()
-                .eq(Role::getCode, "USER")
-                .eq(Role::getStatus, 1)
+                .eq(Role::getCode, RoleType.USER.getCode())
+                .eq(Role::getStatus, RoleStatus.ENABLED.getCode())
                 .one();
         if (role == null) {
             throw new ServiceException("默认用户角色未配置，请联系管理员");

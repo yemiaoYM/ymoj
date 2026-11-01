@@ -11,9 +11,9 @@
             <el-form-item label="权限" prop="visibility">
               <el-select v-model="queryParams.visibility" placeholder="全部题目" clearable style="width: 120px;">
                 <el-option label="全部题目" value="" />
-                <el-option label="公开题目" :value="1" />
-                <el-option label="私有题目" :value="2" />
-                <el-option label="比赛专用" :value="3" />
+                <el-option label="公开题目" :value="PROBLEM_VISIBILITY.PUBLIC" />
+                <el-option label="私有题目" :value="PROBLEM_VISIBILITY.PRIVATE" />
+                <el-option label="比赛专用" :value="PROBLEM_VISIBILITY.CONTEST_EXCLUSIVE" />
               </el-select>
             </el-form-item>
             <el-form-item label="难度" prop="difficulty">
@@ -76,13 +76,13 @@
             <template #default="scope">
               <AsyncSelect
                 v-model="scope.row.visibility"
-                :disabled="!userStore.hasEveryPermission(['problem:problem:edit'])"
+                :disabled="scope.row.visibility === PROBLEM_VISIBILITY.CONTEST_EXCLUSIVE || !userStore.hasEveryPermission(['problem:problem:publish'])"
                 :before-change="(value: number) => handleVisibilityChange(scope.row, value)"
                 style="width: 100px;"
               >
-                <el-option :value="1" label="公开" />
-                <el-option :value="2" label="私有" />
-                <el-option :value="3" label="比赛专用" />
+                <el-option :value="PROBLEM_VISIBILITY.PUBLIC" label="公开" />
+                <el-option :value="PROBLEM_VISIBILITY.PRIVATE" label="私有" />
+                <el-option :value="PROBLEM_VISIBILITY.CONTEST_EXCLUSIVE" label="比赛专属" disabled />
               </AsyncSelect>
             </template>
           </el-table-column>
@@ -186,7 +186,7 @@
 <script lang="ts" setup>
 //import
 import AsyncSelect from '@/components/common/AsyncSelect.vue';
-import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
+import { PROBLEM_DIFFICULTIES, PROBLEM_VISIBILITY } from '@/constants/problem';
 import { useUserStore } from '@/stores/user';
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -342,9 +342,9 @@ const handleSelectionChange = (selection: AdminProblemVO[]) => {
 //获取权限文本
 const getVisibilityText = (visibility: number) => {
   switch (visibility) {
-    case 1: return '公开题目';
-    case 2: return '私有题目';
-    case 3: return '比赛专用';
+    case PROBLEM_VISIBILITY.PUBLIC: return '公开题目';
+    case PROBLEM_VISIBILITY.PRIVATE: return '私有题目';
+    case PROBLEM_VISIBILITY.CONTEST_EXCLUSIVE: return '比赛专用';
     default: return '未知';
   }
 };

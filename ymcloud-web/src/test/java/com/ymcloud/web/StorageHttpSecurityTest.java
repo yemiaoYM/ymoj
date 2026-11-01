@@ -11,20 +11,22 @@ import com.ymcloud.core.security.filter.LogoutSuccessHandlerImpl;
 import com.ymcloud.core.security.service.TokenService;
 import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.storage.TestDataService;
+import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.UserStatus;
-import com.ymcloud.web.controller.admin.common.AdminStorageMigrationController;
 import com.ymcloud.web.controller.admin.common.AdminCarouselController;
+import com.ymcloud.web.controller.admin.common.AdminStorageMigrationController;
 import com.ymcloud.web.controller.admin.contest.AdminContestController;
 import com.ymcloud.web.controller.admin.problem.AdminProblemController;
 import com.ymcloud.web.controller.common.ImageController;
 import com.ymcloud.web.controller.oj.PublicFileController;
 import com.ymcloud.web.handler.GlobalExceptionHandler;
-import com.ymcloud.web.service.admin.AdminProblemService;
 import com.ymcloud.web.service.admin.AdminContestService;
+import com.ymcloud.web.service.admin.AdminProblemService;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.PublicImageService;
 import com.ymcloud.web.service.oj.impl.FileServiceImpl;
@@ -188,6 +190,10 @@ class StorageHttpSecurityTest {
             beanFactory.registerSingleton("tokenService", mock(TokenService.class));
         });
         context.register(TestConfig.class);
+        context.addBeanFactoryPostProcessor(factory -> {
+            factory.registerSingleton("problemEntityService", mock(ProblemEntityService.class));
+            factory.registerSingleton("contestEntityService", mock(ContestEntityService.class));
+        });
         context.refresh();
         files = context.getBean(StoredFileService.class);
         testData = context.getBean(TestDataService.class);
@@ -462,7 +468,7 @@ class StorageHttpSecurityTest {
         verify(files).legacyInventory();
         verify(files).migrateLocal(5L, false);
         verify(files).migrateLocal(5L, true);
-        verify(testData).migrateLegacy(10L, true);
+        verify(context.getBean(AdminProblemService.class)).migrateTestData(10L, true);
     }
 
     @Test
@@ -497,8 +503,8 @@ class StorageHttpSecurityTest {
                         .header("Mock-Permissions", permissions))
                 .andExpect(jsonPath("$.code").value(403));
         verify(problems).getTestCaseFiles(10L);
-        verify(testData).migrateLegacy(10L, false);
-        verify(testData, never()).migrateLegacy(10L, true);
+        verify(context.getBean(AdminProblemService.class)).migrateTestData(10L, false);
+        verify(context.getBean(AdminProblemService.class), never()).migrateTestData(10L, true);
         verify(problems, never()).uploadTestCaseFile(any(), any());
         verify(problems, never()).deleteTestCaseFiles(any(), any());
     }
@@ -518,7 +524,7 @@ class StorageHttpSecurityTest {
                         .header("Mock-Permissions", permissions))
                 .andExpect(jsonPath("$.code").value(403));
         verify(problems).uploadTestCaseFile(eq(10L), any());
-        verify(testData).migrateLegacy(10L, true);
+        verify(context.getBean(AdminProblemService.class)).migrateTestData(10L, true);
         verify(problems, never()).getTestCaseFiles(any());
         verify(problems, never()).deleteTestCaseFiles(any(), any());
     }

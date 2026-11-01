@@ -1,7 +1,6 @@
 package com.ymcloud.web.controller.admin.problem;
 
 import com.ymcloud.common.result.Result;
-import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
@@ -10,14 +9,14 @@ import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ProblemVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminProblemService;
-import org.springframework.core.io.Resource;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -33,9 +32,6 @@ public class AdminProblemController {
 
     @Autowired
     private AdminProblemService adminProblemService;
-
-    @Autowired
-    private TestDataService testDataService;
 
     /**
      * 查询题目列表
@@ -106,10 +102,10 @@ public class AdminProblemController {
     /**
      * 修改题目可见性
      * @param id 题目ID
-     * @param visibility 可见性：1=公开，2=私有，3=比赛专用
+     * @param visibility 可见性：1=公开，2=私有
      * @return 操作结果
      */
-    @PreAuthorize("@ss.hasPermi('problem:problem:edit')")
+    @PreAuthorize("@ss.hasPermi('problem:problem:publish')")
     @PutMapping("/{id}/visibility")
     public Result<Void> updateProblemVisibility(@PathVariable("id") Long id, @RequestParam("visibility") Integer visibility) {
         log.info("修改题目可见性: id={}, visibility={}", id, visibility);
@@ -175,21 +171,28 @@ public class AdminProblemController {
     }
 
     /**
-     * 只读盘点历史测试数据，异常通过报告返回。
+     * 只读盘点历史测试数据，异常通过报告返回
+     * @param problemId 题目 ID
+     * @return 盘点报告
      */
     @PreAuthorize("@ss.hasPermi('problem:testcase:query')")
     @GetMapping("/{problemId}/testcases/migration")
     public Result<TestDataMigrationReport> inspectTestDataMigration(@PathVariable("problemId") Long problemId) {
-        return Result.ok(testDataService.migrateLegacy(problemId, false));
+        log.info("盘点历史测试数据: problemId={}", problemId);
+        return Result.ok(adminProblemService.migrateTestData(problemId, false));
     }
 
     /**
-     * 导入校验通过的历史数据；重复执行返回现有版本。
+     * 导入校验通过的历史数据
+     * 重复执行返回现有版本
+     * @param problemId 题目 ID
+     * @return 迁移报告
      */
     @PreAuthorize("@ss.hasPermi('problem:testcase:add')")
     @PostMapping("/{problemId}/testcases/migration")
     public Result<TestDataMigrationReport> migrateTestData(@PathVariable("problemId") Long problemId) {
-        return Result.ok(testDataService.migrateLegacy(problemId, true));
+        log.info("迁移历史测试数据: problemId={}", problemId);
+        return Result.ok(adminProblemService.migrateTestData(problemId, true));
     }
 
 }

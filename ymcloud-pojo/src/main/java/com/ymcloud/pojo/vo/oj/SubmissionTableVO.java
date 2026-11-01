@@ -14,6 +14,11 @@ import java.time.LocalDateTime;
  */
 @Data
 public class SubmissionTableVO {
+    /**
+     * 当前用户是否可重评该提交，功能权限仍由管理入口检查
+     */
+    private Boolean canRejudge;
+
     /** 当前执行标识，历史提交为 null，用于管理操作的并发检查 */
     private String executionId;
 

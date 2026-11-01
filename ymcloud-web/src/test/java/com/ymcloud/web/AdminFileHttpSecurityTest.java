@@ -9,10 +9,15 @@ import com.ymcloud.core.security.filter.AuthenticationEntryPointImpl;
 import com.ymcloud.core.security.filter.CustomAccessDeniedHandler;
 import com.ymcloud.core.security.filter.JwtAuthenticationTokenFilter;
 import com.ymcloud.core.security.filter.LogoutSuccessHandlerImpl;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.service.TokenService;
 import com.ymcloud.core.storage.StoredFileService;
+import com.ymcloud.core.web.dao.ContestEntityService;
+import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.entity.File;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.UserStatus;
@@ -70,7 +75,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 真实 HTTP 安全链、方法权限和文件业务权限共同执行，不连接外部存储或数据库。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 通过真实安全链验证文件权限和资源归属
  */
 class AdminFileHttpSecurityTest {
 
@@ -78,9 +85,36 @@ class AdminFileHttpSecurityTest {
     @EnableWebSecurity
     @EnableWebMvc
     @Import({SecurityConfig.class, AdminFileController.class, AdminFileServiceImpl.class, FileAccessPolicy.class,
-            GlobalExceptionHandler.class, AuthenticationEntryPointImpl.class, CustomAccessDeniedHandler.class,
+            ResourceAccessService.class, GlobalExceptionHandler.class, AuthenticationEntryPointImpl.class, CustomAccessDeniedHandler.class,
             LogoutSuccessHandlerImpl.class})
     static class TestConfig {
+
+        /**
+         * 隔离题目、比赛的资源归属查询
+         * @return 测试替身
+         */
+        @Bean
+        ProblemEntityService problemEntityService() {
+            return mock(ProblemEntityService.class);
+        }
+
+        /**
+         * 隔离题目、比赛的资源归属查询
+         * @return 测试替身
+         */
+        @Bean
+        ContestEntityService contestEntityService() {
+            return mock(ContestEntityService.class);
+        }
+
+        /**
+         * 隔离题目、比赛的资源归属查询
+         * @return 测试替身
+         */
+        @Bean
+        ContestUserEntityService contestUserEntityService() {
+            return mock(ContestUserEntityService.class);
+        }
 
         @Bean
         StoredFileService storedFileService() {
@@ -104,6 +138,10 @@ class AdminFileHttpSecurityTest {
     private FileEntityService entities;
     private LambdaQueryChainWrapper<File> query;
 
+    /**
+     * 装配真实安全链及文件业务服务，用请求头控制隔离认证身份
+     * @throws Exception 测试请求过滤器装配失败
+     */
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setup() throws Exception {
@@ -137,6 +175,10 @@ class AdminFileHttpSecurityTest {
         context.register(TestConfig.class);
         context.refresh();
         storedFiles = context.getBean(StoredFileService.class);
+        Problem owned = new Problem();
+        owned.setId(10L);
+        owned.setAuthorId(9L);
+        when(context.getBean(ProblemEntityService.class).getById(10L)).thenReturn(owned);
         entities = context.getBean(FileEntityService.class);
         query = mock(LambdaQueryChainWrapper.class, RETURNS_SELF);
         when(query.like(anyBoolean(), any(), any())).thenReturn(query);
@@ -205,12 +247,14 @@ class AdminFileHttpSecurityTest {
     @Test
     void privateMetadataAndDownloadsNeedSpecificPrivatePermission() throws Exception {
         File file = file(FileBizType.GENERAL, false);
-        page(List.of(file));
+        page(List.of());
         when(storedFiles.get(17L)).thenReturn(file);
         mvc.perform(get("/admin/file/list").header("Mock-Permissions", "admin:access,file:file:list"))
-                .andExpect(jsonPath("$.code").value(403));
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.records").isEmpty());
         mvc.perform(get("/admin/file/17/download").header("Mock-Permissions", "admin:access,file:file:download"))
                 .andExpect(jsonPath("$.code").value(403));
+        page(List.of(file));
         mvc.perform(get("/admin/file/list")
                         .header("Mock-Permissions", "admin:access,file:file:list,file:file:private"))
                 .andExpect(jsonPath("$.code").value(200))
@@ -385,6 +429,10 @@ class AdminFileHttpSecurityTest {
         }
     }
 
+    /**
+     * 设置授权过滤后的文件分页结果
+     * @param records 当前页可见文件
+     */
     @SuppressWarnings("unchecked")
     private void page(List<File> records) {
         doAnswer(invocation -> {
@@ -392,7 +440,7 @@ class AdminFileHttpSecurityTest {
             page.setRecords(records);
             page.setTotal(records.size());
             return page;
-        }).when(query).page(any(Page.class));
+        }).when(entities).pageAuthorized(any(Page.class), any(), any());
     }
 
     private File file(FileBizType businessType, boolean publicAccess) {
@@ -407,6 +455,7 @@ class AdminFileHttpSecurityTest {
         file.setObjectKey("internal-key");
         file.setUrl("/files/public/legacy-url");
         file.setBizType(businessType);
+        file.setBizId(businessType == FileBizType.GENERAL ? null : 10L);
         file.setIsPublic(publicAccess ? 1 : 0);
         return file;
     }

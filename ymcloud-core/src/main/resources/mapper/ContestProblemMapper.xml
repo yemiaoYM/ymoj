@@ -34,7 +34,7 @@
              FROM judge j
              JOIN contest_info c
                    ON j.contest_id = c.id
-                   AND j.created_time BETWEEN c.start_time AND c.end_time
+                   AND j.created_time &gt;= c.start_time AND j.created_time &lt; c.end_time
              GROUP BY j.contest_id, j.display_id
         )
         SELECT
@@ -50,6 +50,10 @@
         AND ja.display_id = cp.display_id
         WHERE cp.contest_id = #{contestId}
         ORDER BY cp.display_id;
+    </select>
+
+    <select id="getLastDisplayProblem" resultType="com.ymcloud.pojo.entity.ContestProblem">
+        SELECT * FROM contest_problem WHERE contest_id = #{contestId} ORDER BY display_id DESC LIMIT 1
     </select>
 
 </mapper>

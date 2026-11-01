@@ -16,6 +16,7 @@ import com.ymcloud.pojo.entity.Auth;
 import com.ymcloud.pojo.entity.Role;
 import com.ymcloud.pojo.entity.RoleAuth;
 import com.ymcloud.pojo.entity.UserRole;
+import com.ymcloud.pojo.enums.RoleStatus;
 import com.ymcloud.pojo.query.admin.AdminRolePageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminRoleService;
@@ -33,7 +34,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 角色管理及用户授权服务实现类
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-10
+ * @Description: 角色管理及用户授权服务实现类，仅超级管理员可写入授权
  */
 @Service
 public class AdminRoleServiceImpl implements AdminRoleService {
@@ -76,7 +79,7 @@ public class AdminRoleServiceImpl implements AdminRoleService {
     @Override
     public List<Role> listOptions() {
         return roleEntityService.lambdaQuery()
-                .eq(Role::getStatus, 1)
+                .eq(Role::getStatus, RoleStatus.ENABLED.getCode())
                 .orderByAsc(Role::getId)
                 .list();
     }
@@ -105,6 +108,9 @@ public class AdminRoleServiceImpl implements AdminRoleService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addRole(RoleDTO roleDTO) {
+        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
+            throw new ServiceException("仅超级管理员可以维护角色和权限", HttpStatus.FORBIDDEN);
+        }
         boolean exists = roleEntityService.lambdaQuery()
                 .eq(Role::getCode, roleDTO.getCode())
                 .exists();
@@ -126,12 +132,14 @@ public class AdminRoleServiceImpl implements AdminRoleService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateRole(Long id, RoleDTO roleDTO) {
+        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
+            throw new ServiceException("仅超级管理员可以维护角色和权限", HttpStatus.FORBIDDEN);
+        }
         Role existing = getRoleById(id);
-        checkManageRole(existing);
         if (!existing.getCode().equals(roleDTO.getCode())) {
             throw new ServiceException("角色创建后不能修改编码");
         }
-        if (Boolean.TRUE.equals(existing.getBuiltIn()) && !Objects.equals(roleDTO.getStatus(), 1)) {
+        if (Boolean.TRUE.equals(existing.getBuiltIn()) && !Objects.equals(roleDTO.getStatus(), RoleStatus.ENABLED.getCode())) {
             throw new ServiceException("不能停用系统内置角色");
         }
         Role role = BeanUtil.copyProperties(roleDTO, Role.class);
@@ -148,8 +156,10 @@ public class AdminRoleServiceImpl implements AdminRoleService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteRole(Long id) {
+        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
+            throw new ServiceException("仅超级管理员可以维护角色和权限", HttpStatus.FORBIDDEN);
+        }
         Role role = getRoleById(id);
-        checkManageRole(role);
         if (Boolean.TRUE.equals(role.getBuiltIn())) {
             throw new ServiceException("不能删除系统内置角色");
         }
@@ -202,7 +212,10 @@ public class AdminRoleServiceImpl implements AdminRoleService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateRoleAuths(Long id, List<Long> authIds) {
-        checkManageRole(getRoleById(id));
+        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
+            throw new ServiceException("仅超级管理员可以维护角色和权限", HttpStatus.FORBIDDEN);
+        }
+        getRoleById(id);
         Set<Long> selected = validateIds(authIds);
         Map<Long, Auth> authMap = listAuthOptions()
                 .stream()
@@ -216,7 +229,6 @@ public class AdminRoleServiceImpl implements AdminRoleService {
                     throw new ServiceException("权限或上级菜单不存在，请刷新后重试");
                 }
                 Auth auth = authMap.get(currentId);
-                checkGrantAuth(auth);
                 selected.add(currentId);
                 currentId = auth.getParentId();
             }
@@ -263,7 +275,7 @@ public class AdminRoleServiceImpl implements AdminRoleService {
         List<Long> assignedRoleIds = getUserRoleIds(userId);
         //保留已分配的停用角色，便于显示名称及解除关联
         return roleEntityService.lambdaQuery()
-                .and(query -> query.eq(Role::getStatus, 1)
+                .and(query -> query.eq(Role::getStatus, RoleStatus.ENABLED.getCode())
                         .or(!assignedRoleIds.isEmpty())
                         .in(!assignedRoleIds.isEmpty(), Role::getId, assignedRoleIds))
                 .orderByAsc(Role::getId)
@@ -278,30 +290,30 @@ public class AdminRoleServiceImpl implements AdminRoleService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateUserRoles(Long userId, List<Long> roleIds) {
+        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
+            throw new ServiceException("仅超级管理员可以维护角色和权限", HttpStatus.FORBIDDEN);
+        }
         checkUserExists(userId);
-        if (userId.equals(1L) || userId.equals(SecurityUtils.getUserId())) {
-            throw new ServiceException("不能修改超级管理员或当前登录用户的角色", HttpStatus.FORBIDDEN);
+        if (SecurityUtils.isSuperAdmin(userId)) {
+            throw new ServiceException("不能修改超级管理员的角色", HttpStatus.FORBIDDEN);
         }
         Set<Long> selected = validateIds(roleIds);
-        //同时校验被移除的角色，避免绕过管理员角色保护
-        Set<Long> changed = new HashSet<>(selected);
-        changed.addAll(getUserRoleIds(userId));
-        for (Long roleId : changed) {
-            Role role = getRoleById(roleId);
-            if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId()) && "ADMIN".equals(role.getCode())) {
-                throw new ServiceException("只有超级管理员可以分配或解除管理员角色", HttpStatus.FORBIDDEN);
+        if (!selected.isEmpty()) {
+            List<Role> roles = roleEntityService.listByIds(selected);
+            if (roles.size() != selected.size()) {
+                throw new ServiceException("角色不存在");
             }
-            if (selected.contains(roleId)) {
-                if (!Objects.equals(role.getStatus(), 1)) {
-                    throw new ServiceException("不能分配已停用的角色");
-                }
-                for (Long authId : getRoleAuthIds(roleId)) {
-                    Auth auth = authEntityService.getById(authId);
-                    if (auth == null) {
-                        throw new ServiceException("角色包含无效权限，请先检查角色配置");
-                    }
-                    checkGrantAuth(auth);
-                }
+            if (roles.stream().anyMatch(role -> !Objects.equals(role.getStatus(), RoleStatus.ENABLED.getCode()))) {
+                throw new ServiceException("不能分配已停用的角色");
+            }
+            Set<Long> authIds = roleAuthEntityService.lambdaQuery()
+                    .in(RoleAuth::getRoleId, selected)
+                    .list()
+                    .stream()
+                    .map(RoleAuth::getAuthId)
+                    .collect(Collectors.toSet());
+            if (!authIds.isEmpty() && authEntityService.listByIds(authIds).size() != authIds.size()) {
+                throw new ServiceException("角色包含无效权限，请先检查角色配置");
             }
         }
         userRoleEntityService.lambdaUpdate()
@@ -342,26 +354,4 @@ public class AdminRoleServiceImpl implements AdminRoleService {
         return new LinkedHashSet<>(ids);
     }
 
-    /**
-     * 校验当前用户是否可以维护角色
-     * @param role 角色信息
-     */
-    private void checkManageRole(Role role) {
-        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
-            if ("ADMIN".equals(role.getCode()) || SecurityUtils.getLoginUser().getRoles().contains(role.getCode())) {
-                throw new ServiceException("不能修改管理员角色或当前用户持有的角色", HttpStatus.FORBIDDEN);
-            }
-        }
-    }
-
-    /**
-     * 校验当前用户是否可以授予权限
-     * @param auth 权限信息
-     */
-    private void checkGrantAuth(Auth auth) {
-        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId()) && !"M".equals(auth.getType())
-                && !SecurityUtils.getLoginUser().getPermissions().contains(auth.getCode())) {
-            throw new ServiceException("不能分配当前用户未持有的权限", HttpStatus.FORBIDDEN);
-        }
-    }
 }

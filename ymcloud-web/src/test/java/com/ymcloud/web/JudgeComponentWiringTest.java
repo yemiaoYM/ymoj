@@ -1,6 +1,7 @@
 package com.ymcloud.web;
 
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
@@ -93,6 +94,8 @@ class JudgeComponentWiringTest {
             context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("wiring", Map.of(
                     "ymcloud.judge.exchange", "wiring.exchange",
                     "ymcloud.judge.task-routing-key", "wiring.route")));
+            ResourceAccessService resourceAccess = mock(ResourceAccessService.class);
+            context.getBeanFactory().registerSingleton("resourceAccessService", resourceAccess);
             context.refresh();
 
             JudgeDispatchIdAllocator judgeDispatchIdAllocatorComponent = new JudgeDispatchIdAllocator();
@@ -139,7 +142,7 @@ class JudgeComponentWiringTest {
             assertSame(languageEntityService, ReflectionTestUtils.getField(judgeServiceImplComponent, "languages"));
             assertSame(contestEntityService, ReflectionTestUtils.getField(judgeServiceImplComponent, "contests"));
             assertSame(contestProblemEntityService, ReflectionTestUtils.getField(judgeServiceImplComponent, "contestProblems"));
-            assertSame(contestUserEntityService, ReflectionTestUtils.getField(judgeServiceImplComponent, "contestUsers"));
+            assertSame(resourceAccess, ReflectionTestUtils.getField(judgeServiceImplComponent, "resourceAccess"));
             assertSame(testDataService, ReflectionTestUtils.getField(judgeServiceImplComponent, "testData"));
             assertSame(testDataVersionEntityService, ReflectionTestUtils.getField(judgeServiceImplComponent, "versions"));
             assertSame(judgeDispatchProperties, ReflectionTestUtils.getField(judgeServiceImplComponent, "properties"));

@@ -2,6 +2,7 @@ package com.ymcloud.web.judge;
 
 import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.vo.oj.JudgeResultVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -22,6 +24,27 @@ public class JudgeStatusCache {
 
     @Autowired
     private RedisCache redisCache;
+
+    /**
+     * 资源删除成功后清理被删除提交的执行缓存
+     * @param submissions 被物理删除的提交及执行标识
+     */
+    public void evictAfterCommit(List<Judge> submissions) {
+        List<String> keys = submissions.stream()
+                .map(judge -> key(judge.getId(), judge.getExecutionId()))
+                .toList();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            /**
+             * 数据库删除提交后清理缓存，回滚时不触碰旧缓存
+             */
+            @Override
+            public void afterCommit() {
+                if (!keys.isEmpty()) {
+                    redisCache.deleteObject(keys);
+                }
+            }
+        });
+    }
 
     /**
      * 按执行标识读取短期状态缓存，Redis 失败返回 null 供数据库恢复。

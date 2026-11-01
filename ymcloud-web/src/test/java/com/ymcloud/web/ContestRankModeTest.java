@@ -2,6 +2,7 @@ package com.ymcloud.web;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
@@ -53,6 +54,7 @@ class ContestRankModeTest {
             when(contests.getOIContestRank(any(), eq(20L), any())).thenReturn(page);
         }
         ContestServiceImpl service = new ContestServiceImpl();
+        ReflectionTestUtils.setField(service, "resourceAccess", mock(ResourceAccessService.class));
         ReflectionTestUtils.setField(service, "contestEntityService", contests);
         ReflectionTestUtils.setField(service, "contestProblemEntityService", problems);
         ContestRankPageQuery query = new ContestRankPageQuery();

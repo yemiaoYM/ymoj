@@ -179,6 +179,7 @@
                     :language="language"
                     :theme="theme"
                     :is-contest="isContest"
+                    :submission-allowed="submissionAllowed"
                     :contest-id="contestId"
                     :problem-id="problem.problemId"
                     :problem-case-list="problem.problemCaseList"
@@ -192,7 +193,7 @@
 
 <script setup lang="ts">
 //import
-import { onMounted, ref, onBeforeUnmount,defineAsyncComponent } from 'vue';
+import { onMounted, ref, onBeforeUnmount, defineAsyncComponent, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { DocumentCopy } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
@@ -216,6 +217,18 @@ const activeTabName=ref<string>("problemDetail");
 const problemId=ref<string>('');
 const isContest=ref<boolean>(false);
 const contestId=ref<number>(0);
+const clockNow = ref(Date.now());
+const serverOffset = ref(0);
+let clockTimer: ReturnType<typeof setInterval> | undefined;
+const submissionAllowed = computed(() => {
+    if (!isContest.value) {
+        return true;
+    }
+    const start = problem.value.submissionStartTime;
+    const end = problem.value.submissionEndTime;
+    const now = clockNow.value + serverOffset.value;
+    return start !== null && end !== null && now >= new Date(start).getTime() && now < new Date(end).getTime();
+});
 const code=ref<string>(`//C语言模板(C99)
 #include<stdio.h>
 int main(){
@@ -274,6 +287,7 @@ onMounted(()=>{
         isContest.value=true;
         contestId.value=Number(routerParams.contestID);
         problemId.value=routerParams.displayID as string;
+        clockTimer = setInterval(() => { clockNow.value = Date.now(); }, 1000);
     }
     //获取题目信息
     initProblemInfo();
@@ -282,6 +296,7 @@ onMounted(()=>{
     window.addEventListener('resize', checkMobile);
 })
 onBeforeUnmount(() => {
+    clearInterval(clockTimer);
     window.removeEventListener('resize', checkMobile)
 })
 
@@ -292,6 +307,7 @@ const initProblemInfo=()=>{
         //查询比赛题目
         getContestProblemInfo(contestId.value,problemId.value).then(res=>{
             problem.value=res.data.data;
+            serverOffset.value = new Date(problem.value.serverTime as string).getTime() - Date.now();
             if(problem.value.languageList.length>0){
                 language.value=problem.value.languageList[0].name;
             }

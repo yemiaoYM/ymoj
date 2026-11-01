@@ -5,21 +5,23 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.date.LocalDateTimeUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.HttpStatus;
+import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.contest.ContestException;
 import com.ymcloud.common.exception.contest.ContestNotExistException;
 import com.ymcloud.common.exception.file.FileException;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
-import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
+import com.ymcloud.pojo.dto.admin.CloneContestDTO;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
-import com.ymcloud.pojo.entity.ContestUser;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Problem;
@@ -27,9 +29,11 @@ import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.query.admin.AdminContestPageQuery;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
+import com.ymcloud.pojo.vo.admin.AdminContestVO;
 import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminContestService;
+import com.ymcloud.web.service.admin.ResourceDeletionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -54,13 +58,16 @@ public class AdminContestServiceImpl implements AdminContestService {
     private static final int MAX_CONTEST_PROBLEMS = 15;
 
     @Autowired
+    private ResourceAccessService resourceAccess;
+
+    @Autowired
+    private ResourceDeletionService deletion;
+
+    @Autowired
     private ContestEntityService contestEntityService;
 
     @Autowired
     private JudgeEntityService judges;
-
-    @Autowired
-    private ContestUserEntityService contestUserEntityService;
 
     @Autowired
     private ContestProblemEntityService contestProblemEntityService;
@@ -78,13 +85,16 @@ public class AdminContestServiceImpl implements AdminContestService {
      */
     @Override
     public PageVO<Contest> queryList(AdminContestPageQuery pageQuery) {
+        resourceAccess.requireContestManager();
         //创建分页实体
         Page<Contest> page = Page.of(pageQuery.getPageNo(), pageQuery.getPageSize());
         //条件分页查询比赛列表
         Page<Contest> record = contestEntityService.lambdaQuery()
-                .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Contest::getTitle, pageQuery.getKeyword())
-                .or(StrUtil.isNotBlank(pageQuery.getKeyword()))
-                .like(StrUtil.isNotBlank(pageQuery.getKeyword()), Contest::getCreatorUsername, pageQuery.getKeyword())
+                .eq(!SecurityUtils.isAdmin(), Contest::getCreatorId, SecurityUtils.getUserId())
+                .and(StrUtil.isNotBlank(pageQuery.getKeyword()), query -> query
+                        .like(Contest::getTitle, pageQuery.getKeyword())
+                        .or()
+                        .like(Contest::getCreatorUsername, pageQuery.getKeyword()))
                 .orderByDesc(Contest::getStartTime)
                 .page(page);
         return PageVO.of(record, Contest.class);
@@ -96,12 +106,18 @@ public class AdminContestServiceImpl implements AdminContestService {
      * @return 比赛信息
      */
     @Override
-    public Contest getContestById(Long id) {
+    public AdminContestVO getContestById(Long id) {
         Contest contest = contestEntityService.getById(id);
         if (contest == null) {
             throw new ContestNotExistException();
         }
-        return contest;
+        resourceAccess.requireManageContest(contest);
+        AdminContestVO view = BeanUtil.copyProperties(contest, AdminContestVO.class);
+        view.setStructureLocked(!LocalDateTime.now().isBefore(contest.getStartTime())
+                || judges.lambdaQuery()
+                .eq(Judge::getContestId, id)
+                .exists());
+        return view;
     }
 
     /**
@@ -111,14 +127,19 @@ public class AdminContestServiceImpl implements AdminContestService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addContest(ContestDTO contestDTO) {
+        resourceAccess.requireContestManager();
         //验证比赛时间
         validateContestTime(contestDTO.getStartTime(), contestDTO.getEndTime());
         validateContestImage(contestDTO.getImage());
         //构造实体
         Contest contest = BeanUtil.copyProperties(contestDTO, Contest.class);
-        //如果是私有，必须设置密码
-        if (contest.getVisibility() == 1 && StrUtil.isBlank(contest.getPassword())) {
-            throw new ContestException("私有比赛必须设置密码", HttpStatus.BAD_REQUEST);
+        contest.setSourceId(ContestConstants.ORIGINAL_SOURCE_ID);
+        if (contest.getVisibility() != ContestConstants.VISIBILITY_PASSWORD) {
+            contest.setPassword(null);
+        }
+        // 如果是密码比赛，必须设置密码
+        if (contest.getVisibility() == ContestConstants.VISIBILITY_PASSWORD && StrUtil.isBlank(contest.getPassword())) {
+            throw new ContestException("密码比赛必须设置密码", HttpStatus.BAD_REQUEST);
         }
         //比赛创建者信息
         User user = SecurityUtils.getUser();
@@ -144,9 +165,14 @@ public class AdminContestServiceImpl implements AdminContestService {
     @Transactional(rollbackFor = Exception.class)
     public void updateContest(Long id, ContestDTO contestDTO) {
         //检查比赛是否存在
-        Contest existContest = contestEntityService.getById(id);
-        if (existContest == null) {
-            throw new ContestNotExistException();
+        Contest existContest = lockContest(id);
+        if (!Objects.equals(existContest.getMode(), contestDTO.getMode())
+                || !Objects.equals(existContest.getStartTime(), contestDTO.getStartTime())) {
+            requireStructureEditable(existContest);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (!now.isBefore(existContest.getEndTime()) && contestDTO.getEndTime().isAfter(now)) {
+            throw new ContestException("已结束比赛不能重新开放提交", HttpStatus.BAD_REQUEST);
         }
         //验证比赛时间
         validateContestTime(contestDTO.getStartTime(), contestDTO.getEndTime());
@@ -154,12 +180,16 @@ public class AdminContestServiceImpl implements AdminContestService {
         //修改字段
         Contest contest = BeanUtil.copyProperties(contestDTO, Contest.class);
         contest.setId(id);
+        contest.setSourceId(existContest.getSourceId());
+        if (contest.getVisibility() != ContestConstants.VISIBILITY_PASSWORD) {
+            contest.setPassword(null);
+        }
         //保留原有的创建者信息
         contest.setCreatorId(existContest.getCreatorId());
         contest.setCreatorUsername(existContest.getCreatorUsername());
-        //如果是私有，必须设置密码
-        if (contest.getVisibility() == 1 && StrUtil.isBlank(contest.getPassword())) {
-            throw new ContestException("私有比赛必须设置密码", HttpStatus.BAD_REQUEST);
+        // 如果是密码比赛，必须设置密码
+        if (contest.getVisibility() == ContestConstants.VISIBILITY_PASSWORD && StrUtil.isBlank(contest.getPassword())) {
+            throw new ContestException("密码比赛必须设置密码", HttpStatus.BAD_REQUEST);
         }
         //重新计算比赛时长
         if (contestDTO.getStartTime() != null && contestDTO.getEndTime() != null) {
@@ -177,63 +207,29 @@ public class AdminContestServiceImpl implements AdminContestService {
      * @param ids 比赛ID列表
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public void deleteContestById(List<Long> ids) {
-        if (CollUtil.isEmpty(ids)) {
-            throw new ContestException("比赛ID不能为空");
-        }
-        //检查比赛是否存在
-        List<Contest> contests = contestEntityService.listByIds(ids);
-        if (contests.size() != ids.size()) {
-            throw new ContestException("部分比赛不存在或已被删除");
-        }
-        //检查是否有进行中的比赛
-        LocalDateTime now = LocalDateTime.now();
-        boolean hasRunningContest = contests.stream()
-                .anyMatch(contest -> contest.getStartTime() != null && contest.getEndTime() != null
-                        && now.isAfter(contest.getStartTime()) && now.isBefore(contest.getEndTime()));
-        if (hasRunningContest) {
-            throw new ContestException("不能删除正在进行中的比赛");
-        }
-        //删除比赛相关数据
-        for (Long contestId : ids) {
-            //删除比赛用户关联
-            contestUserEntityService.lambdaUpdate()
-                    .eq(ContestUser::getContestId, contestId)
-                    .remove();
-            //删除比赛题目关联
-            contestProblemEntityService.lambdaUpdate()
-                    .eq(ContestProblem::getContestId, contestId)
-                    .remove();
-        }
-        //删除比赛
-        boolean remove = contestEntityService.removeByIds(ids);
-        if (!remove) {
-            throw new ContestException("删除比赛失败，请稍后再试");
-        }
+        deletion.deleteContests(ids);
     }
 
     /**
      * 更新比赛可见性
      * @param id 比赛ID
-     * @param visibility 可见性：0=公开，1=私有
-     * @param password 密码（私有比赛时必填）
+     * @param visibility 可见性：0=公开，1=密码，2=私有
+     * @param password 密码（密码比赛时必填）
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateContestVisibility(Long id, Integer visibility, String password) {
         //检查可见性参数
-        if (visibility == null || (visibility < 0 || visibility > 1)) {
+        if (visibility == null || (visibility < ContestConstants.VISIBILITY_PUBLIC || visibility > ContestConstants.VISIBILITY_PRIVATE)) {
             throw new ContestException("可见性参数错误", HttpStatus.BAD_REQUEST);
         }
         //检查比赛是否存在
-        Contest contest = contestEntityService.getById(id);
-        if (contest == null) {
-            throw new ContestNotExistException();
-        }
-        //私有比赛必须设置密码
-        if (visibility == 1) {
+        lockContest(id);
+        // 密码比赛必须设置密码
+        if (visibility == ContestConstants.VISIBILITY_PASSWORD) {
             if (StrUtil.isBlank(password)) {
-                throw new ContestException("私有比赛必须设置密码", HttpStatus.BAD_REQUEST);
+                throw new ContestException("密码比赛必须设置密码", HttpStatus.BAD_REQUEST);
             }
             if (password.length() < 5 || password.length() > 20) {
                 throw new ContestException("密码长度必须在5-20位之间", HttpStatus.BAD_REQUEST);
@@ -243,38 +239,29 @@ public class AdminContestServiceImpl implements AdminContestService {
         boolean update = contestEntityService.lambdaUpdate()
                 .eq(Contest::getId, id)
                 .set(Contest::getVisibility, visibility)
-                .set(Contest::getPassword, visibility == 1 ? password : null)
+                .set(Contest::getPassword, visibility == ContestConstants.VISIBILITY_PASSWORD ? password : null)
                 .update();
         if (!update) {
             throw new ContestException("修改比赛可见性失败，请稍后再试");
         }
     }
 
-
     /**
      * 克隆比赛
      * @param id 源比赛ID
-     * @param title 新比赛标题
-     * @param visibility 访问权限
-     * @param password 密码（私有比赛时必填）
+     * @param request 新比赛标题、访问类型、密码和时间
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void cloneContest(Long id, String title, Integer visibility, String password) {
-        //验证参数
-        if (StrUtil.isBlank(title)) {
-            throw new ContestException("比赛标题不能为空", HttpStatus.BAD_REQUEST);
-        }
-        if (title.length() > 100) {
-            throw new ContestException("比赛标题长度不能超过100个字符", HttpStatus.BAD_REQUEST);
-        }
-        if (visibility == null || (visibility < 0 || visibility > 1)) {
-            throw new ContestException("访问权限参数错误", HttpStatus.BAD_REQUEST);
-        }
-        //私有比赛必须设置密码
-        if (visibility == 1) {
+    @Transactional(rollbackFor = Exception.class, isolation = Isolation.READ_COMMITTED)
+    public void cloneContest(Long id, CloneContestDTO request) {
+        resourceAccess.requireContestManager();
+        validateContestTime(request.getStartTime(), request.getEndTime());
+        Integer visibility = request.getVisibility();
+        String password = request.getPassword();
+        // 密码比赛必须设置密码
+        if (visibility == ContestConstants.VISIBILITY_PASSWORD) {
             if (StrUtil.isBlank(password)) {
-                throw new ContestException("私有比赛必须设置密码", HttpStatus.BAD_REQUEST);
+                throw new ContestException("密码比赛必须设置密码", HttpStatus.BAD_REQUEST);
             }
             if (password.length() < 5 || password.length() > 20) {
                 throw new ContestException("密码长度必须在5-20位之间", HttpStatus.BAD_REQUEST);
@@ -282,15 +269,24 @@ public class AdminContestServiceImpl implements AdminContestService {
         }
         
         //检查源比赛是否存在
-        Contest sourceContest = contestEntityService.getById(id);
+        Contest sourceContest = contestEntityService.lambdaQuery()
+                .eq(Contest::getId, id)
+                .last("FOR UPDATE")
+                .one();
         if (sourceContest == null) {
             throw new ContestNotExistException();
+        }
+        if (!resourceAccess.canManageContest(sourceContest)) {
+            resourceAccess.requireContestAccess(sourceContest);
+            if (LocalDateTime.now().isBefore(sourceContest.getEndTime())) {
+                throw new ContestException("只能克隆本人比赛或已结束且有权访问的比赛", HttpStatus.FORBIDDEN);
+            }
         }
         
         //创建新比赛（克隆）
         Contest newContest = BeanUtil.copyProperties(sourceContest, Contest.class);
         newContest.setId(null); //清空ID，让数据库自动生成
-        newContest.setTitle(title); //使用用户输入的标题
+        newContest.setTitle(request.getTitle());
         newContest.setSourceId(sourceContest.getId()); //记录源比赛ID
         
         //设置创建者为当前用户
@@ -300,18 +296,13 @@ public class AdminContestServiceImpl implements AdminContestService {
         
         //设置访问权限和密码
         newContest.setVisibility(visibility);
-        newContest.setPassword(visibility == 1 ? password : null);
+        newContest.setPassword(visibility == ContestConstants.VISIBILITY_PASSWORD ? password : null);
         
-        //设置默认时间（明天开始，持续原有时长）
-        LocalDateTime tomorrow = LocalDateTime.now().plusDays(1).withHour(9).withMinute(0).withSecond(0).withNano(0);
-        newContest.setStartTime(tomorrow);
-        if (sourceContest.getDuration() != null && sourceContest.getDuration() > 0) {
-            newContest.setEndTime(tomorrow.plusMinutes(sourceContest.getDuration()));
-        } else {
-            //如果原比赛没有时长，默认2小时
-            newContest.setEndTime(tomorrow.plusHours(2));
-            newContest.setDuration(120L);
-        }
+        newContest.setStartTime(request.getStartTime());
+        newContest.setEndTime(request.getEndTime());
+        newContest.setDuration(LocalDateTimeUtil.between(request.getStartTime(), request.getEndTime()).toMinutes());
+        newContest.setCreatedTime(null);
+        newContest.setUpdatedTime(null);
         
         boolean save = contestEntityService.save(newContest);
         if (!save) {
@@ -326,6 +317,12 @@ public class AdminContestServiceImpl implements AdminContestService {
             throw new ContestException("一场比赛最多15道题目，无法克隆", HttpStatus.BAD_REQUEST);
         }
         if (CollUtil.isNotEmpty(sourceProblems)) {
+            List<Problem> originals = problemEntityService.lambdaQuery()
+                    .in(Problem::getId, sourceProblems.stream().map(ContestProblem::getProblemId).toList())
+                    .orderByAsc(Problem::getId)
+                    .last("FOR UPDATE")
+                    .list();
+            resourceAccess.requireUseProblems(originals);
             List<ContestProblem> newProblems = sourceProblems.stream()
                     .map(problem -> {
                         ContestProblem newProblem = BeanUtil.copyProperties(problem, ContestProblem.class);
@@ -333,7 +330,9 @@ public class AdminContestServiceImpl implements AdminContestService {
                         newProblem.setContestId(newContest.getId());
                         return newProblem;
                     }).toList();
-            contestProblemEntityService.saveBatch(newProblems);
+            if (!contestProblemEntityService.saveBatch(newProblems)) {
+                throw new ContestException("克隆题目关联失败，操作已回滚");
+            }
         }
     }
 
@@ -349,6 +348,7 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (contest == null) {
             throw new ContestNotExistException();
         }
+        resourceAccess.requireManageContest(contest);
         //查询比赛题目关联表
         List<ContestProblem> contestProblems = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contestId)
@@ -402,30 +402,16 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (contest == null) {
             throw new ContestNotExistException();
         }
-        //获取比赛中已有的题目ID列表
-        List<Long> existingProblemIds = contestProblemEntityService.lambdaQuery()
-                .eq(ContestProblem::getContestId, contestId)
-                .list()
-                .stream()
-                .map(ContestProblem::getProblemId)
-                .toList();
-        //创建分页查询
+        resourceAccess.requireManageContest(contest);
         Page<Problem> page = Page.of(pageQuery.getPageNo(), pageQuery.getPageSize());
-        //构建查询条件
-        Page<Problem> result = problemEntityService.lambdaQuery()
-                .and(StrUtil.isNotBlank(pageQuery.getKeyword()), query -> query
-                        .like(Problem::getTitle, pageQuery.getKeyword())
-                        .or()
-                        .like(Problem::getProblemId, pageQuery.getKeyword()))
-                .eq(pageQuery.getDifficulty() != null, Problem::getDifficulty, pageQuery.getDifficulty())
-                .notIn(CollUtil.isNotEmpty(existingProblemIds), Problem::getId, existingProblemIds) //排除已添加的题目
-                .orderByDesc(Problem::getCreatedTime)
-                .page(page);
+        Page<Problem> result = problemEntityService.pageAvailableForContest(
+                page, pageQuery, contestId, resourceAccess.problemScope());
         return PageVO.of(result, Problem.class);
     }
 
     /**
-     * 批量添加题目到比赛（会将题目权限设置为比赛专用）
+     * 未锁定比赛可批量选题
+     * 仅非克隆赛将原题设为比赛专属
      * @param contestId 比赛ID
      * @param problemIds 题目ID列表
      */
@@ -440,7 +426,8 @@ public class AdminContestServiceImpl implements AdminContestService {
             throw new ContestException("一场比赛最多15道题目", HttpStatus.BAD_REQUEST);
         }
         //检查比赛是否存在
-        lockContest(contestId);
+        Contest contest = lockContest(contestId);
+        requireStructureEditable(contest);
         long count = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contestId)
                 .count();
@@ -448,10 +435,15 @@ public class AdminContestServiceImpl implements AdminContestService {
             throw new ContestException("一场比赛最多15道题目", HttpStatus.BAD_REQUEST);
         }
         //检查题目是否存在
-        List<Problem> problems = problemEntityService.listByIds(problemIds);
+        List<Problem> problems = problemEntityService.lambdaQuery()
+                .in(Problem::getId, problemIds)
+                .orderByAsc(Problem::getId)
+                .last("FOR UPDATE")
+                .list();
         if (problems.size() != problemIds.size()) {
             throw new ContestException("部分题目不存在或已被删除");
         }
+        resourceAccess.requireUseProblems(problems);
         //检查题目是否已经在比赛中
         List<Long> existingProblemIds = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contestId)
@@ -464,19 +456,14 @@ public class AdminContestServiceImpl implements AdminContestService {
             throw new ContestException("部分题目已经在比赛中，请勿重复添加");
         }
         //将题目权限设置为比赛专用
-        boolean updateVisibility = problemEntityService.lambdaUpdate()
-                .in(Problem::getId, problemIds)
-                .set(Problem::getVisibility, 3) //3=比赛专用
-                .update();
-        if (!updateVisibility) {
-            throw new ContestException("更新题目权限失败，请稍后再试");
+        if (contest.getSourceId() == ContestConstants.ORIGINAL_SOURCE_ID) {
+            problemEntityService.lambdaUpdate()
+                    .in(Problem::getId, problemIds)
+                    .set(Problem::getVisibility, ProblemConstants.CONTEST_PROBLEM)
+                    .update();
         }
         //获取当前比赛题目的最大展示ID
-        ContestProblem maxContestProblem = contestProblemEntityService.lambdaQuery()
-                .eq(ContestProblem::getContestId, contestId)
-                .orderByDesc(ContestProblem::getDisplayId)
-                .last("LIMIT 1")
-                .one();
+        ContestProblem maxContestProblem = contestProblemEntityService.getLastDisplayProblem(contestId);
         String maxDisplayId = maxContestProblem != null ? maxContestProblem.getDisplayId() : null;
         //生成新的展示ID起始值
         int startIndex = 0;
@@ -558,7 +545,7 @@ public class AdminContestServiceImpl implements AdminContestService {
     }
 
     /**
-     * 从比赛中移除题目（会将题目权限设置为私有）
+     * 从未锁定比赛移除题目，非克隆赛按剩余引用释放专属状态
      * @param contestId 比赛ID
      * @param contestProblemIds 题目ID列表
      */
@@ -570,7 +557,8 @@ public class AdminContestServiceImpl implements AdminContestService {
             throw new ContestException("题目ID列表不能为空", HttpStatus.BAD_REQUEST);
         }
         //检查比赛是否存在
-        lockContest(contestId);
+        Contest contest = lockContest(contestId);
+        requireStructureEditable(contest);
         //检查题目是否在比赛中
         List<ContestProblem> contestProblems = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contestId)
@@ -579,6 +567,14 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (contestProblems.size() != contestProblemIds.size()) {
             throw new ContestException("部分题目不在比赛中");
         }
+        List<Long> problemIds = contestProblems.stream()
+                .map(ContestProblem::getProblemId)
+                .toList();
+        problemEntityService.lambdaQuery()
+                .in(Problem::getId, problemIds)
+                .orderByAsc(Problem::getId)
+                .last("FOR UPDATE")
+                .list();
         //删除比赛题目关联
         List<Long> ids = contestProblems.stream()
                 .map(ContestProblem::getId)
@@ -587,16 +583,8 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (!remove) {
             throw new ContestException("移除题目失败，请稍后再试");
         }
-        //将题目权限设置为私有，等待管理员手动公开
-        List<Long> problemIds = contestProblems.stream()
-                .map(ContestProblem::getProblemId)
-                .toList();
-        boolean updateVisibility = problemEntityService.lambdaUpdate()
-                .in(Problem::getId, problemIds)
-                .set(Problem::getVisibility, 2) //2=私有
-                .update();
-        if (!updateVisibility) {
-            throw new ContestException("更新题目权限失败，请稍后再试");
+        if (contest.getSourceId() == ContestConstants.ORIGINAL_SOURCE_ID) {
+            problemEntityService.releaseContestProblems(problemIds, LocalDateTime.now());
         }
     }
 
@@ -615,7 +603,7 @@ public class AdminContestServiceImpl implements AdminContestService {
             throw new ContestException("题目顺序参数无效", HttpStatus.BAD_REQUEST);
         }
         Contest contest = lockContest(contestId);
-        requireOrderEditable(contest);
+        requireStructureEditable(contest);
         List<ContestProblem> current = contestProblemEntityService.lambdaQuery()
                 .eq(ContestProblem::getContestId, contestId)
                 .list();
@@ -633,17 +621,17 @@ public class AdminContestServiceImpl implements AdminContestService {
     }
 
     /**
-     * 禁止比赛开始或产生提交后更改题号，调用方须先锁定比赛
+     * 比赛开始或产生提交后锁定赛制、开始时间和题目结构，调用方须先锁定比赛
      * @param contest 已锁定的比赛
      */
-    private void requireOrderEditable(Contest contest) {
+    private void requireStructureEditable(Contest contest) {
         if (!LocalDateTime.now().isBefore(contest.getStartTime())) {
-            throw new ContestException("比赛已开始，不能调整题目顺序", HttpStatus.BAD_REQUEST);
+            throw new ContestException("比赛已开始，不能调整赛制、开始时间或题目结构", HttpStatus.BAD_REQUEST);
         }
         if (judges.lambdaQuery()
                 .eq(Judge::getContestId, contest.getId())
                 .exists()) {
-            throw new ContestException("比赛已有提交，不能调整题目顺序", HttpStatus.BAD_REQUEST);
+            throw new ContestException("比赛已有提交，不能调整赛制、开始时间或题目结构", HttpStatus.BAD_REQUEST);
         }
     }
 
@@ -660,6 +648,7 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (contest == null) {
             throw new ContestNotExistException();
         }
+        resourceAccess.requireManageContest(contest);
         return contest;
     }
 
@@ -686,8 +675,8 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (startTime == null || endTime == null) {
             throw new ContestException("比赛开始时间和结束时间不能为空");
         }
-        if (startTime.isAfter(endTime)) {
-            throw new ContestException("比赛开始时间不能晚于结束时间");
+        if (!startTime.isBefore(endTime)) {
+            throw new ContestException("比赛结束时间必须晚于开始时间");
         }
     }
 

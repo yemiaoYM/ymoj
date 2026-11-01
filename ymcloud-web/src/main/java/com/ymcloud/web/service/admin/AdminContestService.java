@@ -1,10 +1,12 @@
 package com.ymcloud.web.service.admin;
 
+import com.ymcloud.pojo.dto.admin.CloneContestDTO;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminContestPageQuery;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
+import com.ymcloud.pojo.vo.admin.AdminContestVO;
 import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 
@@ -29,7 +31,7 @@ public interface AdminContestService {
      * @param id 比赛ID
      * @return 比赛信息
      */
-    Contest getContestById(Long id);
+    AdminContestVO getContestById(Long id);
 
     /**
      * 添加比赛
@@ -54,19 +56,16 @@ public interface AdminContestService {
      * 更新比赛可见性
      * @param id 比赛ID
      * @param visibility 可见性
-     * @param password 密码（私有比赛时必填）
+     * @param password 密码（密码比赛时必填）
      */
     void updateContestVisibility(Long id, Integer visibility, String password);
-
 
     /**
      * 克隆比赛
      * @param id 源比赛ID
-     * @param title 新比赛标题
-     * @param visibility 访问权限
-     * @param password 密码（私有比赛时必填）
+     * @param request 新比赛标题、访问类型、密码和时间
      */
-    void cloneContest(Long id, String title, Integer visibility, String password);
+    void cloneContest(Long id, CloneContestDTO request);
 
     /**
      * 获取比赛题目列表
@@ -84,7 +83,8 @@ public interface AdminContestService {
     PageVO<Problem> getAvailableProblems(Long contestId, AdminProblemPageQuery pageQuery);
 
     /**
-     * 批量添加题目到比赛（会将题目权限设置为比赛专用）
+     * 批量添加题目
+     * 仅普通比赛触发原题专属状态
      * @param contestId 比赛ID
      * @param problemIds 题目ID列表
      */
@@ -100,7 +100,8 @@ public interface AdminContestService {
     void updateContestProblem(Long contestId, Long problemId, String displayTitle, String color);
 
     /**
-     * 从比赛中移除题目（会将题目权限设置为私有）
+     * 从比赛中移除题目
+     * 仅普通比赛按剩余引用释放专属状态
      * @param contestId 比赛ID
      * @param problemIds 题目ID列表
      */

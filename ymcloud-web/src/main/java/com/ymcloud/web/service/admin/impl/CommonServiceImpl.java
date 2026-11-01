@@ -1,9 +1,13 @@
 package com.ymcloud.web.service.admin.impl;
 
+import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.core.security.service.ResourceAccessService;
+import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
+import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.admin.DashboardStatsVO;
@@ -30,6 +34,9 @@ import java.util.Map;
 public class CommonServiceImpl implements CommonService {
 
     @Autowired
+    private ResourceAccessService resourceAccess;
+
+    @Autowired
     private UserEntityService userEntityService;
 
     @Autowired
@@ -50,8 +57,11 @@ public class CommonServiceImpl implements CommonService {
         DashboardStatsVO stats = new DashboardStatsVO();
         //获取统计数据
         stats.setTotalUsers(userEntityService.count());
-        stats.setTotalProblems(problemEntityService.count());
-        stats.setTotalContests(contestEntityService.count());
+        stats.setTotalProblems(problemEntityService.countAccessible(resourceAccess.problemScope()));
+        stats.setTotalContests(contestEntityService.lambdaQuery()
+                .and(!SecurityUtils.isAdmin(), query -> query.ne(Contest::getVisibility, ContestConstants.VISIBILITY_PRIVATE)
+                        .or().eq(Contest::getCreatorId, SecurityUtils.getUserId()))
+                .count());
         return stats;
     }
 
@@ -64,10 +74,8 @@ public class CommonServiceImpl implements CommonService {
         //获取两周前的时间
         LocalDateTime twoWeeksAgo = LocalDateTime.now().minusWeeks(2);
         //查询最近两周的提交记录
-        List<Judge> recentSubmissions = judgeEntityService.lambdaQuery()
-                .select(Judge::getCreatedTime, Judge::getStatus)
-                .ge(Judge::getCreatedTime, twoWeeksAgo)
-                .list();
+        List<Judge> recentSubmissions = judgeEntityService.listDashboardSubmissions(
+                twoWeeksAgo, resourceAccess.problemScope());
         //创建日期格式化器
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM-dd");
         //创建日期到提交数据的映射

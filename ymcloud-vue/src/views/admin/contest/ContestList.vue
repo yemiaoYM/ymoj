@@ -69,8 +69,9 @@
                 :before-change="(value: number) => handleVisibilityChange(scope.row, value)"
                 style="width: 80px;"
               >
-                <el-option :value="0" label="公开" />
-                <el-option :value="1" label="私有" />
+                <el-option :value="CONTEST_VISIBILITY.PUBLIC" label="公开" />
+                <el-option :value="CONTEST_VISIBILITY.PASSWORD" label="密码" />
+                <el-option :value="CONTEST_VISIBILITY.PRIVATE" label="私有" />
               </AsyncSelect>
             </template>
           </el-table-column>
@@ -106,7 +107,6 @@
                   size="small" 
                   text 
                   :icon="CopyDocument"
-                  :disabled="cloning"
                   @click="handleClone(scope.row)"
                 >
                   克隆
@@ -142,13 +142,20 @@
         </x-flex>
       </el-card>
     </x-flex>
+    <CloneContestDialog
+      v-model="cloneVisible"
+      :source-id="cloneSource.id"
+      :title="cloneSource.title"
+      @created="handleQuery"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
+import { CONTEST_VISIBILITY, CONTEST_MODE } from '@/constants/contest';
 //import
 import AsyncSelect from '@/components/common/AsyncSelect.vue';
-import { useAsyncChange } from '@/composables/useAsyncChange';
+import CloneContestDialog from '@/components/admin/CloneContestDialog.vue';
 import { useUserStore } from '@/stores/user';
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -157,8 +164,7 @@ import { useRouter } from 'vue-router';
 import {
   getAdminContestList,
   deleteContestByIds,
-  updateContestVisibility,
-  cloneAdminContest
+  updateContestVisibility
 } from '@/api/api';
 
 //data
@@ -168,7 +174,8 @@ const contestList = ref<any[]>([]);
 const contestIds = ref<number[]>([]);
 const total = ref<number>(0);
 const loading = ref<boolean>(false);
-const { pending: cloning, beforeChange: cloneContest } = useAsyncChange();
+const cloneVisible = ref(false);
+const cloneSource = ref({ id: 0, title: '' });
 
 //查询参数
 const queryParams = ref({
@@ -222,18 +229,18 @@ const handleSelectionChange = (selection: any[]) => {
 //获取赛制模式文本
 const getModeText = (mode: number) => {
   switch (mode) {
-    case 0: return 'ACM';
-    case 1: return 'OI';
-    case 2: return 'IOI';
+    case CONTEST_MODE.ACM: return 'ACM';
+    case CONTEST_MODE.OI: return 'OI';
+    case CONTEST_MODE.IOI: return 'IOI';
     default: return '未知';
   }
 };
 //获取赛制模式标签类型
 const getModeTagType = (mode: number) => {
   switch (mode) {
-    case 0: return 'primary';
-    case 1: return 'success';
-    case 2: return 'warning';
+    case CONTEST_MODE.ACM: return 'primary';
+    case CONTEST_MODE.OI: return 'success';
+    case CONTEST_MODE.IOI: return 'warning';
     default: return 'primary';
   }
 };
@@ -244,7 +251,7 @@ const getContestStatus = (contest: any) => {
   const endTime = new Date(contest.endTime);
   if (now < startTime) {
     return '未开始';
-  } else if (now >= startTime && now <= endTime) {
+  } else if (now >= startTime && now < endTime) {
     return '进行中';
   } else {
     return '已结束';
@@ -264,8 +271,9 @@ const getStatusTagType = (contest: any) => {
 //获取可见性文本
 const getVisibilityText = (visibility: number) => {
   switch (visibility) {
-    case 0: return '公开';
-    case 1: return '私有';
+    case CONTEST_VISIBILITY.PUBLIC: return '公开';
+    case CONTEST_VISIBILITY.PASSWORD: return '密码';
+    case CONTEST_VISIBILITY.PRIVATE: return '私有';
     default: return '未知';
   }
 };
@@ -292,97 +300,9 @@ const handleManageProblems = (row: any) => {
   router.push(`/admin/contest/${id}/problems`);
 };
 //克隆比赛
-const handleClone = (row: any) => {
-  handleCloneWithDialog(row);
-};
-
-//克隆比赛对话框
-const handleCloneWithDialog = (row: any) => {
-  // 默认标题
-  const defaultTitle = `${row.title} (克隆)`;
-  
-  ElMessageBox.prompt(
-    `请输入新比赛标题：`,
-    '克隆比赛设置',
-    {
-      confirmButtonText: '下一步',
-      cancelButtonText: '取消',
-      inputValue: defaultTitle,
-      inputPlaceholder: '请输入比赛标题',
-      inputValidator: (value: string) => {
-        if (!value || value.trim() === '') {
-          return '比赛标题不能为空';
-        }
-        if (value.length > 100) {
-          return '比赛标题长度不能超过100个字符';
-        }
-        return true;
-      },
-    }
-  ).then(({ value: title }) => {
-    // 弹出权限设置对话框
-    handleCloneVisibilityDialog(row, title);
-  }).catch(() => { });
-};
-
-//克隆比赛权限设置对话框
-const handleCloneVisibilityDialog = (row: any, title: string) => {
-  ElMessageBox.confirm(
-    `比赛 "${title}" 的访问权限设置：`,
-    '选择访问权限',
-    {
-      confirmButtonText: '私有（需设置密码）',
-      cancelButtonText: '公开',
-      distinguishCancelAndClose: true,
-      type: 'info',
-    }
-  ).then(() => {
-    // 用户选择私有，需要设置密码
-    handleClonePasswordDialog(row, title, 1);
-  }).catch((action: string) => {
-    if (action === 'cancel') {
-      // 用户选择公开
-      executeClone(row.id, title, 0, null);
-    }
-    // close 表示关闭对话框，不执行任何操作
-  });
-};
-
-//克隆比赛密码设置对话框
-const handleClonePasswordDialog = (row: any, title: string, visibility: number) => {
-  ElMessageBox.prompt(
-    `私有比赛 "${title}" 需要设置访问密码：`,
-    '设置比赛密码',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputType: 'password',
-      inputPlaceholder: '请输入5-20位密码',
-      inputValidator: (value: string) => {
-        if (!value || value.trim() === '') {
-          return '密码不能为空';
-        }
-        if (value.length < 5) {
-          return '密码长度至少5位';
-        }
-        if (value.length > 20) {
-          return '密码长度不能超过20位';
-        }
-        return true;
-      },
-    }
-  ).then(({ value: password }) => {
-    executeClone(row.id, title, visibility, password);
-  }).catch(() => { });
-};
-
-//执行克隆操作
-const executeClone = async (id: number, title: string, visibility: number, password: string | null) => {
-  await cloneContest(async () => {
-    const res = await cloneAdminContest(id, title, visibility, password);
-    ElMessage.success(res.data.msg);
-    handleQuery();
-  });
+const handleClone = (row: { id: number; title: string }) => {
+  cloneSource.value = { id: row.id, title: row.title };
+  cloneVisible.value = true;
 };
 //删除比赛
 const handleDelete = (row: any) => {
@@ -411,9 +331,9 @@ const handleDelete = (row: any) => {
 //请求成功后由异步选择器更新权限
 const handleVisibilityChange = async (row: { id: number; title: string; visibility: number }, newVisibility: number) => {
   let password: string | null = null;
-  if (newVisibility === 1) {
+  if (newVisibility === CONTEST_VISIBILITY.PASSWORD) {
     const result = await ElMessageBox.prompt(
-      `将比赛 "${row.title}" 设置为私有需要设置访问密码：`,
+      `将比赛 "${row.title}" 设置为密码比赛需要设置访问密码：`,
       '设置比赛密码',
       {
         confirmButtonText: '确定',

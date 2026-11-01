@@ -1,10 +1,17 @@
 package com.ymcloud.web;
 
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.common.exception.submission.SubmissionException;
 import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.core.security.service.PermissionService;
+import com.ymcloud.core.security.service.ResourceAccessService;
+import com.ymcloud.core.web.dao.JudgeEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.dto.SubmissionExecutionDTO;
 import com.ymcloud.pojo.dto.SubmissionStatusDTO;
+import com.ymcloud.pojo.entity.Judge;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.web.controller.admin.AdminSubmissionController;
@@ -19,6 +26,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
@@ -45,17 +53,33 @@ class SubmissionManagementTest {
     }
 
     /**
-     * 非超级管理员即使有管理权限，也不能调用重评或手动状态服务
+     * 普通管理员可以进入重评资源检查，手动改判仍在读取提交前拒绝
      */
     @Test
-    void ordinaryAdministratorCannotManageSubmissions() {
+    @SuppressWarnings("unchecked")
+    void ordinaryAdministratorCanRejudgeButCannotManuallyOverride() {
         authenticate(2L, List.of("*:*:*", "system:submission:rejudge", "system:submission:edit"));
         try {
             JudgeServiceImpl service = new JudgeServiceImpl();
-            SubmissionException rejudge = assertThrows(SubmissionException.class, () -> service.rejudge(10L, null));
+            JudgeEntityService judges = mock(JudgeEntityService.class);
+            ProblemEntityService problems = mock(ProblemEntityService.class);
+            LambdaQueryChainWrapper<Problem> query = mock(LambdaQueryChainWrapper.class, RETURNS_SELF);
+            when(query.eq(any(), any())).thenReturn(query);
+            when(query.last("FOR UPDATE")).thenReturn(query);
+            when(problems.lambdaQuery()).thenReturn(query);
+            Judge submission = new Judge();
+            submission.setContestId(0L);
+            submission.setProblemId(20L);
+            when(judges.getById(10L)).thenReturn(submission);
+            ReflectionTestUtils.setField(service, "resourceAccess", new ResourceAccessService());
+            ReflectionTestUtils.setField(service, "judges", judges);
+            ReflectionTestUtils.setField(service, "problems", problems);
+            assertThrows(ProblemNotExistException.class, () -> service.rejudge(10L, null));
+            verify(query).eq(any(), eq(20L));
+            verify(query).one();
             SubmissionException manual = assertThrows(SubmissionException.class,
                     () -> service.updateSubmissionStatus(10L, new SubmissionStatusDTO()));
-            assertEquals(403, rejudge.getCode());
+
             assertEquals(403, manual.getCode());
         } finally {
             SecurityContextHolder.clearContext();

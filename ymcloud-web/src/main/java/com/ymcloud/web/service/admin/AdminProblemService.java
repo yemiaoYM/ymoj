@@ -1,6 +1,7 @@
 package com.ymcloud.web.service.admin;
 
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
+import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
@@ -13,13 +14,19 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.web.service.admin
- * @ClassName: AdminProblemService
  * @Author: Yemiao
  * @CreateTime: 2025-09-21  21:35
  * @Description: 管理端题目服务接口
  */
 public interface AdminProblemService {
+
+    /**
+     * 检查归属后盘点或迁移历史测试数据
+     * @param problemId 题目 ID
+     * @param execute 是否执行迁移
+     * @return 迁移报告
+     */
+    TestDataMigrationReport migrateTestData(Long problemId, boolean execute);
 
     /**
      * 分页查询题目列表
@@ -58,7 +65,8 @@ public interface AdminProblemService {
     /**
      * 修改题目可见性
      * @param id 题目ID
-     * @param visibility 可见性：1=公开，2=私有，3=比赛专用
+     * @param visibility 可见性：1=公开，2=私有
+     * 比赛专属状态由引用生命周期维护
      */
     void updateProblemVisibility(Long id, Integer visibility);
 

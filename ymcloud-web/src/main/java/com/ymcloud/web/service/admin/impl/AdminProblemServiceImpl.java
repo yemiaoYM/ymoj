@@ -2,18 +2,19 @@ package com.ymcloud.web.service.admin.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
+import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
@@ -23,6 +24,7 @@ import com.ymcloud.pojo.vo.admin.ProblemVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
 import com.ymcloud.web.service.admin.AdminProblemService;
+import com.ymcloud.web.service.admin.ResourceDeletionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
@@ -37,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -49,6 +52,12 @@ import java.util.List;
 public class AdminProblemServiceImpl implements AdminProblemService {
 
     @Autowired
+    private ResourceAccessService resourceAccess;
+
+    @Autowired
+    private ResourceDeletionService deletion;
+
+    @Autowired
     private TestDataService testDataService;
 
     @Autowired
@@ -58,40 +67,31 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     private ProblemTagEntityService problemTagEntityService;
 
     /**
-     * 分页查询题目列表
+     * 按管理归属和实时可见性分页查询题目列表
      * @param pageQuery 查询条件
      * @return 题目列表
      */
     @Override
     public PageVO<Problem> queryList(AdminProblemPageQuery pageQuery) {
+        resourceAccess.requireProblemManager();
         //创建分页实体
         Page<Problem> page = Page.of(pageQuery.getPageNo(), pageQuery.getPageSize());
-        //条件分页查询题目列表（管理端可以查看所有可见性的题目）
-        Page<Problem> record = problemEntityService.lambdaQuery()
-                .and(StrUtil.isNotBlank(pageQuery.getKeyword()), query -> query
-                        .like(Problem::getTitle, pageQuery.getKeyword())
-                        .or()
-                        .like(Problem::getProblemId, pageQuery.getKeyword()))
-                .eq(pageQuery.getDifficulty() != null, Problem::getDifficulty, pageQuery.getDifficulty())
-                .eq(pageQuery.getVisibility() != null, Problem::getVisibility, pageQuery.getVisibility())
-                .orderByDesc(Problem::getCreatedTime)
-                .page(page);
+        // 实时状态筛选和总数统计在 SQL 中完成，不逐条查询比赛引用
+        Page<Problem> record = problemEntityService.pageManaged(page, pageQuery, resourceAccess.problemScope());
 
         return PageVO.of(record, Problem.class);
     }
 
     /**
-     * 根据ID查询题目详情
+     * 根据ID查询可管理题目的详情，返回当前有效可见性
      * @param id 题目ID
      * @return 题目信息
      */
     @Override
     public ProblemVO getProblemById(Long id) {
-        Problem problem = problemEntityService.getById(id);
-        if (problem == null) {
-            throw new ProblemNotExistException();
-        }
+        Problem problem = getManagedProblem(id);
         ProblemVO problemVO = BeanUtil.copyProperties(problem, ProblemVO.class);
+        problemVO.setVisibility(resourceAccess.effectiveVisibility(problem));
         //查询题目的题面样例,将json转化为对象
         List<ProblemCaseVO> problemCaseVOList = JSON.parseArray(problem.getExamples(), ProblemCaseVO.class);
         problemVO.setProblemCaseList(problemCaseVOList);
@@ -115,6 +115,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String addProblem(ProblemDTO problemDTO) {
+        resourceAccess.requireProblemManager();
         validateJudgeMode(problemDTO.getJudgeMode());
         String problemId = problemDTO.getProblemId();
         // 展示 ID 按数据库唯一索引规则判重。
@@ -140,10 +141,8 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         }
         //将mb转化为kb
         problem.setMemoryLimit(problemDTO.getMemoryLimit()*1024);
-        //如果没有设置可见性，默认为私有
-        if (problem.getVisibility() == null) {
-            problem.setVisibility(2);
-        }
+        // 新题统一私有，公开状态只能经独立管理入口调整
+        problem.setVisibility(ProblemConstants.PRIVATE);
         try {
             if (!problemEntityService.save(problem)) {
                 throw new ProblemException("添加题目失败，请稍后再试");
@@ -169,7 +168,8 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 修改题目，保留展示 ID 和作者；空样例列表会清除旧样例。
+     * 修改题目，保留展示 ID 和作者
+     * 空样例列表会清除旧样例
      * @param id 题目ID
      * @param problemDTO 题目信息
      */
@@ -178,14 +178,19 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     public void updateProblem(Long id, ProblemDTO problemDTO) {
         validateJudgeMode(problemDTO.getJudgeMode());
         //检查题目是否存在
-        Problem existProblem = problemEntityService.getById(id);
+        Problem existProblem = problemEntityService.lambdaQuery()
+                .eq(Problem::getId, id)
+                .last("FOR UPDATE")
+                .one();
         if (existProblem == null) {
             throw new ProblemNotExistException();
         }
+        resourceAccess.requireManageProblem(existProblem);
         //构造实体
         Problem problem = BeanUtil.copyProperties(problemDTO, Problem.class);
         problem.setId(id);
-        // 题号与来源无关，编辑出处不改变已有链接和提交记录。
+        problem.setVisibility(existProblem.getVisibility());
+        // 题号与来源无关，编辑出处不改变已有链接和提交记录
         problem.setProblemId(existProblem.getProblemId());
         problem.setSource(normalizeSource(problemDTO.getSource()));
         problem.setMemoryLimit(problemDTO.getMemoryLimit()*1024);
@@ -243,42 +248,35 @@ public class AdminProblemServiceImpl implements AdminProblemService {
      * @param ids 题目ID列表
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public void deleteProblemById(List<Long> ids) {
-        if (CollUtil.isEmpty(ids)) {
-            throw new ProblemException("题目id不能为空");
-        }
-        //检查题目是否存在
-        List<Problem> problems = problemEntityService.listByIds(ids);
-        if (problems.size() != ids.size()) {
-            throw new ProblemException("部分题目不存在或已被删除");
-        }
-        //删除题目标签关联
-        problemTagEntityService.lambdaUpdate()
-                .in(ProblemTag::getProblemId, ids)
-                .remove();
-        //删除题目
-        boolean remove = problemEntityService.removeByIds(ids);
-        if (!remove) {
-            throw new ProblemException("删除题目失败，请稍后再试");
-        }
+        deletion.deleteProblems(ids);
     }
 
     /**
      * 修改题目可见性
      * @param id 题目ID
-     * @param visibility 可见性：1=公开，2=私有，3=比赛专用
+     * @param visibility 可见性：1=公开，2=私有
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateProblemVisibility(Long id, Integer visibility) {
+        if (!SecurityUtils.isAdmin()) {
+            throw new ProblemException("仅普通管理员及以上可以修改题目公开状态", HttpStatus.FORBIDDEN);
+        }
         //检查可见性参数
-        if (visibility == null || (visibility < 1 || visibility > 3)) {
+        if (visibility == null || (visibility < ProblemConstants.PUBLIC || visibility > ProblemConstants.PRIVATE)) {
             throw new ProblemException("可见性参数错误", HttpStatus.BAD_REQUEST);
         }
         //检查题目是否存在
-        Problem problem = problemEntityService.getById(id);
+        Problem problem = problemEntityService.lambdaQuery()
+                .eq(Problem::getId, id)
+                .last("FOR UPDATE")
+                .one();
         if (problem == null) {
             throw new ProblemNotExistException();
+        }
+        if (problemEntityService.hasActiveContestReference(id, LocalDateTime.now())) {
+            throw new ProblemException("题目仍被未结束的非克隆比赛引用，不能修改公开状态");
         }
         //更新可见性
         boolean update = problemEntityService.lambdaUpdate()
@@ -291,32 +289,37 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 获取当前版本的测试样例列表，保持原管理接口结构。
+     * 获取当前版本的测试样例列表，保持原管理接口结构
+     * @param problemId 题目 ID
+     * @return 当前版本的文件清单
      */
     @Override
     public List<ProblemCaseInfo> getTestCaseFiles(Long problemId) {
+        getManagedProblem(problemId);
         return testDataService.listCurrent(problemId);
     }
 
     /**
-     * 以不可变版本发布成对上传的测试数据。
+     * 以不可变版本发布成对上传的测试数据
+     * @param problemId 题目 ID
+     * @param files 输入输出文件
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void uploadTestCaseFile(Long problemId, MultipartFile[] files) {
+        getManagedProblem(problemId);
         testDataService.upload(problemId, files);
     }
 
     /**
-     * 下载时固定一次当前版本，避免并发发布造成文件与清单错配。
+     * 下载时固定一次当前版本，避免并发发布造成文件与清单错配
+     * @param problemId 题目 ID
+     * @param fileName 版本内的文件名
+     * @return 当前版本文件流
      */
     @Override
     public ResponseEntity<Resource> downloadTestCaseFile(Long problemId, String fileName) {
-        Problem problem = problemEntityService.lambdaQuery()
-                .eq(Problem::getId, problemId)
-                .one();
-        if (problem == null) {
-            throw new ProblemNotExistException();
-        }
+        Problem problem = getManagedProblem(problemId);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentDisposition(ContentDisposition.attachment()
                 .filename(fileName == null ? "testcase" : fileName.substring(fileName.lastIndexOf('/') + 1),
@@ -331,10 +334,41 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 删除生成新版本，旧对象继续保留给排队任务。
+     * 删除生成新版本，旧对象继续保留给排队任务
+     * @param problemId 题目 ID
+     * @param fileNames 待移除文件名
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteTestCaseFiles(Long problemId, List<String> fileNames) {
+        getManagedProblem(problemId);
         testDataService.delete(problemId, fileNames);
+    }
+
+    /**
+     * 按题目管理归属检查历史数据迁移入口
+     * @param problemId 题目 ID
+     * @param execute 是否执行迁移，false 仅盘点
+     * @return 迁移或盘点报告
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TestDataMigrationReport migrateTestData(Long problemId, boolean execute) {
+        getManagedProblem(problemId);
+        return testDataService.migrateLegacy(problemId, execute);
+    }
+
+    /**
+     * 加载当前用户可以管理的原题
+     * @param problemId 题目 ID
+     * @return 已通过归属校验的题目
+     */
+    private Problem getManagedProblem(Long problemId) {
+        Problem problem = problemEntityService.getById(problemId);
+        if (problem == null) {
+            throw new ProblemNotExistException();
+        }
+        resourceAccess.requireManageProblem(problem);
+        return problem;
     }
 }

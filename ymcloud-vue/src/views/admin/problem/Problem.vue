@@ -54,10 +54,10 @@
             />
           </el-form-item>
           <el-form-item label="权限" prop="visibility">
-            <el-select v-model="problem.visibility" style="width: 200px">
-              <el-option :value="1" label="公开" />
-              <el-option :value="2" label="私有" />
-              <el-option :value="3" label="比赛专用" />
+            <el-select v-model="problem.visibility" disabled style="width: 200px">
+              <el-option :value="PROBLEM_VISIBILITY.PUBLIC" label="公开" />
+              <el-option :value="PROBLEM_VISIBILITY.PRIVATE" label="私有" />
+              <el-option :value="PROBLEM_VISIBILITY.CONTEST_EXCLUSIVE" label="比赛专用" />
             </el-select>
           </el-form-item>
           <el-form-item label="难度" prop="difficulty">
@@ -247,7 +247,7 @@ import type { FormInstance, FormRules } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
 import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/api/api";
 import type { Tag, ProblemDTO } from "@/type/types";
-import { PROBLEM_DIFFICULTIES } from "@/constants/problem";
+import { PROBLEM_DIFFICULTIES, PROBLEM_VISIBILITY } from "@/constants/problem";
 import { isDraftRecord, useLocalDraft } from "@/composables/useLocalDraft";
 import { useAsyncChange } from "@/composables/useAsyncChange";
 import { useRemoteProblemStore } from "@/stores/remoteProblem";
@@ -474,7 +474,7 @@ function handleCreateForm(): ProblemForm {
     source: "",
     difficulty: 1,
     judgeMode: "default",
-    visibility: 1,
+    visibility: PROBLEM_VISIBILITY.PRIVATE,
     openCaseResult: false,
     timeLimit: 1000,
     memoryLimit: 256,

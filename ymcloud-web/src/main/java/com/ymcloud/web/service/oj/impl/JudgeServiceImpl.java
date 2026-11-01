@@ -6,21 +6,19 @@ import com.ymcloud.common.constant.JudgeConstants;
 import com.ymcloud.common.constant.LanguageConstants;
 import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.contest.ContestException;
-import com.ymcloud.common.exception.contest.ContestNotAccessException;
 import com.ymcloud.common.exception.contest.ContestNotExistException;
 import com.ymcloud.common.exception.contest.ContestNotStartException;
 import com.ymcloud.common.exception.contest.ContestProblemNotExistException;
 import com.ymcloud.common.exception.judge.JudgeException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
-import com.ymcloud.common.exception.problem.ProblemPermissionException;
 import com.ymcloud.common.exception.submission.SubmissionException;
 import com.ymcloud.common.exception.submission.SubmissionNotExistException;
 import com.ymcloud.common.utils.IpUtils;
+import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
-import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.dao.JudgeCaseEntityService;
 import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
@@ -35,7 +33,6 @@ import com.ymcloud.pojo.dto.SubmissionStatusDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
-import com.ymcloud.pojo.entity.ContestUser;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeCase;
 import com.ymcloud.pojo.entity.JudgeDispatch;
@@ -82,6 +79,9 @@ public class JudgeServiceImpl implements JudgeService {
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("Java", "C", "C++", "Python");
 
     @Autowired
+    private ResourceAccessService resourceAccess;
+
+    @Autowired
     private JudgeEntityService judges;
 
     @Autowired
@@ -98,9 +98,6 @@ public class JudgeServiceImpl implements JudgeService {
 
     @Autowired
     private ContestProblemEntityService contestProblems;
-
-    @Autowired
-    private ContestUserEntityService contestUsers;
 
     @Autowired
     private TestDataService testData;
@@ -156,13 +153,38 @@ public class JudgeServiceImpl implements JudgeService {
      * @param request 人工状态，null 表示创建新的评测任务
      */
     private void replaceExecution(Long submissionId, String expectedExecutionId, SubmissionStatusDTO request) {
-        if (!SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
-            throw new SubmissionException("仅超级管理员可以管理提交", HttpStatus.FORBIDDEN);
+        if (request != null && !SecurityUtils.isSuperAdmin(SecurityUtils.getUserId())) {
+            throw new SubmissionException("仅超级管理员可以手动改判", HttpStatus.FORBIDDEN);
         }
         if (submissionId <= 0) {
             throw new SubmissionException("提交编号无效", HttpStatus.BAD_REQUEST);
         }
-        //与结果接收保持任务、提交的锁定顺序
+        Judge existing = judges.getById(submissionId);
+        if (existing == null) {
+            throw new SubmissionNotExistException();
+        }
+        // 先锁资源，再锁任务和提交，与删除及新提交保持一致
+        Contest contest = null;
+        if (existing.getContestId() != JudgeConstants.PRACTICE_CONTEST_ID) {
+            contest = contests.lambdaQuery()
+                    .eq(Contest::getId, existing.getContestId())
+                    .last("FOR UPDATE")
+                    .one();
+            if (contest == null) {
+                throw new ContestNotExistException();
+            }
+        }
+        if (!SecurityUtils.isAdmin()
+                && (contest == null || !resourceAccess.canManageContest(contest))) {
+            throw new SubmissionException("无权重评该提交", HttpStatus.FORBIDDEN);
+        }
+        Problem problem = problems.lambdaQuery()
+                .eq(Problem::getId, existing.getProblemId())
+                .last("FOR UPDATE")
+                .one();
+        if (problem == null) {
+            throw new ProblemNotExistException();
+        }
         JudgeDispatch previous = dispatches.lambdaQuery()
                 .eq(JudgeDispatch::getSubmissionId, submissionId)
                 .last("FOR UPDATE")
@@ -177,27 +199,11 @@ public class JudgeServiceImpl implements JudgeService {
         if (!Objects.equals(judge.getExecutionId(), expectedExecutionId)) {
             throw new SubmissionException("该提交已被操作，请刷新后重试", HttpStatus.CONFLICT);
         }
-        Contest contest = null;
-        if (judge.getContestId() != 0) {
-            contest = contests.lambdaQuery()
-                    .eq(Contest::getId, judge.getContestId())
-                    .one();
-            if (contest == null) {
-                throw new ContestNotExistException();
-            }
-        }
         JudgeTask task = null;
         String executionId;
         JudgeStatus status;
         Integer score = null;
         if (request == null) {
-            Problem problem = problems.lambdaQuery()
-                    .eq(Problem::getId, judge.getProblemId())
-                    .last("FOR UPDATE")
-                    .one();
-            if (problem == null) {
-                throw new ProblemNotExistException();
-            }
             task = formalTask(problem, contest, judge.getLanguage(), judge.getCode());
             task.setSubmissionId(submissionId);
             executionId = task.getExecutionId();
@@ -244,7 +250,7 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 版本读取持有题目行锁，提交记录和固定任务快照在同一事务提交。
+     * 版本读取持有题目行锁，提交记录和固定任务快照在同一事务提交
      * @param request 经过结构校验的提交请求
      * @return 本次正式提交 ID
      */
@@ -257,22 +263,17 @@ public class JudgeServiceImpl implements JudgeService {
         User user = SecurityUtils.getUser();
         Problem problem = problems.lambdaQuery()
                 .eq(Problem::getProblemId, request.getProblemId())
+                .last("FOR UPDATE")
                 .one();
         if (problem == null) {
             throw new ProblemNotExistException();
         }
-        if (Objects.equals(problem.getVisibility(), ProblemConstants.CONTEST_PROBLEM)) {
-            throw new JudgeException("请从比赛官网进行提交评测");
-        }
-        if (Objects.equals(problem.getVisibility(), ProblemConstants.PRIVATE)
-                && !Objects.equals(user.getId(), problem.getAuthorId())) {
-            throw new ProblemPermissionException();
-        }
+        resourceAccess.requireReadProblem(problem);
         return createSubmission(request, user, problem, null, null);
     }
 
     /**
-     * 检查比赛时段、参赛资格和比赛题目映射后创建提交。
+     * 检查比赛时段、参赛资格和比赛题目映射后创建提交
      * @param request 经过结构校验的比赛提交请求
      * @return 本次比赛提交 ID
      */
@@ -282,6 +283,7 @@ public class JudgeServiceImpl implements JudgeService {
         }
         Contest contest = contests.lambdaQuery()
                 .eq(Contest::getId, request.getContestId())
+                .last("FOR UPDATE")
                 .one();
         if (contest == null) {
             throw new ContestNotExistException();
@@ -290,19 +292,11 @@ public class JudgeServiceImpl implements JudgeService {
         if (now.isBefore(contest.getStartTime())) {
             throw new ContestNotStartException();
         }
-        if (now.isAfter(contest.getEndTime()) && !Boolean.TRUE.equals(contest.getAllowEndSubmit())) {
+        if (!now.isBefore(contest.getEndTime())) {
             throw new ContestException("比赛结束后禁止提交");
         }
         User user = SecurityUtils.getUser();
-        if (!Objects.equals(contest.getVisibility(), ContestConstants.VISIBILITY_PUBLIC)) {
-            boolean access = contestUsers.lambdaQuery()
-                    .eq(ContestUser::getContestId, contest.getId())
-                    .eq(ContestUser::getUserId, user.getId())
-                    .exists();
-            if (!access) {
-                throw new ContestNotAccessException();
-            }
-        }
+        resourceAccess.requireContestAccess(contest);
         ContestProblem contestProblem = contestProblems.lambdaQuery()
                 .eq(ContestProblem::getContestId, contest.getId())
                 .eq(ContestProblem::getDisplayId, request.getProblemId())
@@ -312,6 +306,7 @@ public class JudgeServiceImpl implements JudgeService {
         }
         Problem problem = problems.lambdaQuery()
                 .eq(Problem::getId, contestProblem.getProblemId())
+                .last("FOR UPDATE")
                 .one();
         if (problem == null) {
             throw new ProblemNotExistException();
@@ -345,7 +340,7 @@ public class JudgeServiceImpl implements JudgeService {
                 .status(JudgeStatus.STATUS_PENDING)
                 .code(request.getCode())
                 .codeLength(request.getCode().length())
-                .contestId(contest == null ? 0L : contest.getId())
+                .contestId(contest == null ? JudgeConstants.PRACTICE_CONTEST_ID : contest.getId())
                 .contestProblemId(contestProblem == null ? 0L : contestProblem.getId())
                 .judgeServer(JudgeConstants.LOCAL_JUDGE_SERVER)
                 .ip(IpUtils.getIpAddr())
@@ -606,9 +601,16 @@ public class JudgeServiceImpl implements JudgeService {
                 .eq(JudgeDispatch::getSubmissionId, submissionId)
                 .one();
         if (dispatch == null) {
-            return historicalStatus(submissionId, userId);
+            return historicalStatus(submissionId);
         }
-        requireOwner(userId, dispatch.getUserId());
+        if (Objects.equals(dispatch.getStrategy(), JudgeDispatchState.FORMAL)) {
+            Judge submission = judges.getById(submissionId);
+            if (submission == null || !resourceAccess.canReadSubmissionCode(submission)) {
+                throw new JudgeException("无权查看该评测状态", HttpStatus.FORBIDDEN);
+            }
+        } else {
+            requireOwner(userId, dispatch.getUserId());
+        }
         JudgeResultVO cached = cache.get(submissionId, dispatch.getExecutionId());
         if (cached != null && cached.getStatus() == dispatch.getStatus()) {
             return cached;
@@ -650,19 +652,20 @@ public class JudgeServiceImpl implements JudgeService {
     /**
      * 读取任务箱拆分前的提交状态，同样验证查看权限。
      * @param submissionId 历史正式提交 ID
-     * @param userId 从安全上下文取得的当前用户 ID
      * @return 允许当前用户查看的历史状态
      */
-    private JudgeResultVO historicalStatus(Long submissionId, Long userId) {
+    private JudgeResultVO historicalStatus(Long submissionId) {
         Judge historical = judges.lambdaQuery()
-                .select(Judge::getUserId, Judge::getStatus, Judge::getTime,
-                        Judge::getMemory, Judge::getErrorMessage)
+                .select(Judge::getUserId, Judge::getStatus, Judge::getTime, Judge::getMemory,
+                        Judge::getErrorMessage, Judge::getProblemId, Judge::getContestId, Judge::getShare)
                 .eq(Judge::getId, submissionId)
                 .one();
         if (historical == null) {
             throw new JudgeException("评测记录不存在");
         }
-        requireOwner(userId, historical.getUserId());
+        if (!resourceAccess.canReadSubmissionCode(historical)) {
+            throw new JudgeException("无权查看该评测状态", HttpStatus.FORBIDDEN);
+        }
         return JudgeResultVO.builder()
                 .status(historical.getStatus())
                 .time(historical.getTime())

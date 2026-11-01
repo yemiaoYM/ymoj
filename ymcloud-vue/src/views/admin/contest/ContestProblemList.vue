@@ -15,7 +15,7 @@
             plain
             type="primary"
             :icon="Plus"
-            :disabled="loading || contestProblemList.length >= 15"
+            :disabled="structureLocked || loading || contestProblemList.length >= 15"
             :loading="problemSearchLoading"
             @click="handleAddProblem"
           >
@@ -26,7 +26,7 @@
             plain
             type="primary"
             :icon="Sort"
-            :disabled="loading || contestProblemList.length < 2"
+            :disabled="structureLocked || loading || contestProblemList.length < 2"
             @click="onOpenOrder"
           >调整顺序</el-button>
           <el-button
@@ -34,12 +34,14 @@
             plain
             type="danger"
             :icon="Delete"
-            :disabled="contestProblemIds.length === 0 || removeAction.pending.value"
+            :disabled="structureLocked || contestProblemIds.length === 0 || removeAction.pending.value"
             @click="handleDeleteProblem()"
           >
             移除选中题目
           </el-button>
         </x-flex>
+
+        <el-text v-if="structureLocked" type="info">比赛结构已锁定：可纠正题面及展示信息，不可增删题目、排序或修改题号。</el-text>
 
         <!-- 题目列表 -->
         <el-table
@@ -90,7 +92,7 @@
                   size="small"
                   text
                   :icon="Delete"
-                  :disabled="removeAction.pending.value"
+                  :disabled="structureLocked || removeAction.pending.value"
                   @click="handleDeleteProblem(scope.row)"
                 >
                   移除
@@ -302,6 +304,7 @@ import { useAsyncChange } from '@/composables/useAsyncChange';
 import { Balloon } from '@vicons/ionicons5';
 import {
   getAdminContestProblems,
+  getAdminContestById,
   getAvailableProblemsForContest,
   addProblemsToContest,
   updateContestProblem,
@@ -315,6 +318,7 @@ const contestId = ref<number>(0);
 const contestProblemList = ref<AdminContestProblemVO[]>([]);
 const contestProblemIds = ref<number[]>([]);
 const loading = ref<boolean>(false);
+const structureLocked = ref(true);
 //添加题目相关
 const addProblemDialogVisible = ref<boolean>(false);
 const availableProblems = ref<AdminProblemVO[]>([]);
@@ -373,8 +377,9 @@ onMounted(() => {
 //查询比赛题目列表
 const handleQuery = () => {
   loading.value = true;
-  getAdminContestProblems(contestId.value).then(res => {
+  Promise.all([getAdminContestProblems(contestId.value), getAdminContestById(contestId.value)]).then(([res, info]) => {
     contestProblemList.value = res.data.data;
+    structureLocked.value = info.data.data.structureLocked;
   }).catch(e => {
     console.log(e);
   }).finally(() => {

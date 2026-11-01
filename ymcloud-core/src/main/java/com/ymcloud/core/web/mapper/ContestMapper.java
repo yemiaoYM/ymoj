@@ -8,8 +8,6 @@ import com.ymcloud.pojo.vo.oj.ContestRankVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.util.List;
-
 /**
  * @PackageName: com.ymcloud.core.web.mapper
  * @ClassName: ContestMapper

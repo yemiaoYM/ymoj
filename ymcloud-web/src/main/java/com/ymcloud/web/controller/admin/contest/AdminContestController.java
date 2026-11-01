@@ -1,13 +1,15 @@
 package com.ymcloud.web.controller.admin.contest;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.pojo.dto.admin.CloneContestDTO;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminContestPageQuery;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
-import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.admin.AdminContestVO;
 import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
+import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminContestService;
 import com.ymcloud.web.service.common.PublicImageService;
 import lombok.extern.slf4j.Slf4j;
@@ -75,9 +77,9 @@ public class AdminContestController {
      */
     @PreAuthorize("@ss.hasPermi('contest:contest:query')")
     @GetMapping("/{id}")
-    public Result<Contest> getContestById(@PathVariable("id") Long id) {
+    public Result<AdminContestVO> getContestById(@PathVariable("id") Long id) {
         log.info("根据ID查询比赛:{}", id);
-        Contest contest = adminContestService.getContestById(id);
+        AdminContestVO contest = adminContestService.getContestById(id);
         return Result.ok(contest);
     }
 
@@ -124,8 +126,8 @@ public class AdminContestController {
     /**
      * 修改比赛可见性
      * @param id 比赛ID
-     * @param visibility 可见性：0=公开，1=私有
-     * @param password 密码（私有比赛时必填）
+     * @param visibility 可见性：0=公开，1=密码，2=私有
+     * @param password 密码（密码比赛时必填）
      * @return 操作结果
      */
     @PreAuthorize("@ss.hasPermi('contest:contest:edit')")
@@ -138,23 +140,18 @@ public class AdminContestController {
         return Result.ok();
     }
 
-
     /**
      * 克隆比赛
      * @param id 源比赛ID
-     * @param title 新比赛标题
-     * @param visibility 访问权限：0=公开，1=私有
-     * @param password 密码（私有比赛时必填）
+     * @param request 新比赛标题、访问类型、密码和时间
      * @return 操作结果
      */
     @PreAuthorize("@ss.hasPermi('contest:contest:add')")
     @PostMapping("/{id}/clone")
     public Result<Void> cloneContest(@PathVariable("id") Long id,
-                                     @RequestParam("title") String title,
-                                     @RequestParam("visibility") Integer visibility,
-                                     @RequestParam(value = "password", required = false) String password) {
-        log.info("克隆比赛: id={}, title={}, visibility={}, hasPassword={}", id, title, visibility, password != null);
-        adminContestService.cloneContest(id, title, visibility, password);
+                                     @RequestBody @Validated CloneContestDTO request) {
+        log.info("克隆比赛: id={}", id);
+        adminContestService.cloneContest(id, request);
         return Result.ok();
     }
 
@@ -187,7 +184,8 @@ public class AdminContestController {
     }
 
     /**
-     * 批量添加题目到比赛（会将题目权限设置为比赛专用）
+     * 批量添加题目
+     * 仅普通比赛触发原题专属状态
      * @param contestId 比赛ID
      * @param problemIds 题目ID列表
      * @return 操作结果
@@ -221,7 +219,8 @@ public class AdminContestController {
     }
 
     /**
-     * 从比赛中移除题目（会将题目权限设置为私有）
+     * 从比赛中移除题目
+     * 仅普通比赛按剩余引用释放专属状态
      * @param contestId 比赛ID
      * @param problemIds 题目IDs
      * @return 操作结果

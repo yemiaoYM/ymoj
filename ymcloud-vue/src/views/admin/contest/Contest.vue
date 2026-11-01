@@ -59,6 +59,7 @@
             <el-form-item class="contest-field" label="开始时间" prop="startTime">
               <el-date-picker
                 v-model="contest.startTime"
+                :disabled="structureLocked"
                 type="datetime"
                 placeholder="选择开始时间"
                 style="width: 100%"
@@ -88,23 +89,24 @@
               </el-select>
             </el-form-item>
             <el-form-item class="contest-field" label="赛制模式" prop="mode">
-              <el-select v-model="contest.mode" style="width: 100%">
-                <el-option :value="0" label="ACM" />
-                <el-option :value="1" label="OI" />
-                <el-option :value="2" label="IOI" />
+              <el-select v-model="contest.mode" :disabled="structureLocked" style="width: 100%">
+                <el-option :value="CONTEST_MODE.ACM" label="ACM" />
+                <el-option :value="CONTEST_MODE.OI" label="OI" />
+                <el-option :value="CONTEST_MODE.IOI" label="IOI" />
               </el-select>
             </el-form-item>
             <el-form-item class="contest-field" label="访问权限" prop="visibility">
               <el-select v-model="contest.visibility" style="width: 100%">
-                <el-option :value="0" label="公开" />
-                <el-option :value="1" label="私有（需密码）" />
+                <el-option :value="CONTEST_VISIBILITY.PUBLIC" label="公开" />
+                <el-option :value="CONTEST_VISIBILITY.PASSWORD" label="密码" />
+                <el-option :value="CONTEST_VISIBILITY.PRIVATE" label="私有" />
               </el-select>
             </el-form-item>
           </x-flex>
-          <el-form-item v-if="contest.visibility === 1" label="比赛密码" prop="password">
+          <el-form-item v-if="contest.visibility === CONTEST_VISIBILITY.PASSWORD" label="比赛密码" prop="password">
             <el-input
               v-model="contest.password"
-              placeholder="请输入比赛密码（私有比赛必填）"
+              placeholder="请输入比赛密码（密码比赛必填）"
               show-password
               style="width: 100%; max-width: 400px"
             />
@@ -115,9 +117,6 @@
                 <el-radio :value="0">否</el-radio>
                 <el-radio :value="1">是</el-radio>
               </el-radio-group>
-            </el-form-item>
-            <el-form-item class="contest-field" label="允许结束后提交" prop="allowEndSubmit">
-              <el-switch v-model="contest.allowEndSubmit" />
             </el-form-item>
           </x-flex>
 
@@ -159,6 +158,7 @@
 </template>
 
 <script setup lang="ts">
+import { CONTEST_VISIBILITY, CONTEST_MODE } from '@/constants/contest';
 //import
 import { computed, ref, defineAsyncComponent, watch, nextTick, onBeforeUnmount } from "vue";
 import { ElMessage } from "element-plus";
@@ -189,6 +189,7 @@ const canEdit = computed(() => userStore.hasEveryPermission([
   mode.value === 'edit' ? 'contest:contest:edit' : 'contest:contest:add',
 ]));
 const loadFailed = ref(false);
+const structureLocked = ref(false);
 const formRef = ref<FormInstance>();
 const descriptionEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
 const mode = ref('add');
@@ -238,11 +239,11 @@ const rules: FormRules<ContestForm> = {
   password: [
     { 
       required: true, 
-      message: "私有比赛必须设置密码", 
+      message: "密码比赛必须设置密码",
       trigger: "blur",
       validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
-        if (contest.value.visibility === 1 && !value) {
-          callback(new Error("私有比赛必须设置密码"));
+        if (contest.value.visibility === CONTEST_VISIBILITY.PASSWORD && !value) {
+          callback(new Error("密码比赛必须设置密码"));
         } else {
           callback();
         }
@@ -259,7 +260,6 @@ type ContestForm = {
   title: string;
   image: string | null;
   description: string;
-  sourceId: number;
   rated: number;
   mode: number;
   style: number;
@@ -267,7 +267,6 @@ type ContestForm = {
   password: string;
   startTime: string | null;
   endTime: string | null;
-  allowEndSubmit: boolean;
 };
 type ContestDraft = Omit<ContestForm, 'password'>;
 
@@ -277,15 +276,13 @@ function createForm(): ContestForm {
     title: '',
     image: null,
     description: '',
-    sourceId: 0,
     rated: 0,
-    mode: 0,
+    mode: CONTEST_MODE.ACM,
     style: 0,
-    visibility: 0,
+    visibility: CONTEST_VISIBILITY.PUBLIC,
     password: '',
     startTime: '',
     endTime: '',
-    allowEndSubmit: false,
   };
 }
 
@@ -305,8 +302,7 @@ const localDraft = useLocalDraft<ContestDraft>(
       && (value.image === null || typeof value.image === 'string')
       && ['title', 'description'].every(key => typeof value[key] === 'string')
       && ['startTime', 'endTime'].every(key => value[key] === null || typeof value[key] === 'string')
-      && ['sourceId', 'rated', 'mode', 'style', 'visibility'].every(key => typeof value[key] === 'number')
-      && typeof value.allowEndSubmit === 'boolean';
+      && ['rated', 'mode', 'style', 'visibility'].every(key => typeof value[key] === 'number');
   },
 );
 
@@ -348,7 +344,7 @@ const handleSubmitContest = async () => {
     if (current !== revision) return false;
     if (await editor.uploadImages() === false || current !== revision) return false;
     const { id, ...fields } = contest.value;
-    const submitData = { ...fields, password: fields.visibility === 1 ? fields.password : null };
+    const submitData = { ...fields, password: fields.visibility === CONTEST_VISIBILITY.PASSWORD ? fields.password : null };
     const res = mode.value === 'edit' && id
       ? await updateAdminContest(id, submitData)
       : await addAdminContest(submitData);
@@ -375,12 +371,12 @@ const loadContestData = async () => {
     const res = await getAdminContestById(id);
     if (current !== revision) return;
     const data = res.data.data;
+    structureLocked.value = data.structureLocked;
     contest.value = {
       id: data.id,
       title: data.title,
       image: data.image ?? null,
       description: data.description,
-      sourceId: data.sourceId,
       rated: data.rated,
       mode: data.mode,
       style: data.style,
@@ -388,7 +384,6 @@ const loadContestData = async () => {
       password: data.password ?? '',
       startTime: data.startTime,
       endTime: data.endTime,
-      allowEndSubmit: data.allowEndSubmit,
     };
   } catch {
     if (current === revision) loadFailed.value = true;
@@ -408,6 +403,7 @@ watch(() => [route.name, route.params.id], () => {
   uploading.value = false;
   pendingUpload.value = null;
   contest.value = createForm();
+  structureLocked.value = false;
   if (mode.value === 'edit') {
     loadContestData();
   } else if (route.name === 'AdminContestAdd') {
