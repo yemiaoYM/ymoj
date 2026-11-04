@@ -197,7 +197,7 @@ watch(
   line-height: 1.6;
   width: 100%;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px var(--ym-profile-shadow);
   border: none;
 }
 
@@ -225,7 +225,7 @@ watch(
 }
 
 .profile-tabs :deep(.el-tabs__item:not(.is-active)) {
-  background-color: #f7f7fa;
+  background-color: var(--ym-profile-fill);
 }
 
 .last-login-container {
@@ -238,7 +238,7 @@ watch(
   flex: 1;
   color: white;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px var(--ym-profile-shadow);
 
   span {
     font-size: 17px;

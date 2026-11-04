@@ -6,6 +6,7 @@
           <x-flex vertical align="center" :size="8">
             <BrandLogo class="login-logo" />
             <h2 class="login-title">管理后台登录</h2>
+            <ThemeSelect />
           </x-flex>
         </template>
         <el-form
@@ -78,6 +79,7 @@
 </template>
 
 <script setup lang="ts">
+import ThemeSelect from '@/components/common/ThemeSelect.vue';
 import { ref, onMounted } from 'vue';
 import { User, Lock, Key } from '@element-plus/icons-vue';
 import type { LoginDTO } from '@/type/types';
@@ -184,14 +186,14 @@ const refreshCaptcha = () => {
 
 .login-form {
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--ym-surface);
   width: 400px;
   padding: 25px 25px 5px 25px;
 }
 .title {
   margin: 0 auto 30px auto;
   text-align: center;
-  color: #707070;
+  color: var(--ym-login-heading);
 }
 .captcha-img {
   width: 33%;
@@ -213,5 +215,8 @@ const refreshCaptcha = () => {
   font-family: Arial, serif;
   font-size: 12px;
   letter-spacing: 1px;
+}
+html.dark .login-container {
+  background: var(--ym-surface-page);
 }
 </style>

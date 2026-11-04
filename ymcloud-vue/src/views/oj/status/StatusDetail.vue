@@ -49,7 +49,7 @@
           <el-descriptions-item label="题目">
             <span
               @click="goProblem(submissionData.displayId)"
-              style="color: #409eff; cursor: pointer; font-weight: bold"
+              style="color: var(--ym-link); cursor: pointer; font-weight: bold"
             >
               {{
                 submissionData.displayId + " - " + submissionData.problemTitle
@@ -59,7 +59,7 @@
           <el-descriptions-item label="用户">
             <span
               @click="goUser(submissionData.username)"
-              style="color: #409eff; cursor: pointer; font-weight: bold"
+              style="color: var(--ym-link); cursor: pointer; font-weight: bold"
             >
               {{ submissionData.username }}
             </span>
@@ -120,7 +120,7 @@
             <x-flex justify="center" align="center" vertical :size="0">
               <span style="font-weight: bold">Test #{{ judgeCase.caseIndex }}</span>
               <span style="font-size: 20px; font-weight: bold">{{ judgeCase.status }}</span>
-              <span style="font-size: 15px; font-weight: bold; color: #666">
+              <span style="font-size: 15px; font-weight: bold; color: var(--ym-muted-text)">
                 {{ formatSubmissionTime(judgeCase.time) }} / {{ formatSubmissionMemory(judgeCase.memory) }}
               </span>
               <x-flex align="center">
@@ -320,7 +320,7 @@ const copyCode = async () => {
   font-size: 15px;
   font-family: Monaco, Consolas, monospace;
   white-space: pre-wrap;
-  color: #333;
+  color: var(--ym-output-text);
   line-height: 1.5;
 }
 .test-case-list {
@@ -329,18 +329,18 @@ const copyCode = async () => {
 
 .test-case-box {
   min-width: 0;
-  border: 1px solid #f56c6c;
-  border-left: 3px solid #f56c6c;
+  border: 1px solid var(--ym-danger-color);
+  border-left: 3px solid var(--ym-danger-color);
   border-radius: 5px;
   padding: 15px 16px;
-  color: #f56c6c;
-  background-color: #fff;
+  color: var(--ym-danger-color);
+  background-color: var(--ym-surface);
   text-align: center;
 }
 
 .test-case-box.AC {
-  border-color: #67c23a;
-  color: #67c23a;
+  border-color: var(--ym-success-color);
+  color: var(--ym-success-color);
 }
 
 @media screen and (min-width: 1024px) {

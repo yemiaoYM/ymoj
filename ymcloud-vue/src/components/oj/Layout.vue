@@ -28,7 +28,7 @@ const CommonHeader = defineAsyncComponent(() => import('@/components/oj/CommonHe
   min-height: 0;
   overflow: hidden;
   padding: 0;
-  background-color: #eff3f5;
+  background-color: var(--ym-page);
 }
 .el-header{
   padding: 0;

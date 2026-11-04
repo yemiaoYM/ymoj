@@ -2,6 +2,7 @@
   <div style="width: 100%; height: 100%;">
     <calendar-heatmap
         :values="processedValues"
+        :dark-mode="theme.isDark"
         :end-date="new Date(endDate)"
         tooltip-unit="提交"
         :locale="locale"
@@ -13,6 +14,7 @@
 </template>
 
 <script lang="ts">
+import { useThemeStore } from '@/stores/theme';
 import { defineComponent, type PropType, computed } from 'vue';
 import 'vue3-calendar-heatmap/dist/style.css';
 import { CalendarHeatmap, type CalendarItem } from 'vue3-calendar-heatmap';
@@ -38,6 +40,7 @@ export default defineComponent({
     },
   },
   setup(props) {
+    const theme = useThemeStore();
     const processedValues = computed(() => {
         return props.values.map(v => ({...v, count: v.count || 0}))
     })
@@ -60,6 +63,7 @@ export default defineComponent({
 
 
     return {
+      theme,
       locale,
       tooltipFormatter,
       processedValues,

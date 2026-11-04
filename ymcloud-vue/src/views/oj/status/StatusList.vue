@@ -87,7 +87,7 @@
               <template #default="{ row }">
                 <span
                   @click="handToProblem(row.displayId)"
-                  style="cursor: pointer; color: #409eff"
+                  style="cursor: pointer; color: var(--ym-link)"
                 >
                   {{ row.displayId + " " + row.problemTitle }}
                 </span>
@@ -131,7 +131,7 @@
               <template #default="{ row }">
                 <el-tooltip content="查看提交详情" placement="top">
                   <span
-                    style="cursor: pointer; color: #409eff"
+                    style="cursor: pointer; color: var(--ym-link)"
                     @click="handSubmissionDetail(row.submissionId)"
                     >{{ row.language }}</span
                   >
@@ -142,7 +142,7 @@
               <template #default="{ row }">
                 <span
                   @click="handToUserInfo(row.username)"
-                  style="cursor: pointer; color: #409eff"
+                  style="cursor: pointer; color: var(--ym-link)"
                 >
                   {{ row.username }}
                 </span>
@@ -381,20 +381,20 @@ onBeforeUnmount(() => { requestGeneration++; });
 .filter-label {
   font-size: 14px;
   font-weight: 600;
-  color: #606266;
+  color: var(--ym-regular-text);
   margin-right: 8px;
 }
 
 ::v-deep(.el-table__header th) {
   font-size: 15px;
-  color: #666;
+  color: var(--ym-muted-text);
   font-weight: bold;
   text-align: center;
 }
 
 ::v-deep(.el-table__body .el-table__cell) {
   font-size: 15px;
-  color: #000305;
+  color: var(--ym-table-link);
   font-family: Consolas,serif;
   text-align: center;
 }

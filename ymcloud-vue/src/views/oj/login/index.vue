@@ -72,6 +72,7 @@
             <span>返回首页</span>
           </x-flex>
         </el-link>
+        <ThemeSelect />
         <span>YMOJ 喵语云 · 在线评测平台</span>
       </x-flex>
     </x-flex>
@@ -80,6 +81,7 @@
 
 <script lang="ts" setup>
 //import
+import ThemeSelect from '@/components/common/ThemeSelect.vue';
 import { ref, defineAsyncComponent, onMounted } from 'vue';
 import { ArrowRight, Back, Reading, Trophy } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
@@ -139,22 +141,22 @@ onMounted(() => {
 .login-page {
   min-height: 100dvh;
   padding: 20px 24px;
-  background: #f8f9fb url('@/assets/image/auth-background.png') center / cover no-repeat;
+  background: var(--ym-auth-page) url('@/assets/image/auth-background.png') center / cover no-repeat;
 }
 
 .login-card {
   width: 1000px;
   max-width: 100%;
   min-height: 632px;
-  background: #fff;
-  box-shadow: 0 12px 45px rgba(35, 52, 74, 0.12);
+  background: var(--ym-surface);
+  box-shadow: 0 12px 45px var(--ym-auth-shadow);
 }
 
 .brand-panel {
   width: 46%;
   padding: 32px 44px 24px;
-  color: #fff;
-  background: #50647c;
+  color: var(--ym-auth-foreground);
+  background: var(--ym-auth-panel);
 }
 
 .login-logo {
@@ -174,7 +176,7 @@ onMounted(() => {
 }
 
 .brand-panel p {
-  color: #e1e7ef;
+  color: var(--ym-auth-description);
   font-size: 16px;
   line-height: 1.9;
 }
@@ -187,21 +189,21 @@ onMounted(() => {
 .admin-entry {
   margin-top: auto;
   padding-top: 20px;
-  border-top: 1px solid #ffffff38;
+  border-top: 1px solid var(--ym-auth-divider);
   min-height: 48px;
-  color: #fff;
+  color: var(--ym-auth-foreground);
   font-size: 16px;
   text-decoration: none;
 }
 
 .admin-entry small {
   margin-left: 12px;
-  color: #d4dee9;
+  color: var(--ym-auth-caption);
   font-size: 14px;
 }
 
 .admin-entry:hover {
-  color: #c6e4ff;
+  color: var(--ym-auth-hover);
 }
 
 .form-panel {
@@ -268,5 +270,8 @@ onMounted(() => {
   .explore-links {
     margin-top: 24px;
   }
+}
+html.dark .login-page {
+  background: var(--ym-surface-page);
 }
 </style>

@@ -179,7 +179,7 @@ const handUpdateUserInfo=async ()=>{
         width: 320px;
         margin: 0 auto;
         .el-icon--upload{
-            color: #409eff;
+            color: var(--ym-link);
         }
     }
     .user-avatar{
@@ -197,7 +197,7 @@ const handUpdateUserInfo=async ()=>{
 }
 .md-editor{
     border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px var(--ym-header-shadow);
 }
 :deep(.el-form-item__label) {
     font-size: 12px;

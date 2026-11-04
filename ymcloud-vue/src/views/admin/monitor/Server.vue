@@ -3,7 +3,7 @@
     class="server-container" 
     v-loading.fullscreen.lock="loading"
     element-loading-text="加载服务器配置中..."
-    element-loading-background="rgba(0, 0, 0, 0.8)"
+    element-loading-background="var(--ym-loading-overlay)"
     >
     <el-row :gutter="10">
       <el-col :span="12" class="card-box">

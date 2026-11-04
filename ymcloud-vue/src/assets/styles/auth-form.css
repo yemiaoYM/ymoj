@@ -36,7 +36,8 @@
 }
 
 .auth-form :deep(.el-input__wrapper) {
-  background: #f5f7fb;
+  --el-input-bg-color: var(--ym-auth-fill);
+  background: var(--el-input-bg-color);
 }
 
 .auth-form :deep(.el-input__inner) {
@@ -44,12 +45,12 @@
 }
 
 .auth-form :deep(.el-input__inner::placeholder) {
-  color: #858c97;
+  color: var(--ym-auth-placeholder);
   font-size: 14px;
 }
 
 .auth-form :deep(.el-input__prefix) {
-  color: #747c89;
+  color: var(--ym-auth-muted);
 }
 
 .captcha-row,

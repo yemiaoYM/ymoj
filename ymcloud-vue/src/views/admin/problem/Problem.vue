@@ -3,7 +3,7 @@
     <el-card>
       <!-- 标题和操作按钮 -->
       <template #header>
-        <span style="font-size: 22px; font-weight: 600; color: #409eff">
+        <span style="font-size: 22px; font-weight: 600; color: var(--ym-link)">
           {{ mode === 'edit' ? '编辑题目' : '新增题目' }}
         </span>
       </template>

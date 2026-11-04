@@ -28,6 +28,7 @@
           <el-tag effect="dark" size="large">主题</el-tag>
           <el-select
             id="theme-select"
+            aria-label="代码编辑器配色"
             v-model="selectedTheme"
             placeholder="选择当前主题"
             @change="updateTheme"
@@ -168,8 +169,8 @@
                 <x-flex v-if="judgeResult.errorMessage">
                   <span style="flex: 1;text-align: center;">错误信息</span>
                   <span style="flex: 10;
-                              background-color: #f5f5f5;
-                              border: 1px solid #ccc;
+                              background-color: var(--ym-editor-fill);
+                              border: 1px solid var(--ym-editor-border);
                               border-radius: 5px;
                               padding: 5px 10px;"
                   >
@@ -262,12 +263,13 @@
 
 <script lang="ts">
 //import
-import { onMounted, onUnmounted, ref, type PropType } from 'vue';
+import { onMounted, onUnmounted, ref, watch, type PropType } from 'vue';
 import { ElMessage,ElMessageBox } from 'element-plus';
 import { TimeOutline,HardwareChipSharp,Bug } from '@vicons/ionicons5';
 import type { ProblemCaseVO,LanguageVO,EditorCache,JudgeResult } from '@/type/types';
 import { getStatusType,formatSubmissionTime,formatSubmissionMemory } from '@/utils/utils';
 import { useUserStore } from '@/stores/user';
+import { useThemeStore } from '@/stores/theme';
 import Storage from '@/utils/storage';
 import { submitJudge,testJudge,getJudgeStatus } from '@/api/api';
 
@@ -321,7 +323,7 @@ export default {
       },
       theme: {
         type: String,
-        default: "solarized"
+        default: "system"
       },
       problemId: {
         //problemId是题目的唯一标识，是展示displayId
@@ -372,10 +374,11 @@ export default {
   //声明事件
   emits: ['update:codeValue'],
   setup(props,{emit}) {
+      const themeStore = useThemeStore();
       const cmOptions = ref({
           //语言及语法模式
           mode: 'text/x-csrc',
-          theme: 'solarized',
+          theme: themeStore.isDark ? 'monokai' : 'solarized',
           //显示行号
           line: true,
           lineNumbers: true,
@@ -396,6 +399,9 @@ export default {
       const userStore=useUserStore();
       //当前编辑器配置
       const selectedTheme=ref(props.theme);
+      watch([selectedTheme, () => themeStore.resolvedTheme], ([value]) => {
+          cmOptions.value.theme = value === 'system' ? (themeStore.isDark ? 'monokai' : 'solarized') : value;
+      }, { immediate: true });
       const selectedLanguage=ref(props.language);
       const codeValue = ref(props.code);
       //自测输入
@@ -423,6 +429,7 @@ export default {
 
       //themes列表
       const themes = [
+          { label: "跟随外观", value: "system" },
           { label: "solarized", value: "solarized" },
           { label: "idea", value: "idea" },
           { label: "monokai", value: "monokai" },
@@ -467,7 +474,7 @@ export default {
         codeValue.value=props.code;
         const theme = themes.find(e => e.value === props.theme);
         if(theme){
-          cmOptions.value.theme = theme.value;
+          cmOptions.value.theme = theme.value === 'system' ? (themeStore.isDark ? 'monokai' : 'solarized') : theme.value;
           selectedTheme.value = theme.value;
         }
         const lang = props.languages.find(e => e.name === props.language);
@@ -485,7 +492,7 @@ export default {
 
       //更新主题
       const updateTheme=(value:string)=>{
-          cmOptions.value.theme=value;
+          cmOptions.value.theme=value === 'system' ? (themeStore.isDark ? 'monokai' : 'solarized') : value;
           updateEditor();
       }
       
@@ -731,15 +738,15 @@ export default {
   border-radius: 8px;
   padding: 10px;
   box-sizing: border-box;
-  border: 1px solid #ccc;
-  background-color: #fff;
+  border: 1px solid var(--ym-editor-border);
+  background-color: var(--ym-surface);
 }
 .editor-main {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #f5f7fa;
+  background: var(--ym-editor-panel);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -756,7 +763,7 @@ export default {
   height: 12px;
   border-radius: 50%;
   vertical-align: middle;
-  background-color: #fff;
+  background-color: var(--ym-surface);
 }
 :deep(.result-container .el-alert__title) {
   font-size: 22px;
@@ -766,6 +773,6 @@ export default {
     margin-left: 10px;
 }
 :deep(.el-textarea__inner[readonly]){
-    background-color: #f7f8f9;
+    background-color: var(--ym-readonly-fill);
 }
 </style>

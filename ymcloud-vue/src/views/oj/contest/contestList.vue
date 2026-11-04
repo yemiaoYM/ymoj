@@ -32,7 +32,7 @@
               fit="contain"
               lazy
               :alt="competition.title"
-              :src="competition.image || defaultContest"
+              :src="competition.image || (theme.isDark ? defaultContestDark : defaultContest)"
             />
             <x-flex class="contest-info" vertical :size="14">
               <x-flex align="center" justify="space-between" :size="12" :wrap="false">
@@ -111,8 +111,11 @@ import type { ContestTableVO } from '@/type/types';
 import { getContestTableList } from '@/api/api';
 import { formatContestMode, formatContestStyle, formatContestDuration } from '@/utils/utils';
 import defaultContest from '@/assets/image/defaultContest.jpg';
+import defaultContestDark from '@/assets/image/defaultContest-dark.webp';
+import { useThemeStore } from '@/stores/theme';
 
 const router = useRouter();
+const theme = useThemeStore();
 const competitions = ref<ContestTableVO[]>([]);
 const loading = ref(false);
 const loaded = ref(false);
@@ -175,7 +178,7 @@ const handleSearch = () => {
   width: min(440px, 100%);
   height: 48px;
   --el-border-radius-base: 10px;
-  --el-input-border-color: #dce7fa;
+  --el-input-border-color: var(--ym-search-border);
 }
 
 .contest-search :deep(.el-input__wrapper) {

@@ -3,7 +3,7 @@
     <el-card>
       <!-- 标题和操作按钮 -->
       <template #header>
-        <span style="font-size: 22px; font-weight: 600; color: #409eff">
+        <span style="font-size: 22px; font-weight: 600; color: var(--ym-link)">
           {{ mode === 'edit' ? '编辑比赛' : '创建比赛' }}
         </span>
       </template>
@@ -32,7 +32,7 @@
                 class="contest-cover"
                 fit="cover"
                 alt="比赛封面"
-                :src="contest.image || defaultContest"
+                :src="contest.image || (theme.isDark ? defaultContestDark : defaultContest)"
               />
               <x-flex vertical :size="8">
                 <x-flex v-if="canEdit" align="center">
@@ -168,8 +168,10 @@ import { useAsyncChange } from "@/composables/useAsyncChange";
 import { useRoute, useRouter } from "vue-router";
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 import defaultContest from '@/assets/image/defaultContest.jpg';
+import defaultContestDark from '@/assets/image/defaultContest-dark.webp';
 import { uploadContestImage } from '@/api/contest';
 import { useUserStore } from '@/stores/user';
+import { useThemeStore } from '@/stores/theme';
 import { addAdminContest, updateAdminContest, getAdminContestById } from "@/api/api";
 
 //异步导入markdown
@@ -185,6 +187,7 @@ const { pending: saving, beforeChange: saveContest } = useAsyncChange();
 const uploading = ref(false);
 const pendingUpload = ref<Blob | null>(null);
 const userStore = useUserStore();
+const theme = useThemeStore();
 const canEdit = computed(() => userStore.hasEveryPermission([
   mode.value === 'edit' ? 'contest:contest:edit' : 'contest:contest:add',
 ]));

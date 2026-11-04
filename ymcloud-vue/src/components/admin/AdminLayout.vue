@@ -106,16 +106,16 @@ onBeforeUnmount(() => media.removeEventListener('change', onViewportChange));
   min-height: 0;
   overflow: hidden;
   padding: 0;
-  background: #eff3f5;
+  background: var(--ym-page);
 }
 /* 后台列表沿用用户、题目列表的表头；列对齐仍由 el-table-column 决定。 */
 .admin-main :deep(.el-table) {
-  --el-table-header-bg-color: #f8f8f9;
+  --el-table-header-bg-color: var(--ym-table-header);
 }
 .admin-main :deep(.el-table__header-wrapper th) {
   word-break: break-word;
   background-color: var(--el-table-header-bg-color);
-  color: #515a6e;
+  color: var(--ym-table-heading);
   height: 40px;
   font-size: 13px;
 }

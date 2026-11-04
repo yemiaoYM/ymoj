@@ -7,8 +7,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 /**
- * @PackageName: com.ymcloud.common.utils
- * @ClassName: IpUtil
  * @Author: Yemiao
  * @CreateTime: 2025-07-19  12:08
  * @Description: 获取客户端IP工具类，支持多级代理
@@ -95,8 +93,7 @@ public class IpUtils {
     public static String getHostName() {
         try {
             return InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException e) {
-        }
+        } catch (UnknownHostException e) {}
         return "未知";
     }
 
@@ -108,8 +105,7 @@ public class IpUtils {
     public static String getHostIp() {
         try {
             return InetAddress.getLocalHost().getHostAddress();
-        } catch (UnknownHostException e) {
-        }
+        } catch (UnknownHostException e) {}
         return "127.0.0.1";
     }
 

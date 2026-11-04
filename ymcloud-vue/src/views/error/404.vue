@@ -189,7 +189,7 @@ const handleToBack = () => {
   font-size: 32px;
   font-weight: bold;
   line-height: 40px;
-  color: #1482f0;
+  color: var(--ym-error-link);
   opacity: 0;
   margin-bottom: 20px;
   animation-name: slideUp;
@@ -199,7 +199,7 @@ const handleToBack = () => {
 .bullshit__headline {
   font-size: 20px;
   line-height: 24px;
-  color: #222;
+  color: var(--ym-error-heading);
   font-weight: bold;
   opacity: 0;
   margin-bottom: 10px;
@@ -211,7 +211,7 @@ const handleToBack = () => {
 .bullshit__info {
   font-size: 13px;
   line-height: 21px;
-  color: grey;
+  color: var(--ym-error-description);
   opacity: 0;
   margin-bottom: 30px;
   animation-name: slideUp;

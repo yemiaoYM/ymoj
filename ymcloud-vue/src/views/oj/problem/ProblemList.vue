@@ -82,7 +82,7 @@
           </el-table-column>
           <el-table-column min-width="250" label="题目">
             <template #default="{ row }">
-              <span @click="doProblem(row.problemId)" style="color: #409EFF; cursor: pointer;font-weight: bold;">
+              <span @click="doProblem(row.problemId)" style="color: var(--ym-link); cursor: pointer;font-weight: bold;">
                 {{ row.title }}
               </span>
             </template>
@@ -339,7 +339,7 @@ watch(
 
 .problem-search {
   --el-border-radius-base: 10px;
-  --el-input-border-color: #dce7fa;
+  --el-input-border-color: var(--ym-search-border);
   height: 48px;
 }
 
@@ -349,7 +349,7 @@ watch(
 
 .problem-search :deep(.el-input__prefix) {
   margin-right: 4px;
-  color: #7186a6;
+  color: var(--ym-search-icon);
   font-size: 20px;
 }
 

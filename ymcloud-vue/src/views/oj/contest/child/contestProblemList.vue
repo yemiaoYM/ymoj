@@ -80,6 +80,6 @@ const handleCellClick = (row: any) => {
 }
 
 :deep(.el-table__body .el-table__cell) {
-  color: #000305;
+  color: var(--ym-table-link);
 }
 </style>

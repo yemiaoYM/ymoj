@@ -17,6 +17,7 @@
     >
       <div ref="contentRef">
         <MdPreview
+          :theme="theme.resolvedTheme"
           preview-theme="cyanosis"
           :id="`announcement-${announcement.id}`"
           :model-value="announcement.content"
@@ -35,6 +36,7 @@
 </template>
 
 <script setup lang="ts">
+import { useThemeStore } from '@/stores/theme';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { MdPreview } from 'md-editor-v3';
 import { sanitizeMarkdown } from '@/utils/markdown';
@@ -43,6 +45,7 @@ import 'md-editor-v3/lib/preview.css';
 
 defineProps<{ announcement: Announcement }>();
 
+const theme = useThemeStore();
 const articleRef = ref<HTMLElement>();
 const contentRef = ref<HTMLElement>();
 const expanded = ref(false);

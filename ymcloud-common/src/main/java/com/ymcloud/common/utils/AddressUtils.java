@@ -9,8 +9,6 @@ import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * @PackageName: com.ymcloud.common.utils
- * @ClassName: AddressUtils
  * @Author: Yemiao
  * @CreateTime: 2025-09-14  22:06
  * @Description: 获取地址类
@@ -38,7 +36,7 @@ public class AddressUtils {
             JSONObject obj = JSON.parseObject(rspStr);
             return obj.getString("addr");
         } catch (Exception e) {
-            log.error("获取地理位置异常 {}", ip, e);
+
         }
         return UNKNOWN;
     }

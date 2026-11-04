@@ -502,8 +502,8 @@ const handleClose = () => {
 
 :deep(.el-table__header-wrapper th) {
   word-break: break-word;
-  background-color: #f8f8f9;
-  color: #515a6e;
+  background-color: var(--ym-table-header);
+  color: var(--ym-table-heading);
   height: 40px;
   font-size: 13px;
 }

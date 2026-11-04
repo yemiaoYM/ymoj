@@ -1,6 +1,7 @@
 <template>
   <div class="markdown-editor" v-loading="uploading" element-loading-text="正在上传正文图片" style="width: 100%;height: 100%;">
-    <MdEditor 
+    <MdEditor
+      :theme="theme.resolvedTheme"
       ref="editorRef"
       v-model="modelValue" 
       :toolbars="toolbars"
@@ -88,6 +89,7 @@
 </template>
 
 <script>
+import { useThemeStore } from '@/stores/theme';
 import { ref,defineComponent,watch,onBeforeUnmount,nextTick } from 'vue';
 import { DropdownToolbar, MdEditor } from 'md-editor-v3';
 import {
@@ -124,6 +126,7 @@ export default defineComponent({
   },
   emits: ["update:content"],
   setup(props, { emit }) {
+    const theme = useThemeStore();
     //配置
     const toolbars = [
       0,
@@ -306,6 +309,7 @@ export default defineComponent({
     });
 
     return {
+      theme,
       sanitizeMarkdown,
       modelValue,
       toolbars,

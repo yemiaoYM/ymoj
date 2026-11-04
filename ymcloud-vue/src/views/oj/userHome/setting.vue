@@ -56,6 +56,6 @@ const activeName = ref<string>('UserInfo');
 :deep(.el-collapse-item__header)  {
   border-radius: 4px;
   font-size: 18px;
-  color: #409eff;
+  color: var(--ym-link);
 }
 </style>

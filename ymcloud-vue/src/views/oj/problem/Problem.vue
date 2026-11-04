@@ -155,7 +155,7 @@
                             <el-table-column prop="language" label="语言" align="center">
                                 <template #default="{ row }">
                                     <el-tooltip content="查看提交详情" placement="top" >
-                                    <span style="color: #409EFF; cursor: pointer;" @click="handSubmissionDetail(row.submissionId)">{{row.language}}</span>
+                                    <span style="color: var(--ym-link); cursor: pointer;" @click="handSubmissionDetail(row.submissionId)">{{row.language}}</span>
                                     </el-tooltip>
                                 </template>
                             </el-table-column>
@@ -263,7 +263,7 @@ const pageSize=ref<number>(10);
 const total=ref<number>(0);
 const problemLoading=ref<boolean>(true);
 const language=ref<string>('C++');
-const theme=ref<string>('solarized');
+const theme=ref<string>('system');
 
 //methods
 //监听屏幕变化
@@ -411,22 +411,22 @@ const copyText = async (text: string) => {
     height: calc(100vh - 60px);
 }
 .content-head-detail{
-    border: 1px solid #dedede;
-    background-color: #fafafa;
+    border: 1px solid var(--ym-sample-border);
+    background-color: var(--ym-code-surface);
     border-radius: 8px;
-    border-left: 3px solid #51a2f4;
+    border-left: 3px solid var(--ym-sample-accent);
     padding: 20px;
 }
 .problem-card {
-    border-color: #efeff5;
+    border-color: var(--ym-problem-border);
     border-radius: 3px;
-    color: #333639;
+    color: var(--ym-problem-text);
     line-height: 1.6;
 }
 :deep(.problem-card > .el-card__header) {
     padding: 19px 24px 20px;
     border-bottom: 0;
-    color: #7cb9f7;
+    color: var(--ym-problem-link-hover);
     font-size: 18px;
     font-weight: 500;
 }
@@ -445,7 +445,7 @@ const copyText = async (text: string) => {
 :deep(.problem-cases .el-collapse-item + .el-collapse-item) {
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid #efeff5;
+    border-top: 1px solid var(--ym-problem-border);
 }
 :deep(.problem-cases .el-collapse-item__content) {
     padding: 16px 0 0;

@@ -33,7 +33,6 @@
           </el-button>
           <el-button :icon="Refresh" :loading="loading" :disabled="!!busyKey" @click="loadConfigs">刷新</el-button>
         </x-flex>
-        <p class="storage-description">待配置的行仅是服务示例，填写并保存后才建立配置。</p>
         <el-alert
           v-if="!loaded && !loading"
           title="存储配置加载失败，请重试"

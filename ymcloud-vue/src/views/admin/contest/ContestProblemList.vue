@@ -3,7 +3,7 @@
     <x-flex vertical :size="16">
       <el-card>
         <template #header>
-          <span style="font-size: 18px; font-weight: 600; color: #409eff;">
+          <span style="font-size: 18px; font-weight: 600; color: var(--ym-link);">
             比赛题目管理
           </span>
         </template>
@@ -519,8 +519,8 @@ const handleDeleteProblem = async (row?: AdminContestProblemVO) => {
 
 :deep(.el-table__header-wrapper th) {
   word-break: break-word;
-  background-color: #f8f8f9;
-  color: #515a6e;
+  background-color: var(--ym-table-header);
+  color: var(--ym-table-heading);
   height: 40px;
   font-size: 13px;
   text-align: center;

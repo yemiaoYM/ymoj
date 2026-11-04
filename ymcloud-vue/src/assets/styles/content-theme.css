@@ -1,0 +1,110 @@
+/*
+ * Markdown、代码高亮与热力图的暗色适配，不修改内容排版
+ */
+html.dark .md-editor,
+html.dark .md-editor-modal-container {
+  --md-color: var(--ym-text-primary);
+  --md-bk-color: var(--ym-surface-card);
+  --md-bk-color-outstand: var(--ym-surface-muted);
+  --md-border-color: var(--ym-border);
+  --md-border-hover-color: var(--ym-border-control);
+  --md-border-active-color: var(--ym-primary);
+  --md-hover-color: var(--ym-text-primary);
+  --md-bk-hover-color: var(--ym-surface-hover);
+}
+
+/*
+ * 只读正文透出卡片底色，避免在题面和公告中出现独立的深色矩形
+ */
+html.dark .md-editor-previewOnly {
+  --md-bk-color: transparent;
+}
+
+html.dark .md-editor[data-theme=dark] .cyanosis-theme {
+  --md-theme-base-color: var(--ym-text-primary);
+  --md-theme-title-color: var(--ym-text-primary);
+  --md-theme-strong-color: var(--ym-primary);
+  --md-theme-em-color: var(--ym-warning);
+  --md-theme-del-color: var(--ym-text-secondary);
+  --md-theme-link-color: var(--ym-primary);
+  --md-theme-linkh-color: var(--ym-primary-hover);
+  --md-theme-border-color: var(--ym-border);
+  --md-theme-border-color-2: var(--ym-border);
+  --md-theme-bg-color: var(--ym-surface-card);
+  --md-theme-blockquote-color: var(--ym-text-regular);
+  --md-theme-blockquote-bg-color: var(--ym-surface-muted);
+  --md-theme-code-color: var(--ym-primary);
+  --md-theme-code-bg-color: var(--ym-surface-muted);
+  --md-theme-code-block-bg-color: var(--ym-surface-muted);
+  --md-theme-code-line-number-color: var(--ym-text-secondary);
+  --md-theme-table-border-color: var(--ym-border);
+  --md-theme-table-th-color: var(--ym-surface-hover);
+  --md-theme-table-tht-color: var(--ym-text-primary);
+  --md-theme-table-tr-nc-color: var(--ym-surface-muted);
+  --md-theme-table-trh-color: var(--ym-surface-hover);
+}
+
+html.dark .md-editor .hljs-comment,
+html.dark .md-editor .hljs-quote {
+  color: var(--ym-code-comment);
+}
+
+html.dark .md-editor .hljs-keyword,
+html.dark .md-editor .hljs-doctag {
+  color: var(--ym-code-keyword);
+}
+
+html.dark .md-editor .hljs-string,
+html.dark .md-editor .hljs-regexp {
+  color: var(--ym-code-string);
+}
+
+html.dark .md-editor .hljs-number,
+html.dark .md-editor .hljs-type,
+html.dark .md-editor .hljs-variable,
+html.dark .md-editor .hljs-attr {
+  color: var(--ym-code-number);
+}
+
+html.dark .md-editor .hljs-title,
+html.dark .md-editor .hljs-meta,
+html.dark .md-editor .hljs-symbol {
+  color: var(--ym-code-title);
+}
+
+html.dark .md-editor .hljs-built_in,
+html.dark .md-editor .hljs-title.class_ {
+  color: var(--ym-code-type);
+}
+
+html.dark .md-editor .hljs-literal {
+  color: var(--ym-code-literal);
+}
+
+html.dark .md-editor .hljs-subst,
+html.dark .md-editor .hljs-name {
+  color: var(--ym-code-name);
+}
+
+html.dark .md-editor .cyanosis-theme details > p {
+  color: var(--ym-text-regular);
+}
+
+html.dark .vch__container .vch__wrapper text {
+  fill: var(--ym-text-secondary);
+}
+
+html.dark .CodeMirror-hints {
+  color: var(--ym-text-primary);
+  background: var(--ym-surface-overlay);
+  border-color: var(--ym-border-control);
+}
+
+html.dark .CodeMirror-hint {
+  color: var(--ym-text-primary);
+}
+
+html.dark li.CodeMirror-hint-active {
+  color: var(--ym-on-solid);
+  background: var(--ym-primary);
+}

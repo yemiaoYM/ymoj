@@ -1,6 +1,7 @@
 <template>
   <div style="width: 100%;height: 100%;">
-    <MdPreview 
+    <MdPreview
+      :theme="theme.resolvedTheme"
       :model-value="content"
       :sanitize="sanitizeMarkdown"
       previewTheme="cyanosis"
@@ -9,6 +10,7 @@
 </template>
 
 <script lang="ts">
+import { useThemeStore } from '@/stores/theme';
 import { defineComponent } from 'vue';
 import { MdPreview } from 'md-editor-v3';
 import { sanitizeMarkdown } from '@/utils/markdown';
@@ -26,7 +28,7 @@ export default defineComponent({
     }
   },
   setup() {
-    return { sanitizeMarkdown };
+    return { sanitizeMarkdown, theme: useThemeStore() };
   }
 })
 </script>

@@ -1,0 +1,220 @@
+/*
+ * 浅色保留既有配色，暗色业务变量引用 Element Plus 原生主题
+ */
+:root {
+  --vt-c-white: #ffffff;
+  --vt-c-white-soft: #f8f8f8;
+  --vt-c-white-mute: #f2f2f2;
+
+  --vt-c-black: #181818;
+  --vt-c-black-soft: #222222;
+  --vt-c-black-mute: #282828;
+
+  --vt-c-indigo: #2c3e50;
+
+  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
+  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
+  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
+  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
+
+  --vt-c-text-light-1: var(--vt-c-indigo);
+  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
+  --vt-c-text-dark-1: var(--vt-c-white);
+  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
+  --color-background: var(--vt-c-white);
+  --color-background-soft: var(--vt-c-white-soft);
+  --color-background-mute: var(--vt-c-white-mute);
+
+  --color-border: var(--vt-c-divider-light-2);
+  --color-border-hover: var(--vt-c-divider-light-1);
+
+  --color-heading: var(--vt-c-text-light-1);
+  --color-text: var(--vt-c-text-light-1);
+
+  --section-gap: 160px;
+  --ym-auth-muted: #747c89;
+  --ym-code-gutter: #f1f1f1;
+  --ym-code-comment: #a0a1a7;
+  --ym-code-keyword: #a626a4;
+  --ym-code-string: #50a14f;
+  --ym-code-number: #986801;
+  --ym-code-title: #4078f2;
+  --ym-problem-link-hover: #7cb9f7;
+  --ym-readonly-fill: #f7f8f9;
+  --ym-auth-foreground: #fff;
+  --ym-auth-caption: #d4dee9;
+  --ym-auth-description: #e1e7ef;
+  --ym-auth-divider: #ffffff38;
+  --ym-auth-fill: #f5f7fb;
+  --ym-auth-hover: #c6e4ff;
+  --ym-auth-page: #f8f9fb;
+  --ym-auth-panel: #50647c;
+  --ym-auth-placeholder: #858c97;
+  --ym-auth-shadow: rgba(35, 52, 74, 0.12);
+  --ym-code-border: #e9eaec;
+  --ym-code-literal: #0184bb;
+  --ym-code-name: #e45649;
+  --ym-code-surface: #fafafa;
+  --ym-code-text: #383a42;
+  --ym-code-type: #c18401;
+  --ym-content-text: black;
+  --ym-danger-color: #f56c6c;
+  --ym-divider-soft: #f0f0f0;
+  --ym-editor-border: #ccc;
+  --ym-editor-fill: #f5f5f5;
+  --ym-editor-panel: #f5f7fa;
+  --ym-error-heading: #222;
+  --ym-error-description: grey;
+  --ym-error-link: #1482f0;
+  --ym-header-shadow: rgba(0, 0, 0, 0.1);
+  --ym-link: #409eff;
+  --ym-loading-overlay: rgba(0, 0, 0, 0.8);
+  --ym-login-heading: #707070;
+  --ym-menu-text: #495060;
+  --ym-muted-text: #666;
+  --ym-output-text: #333;
+  --ym-page: #eff3f5;
+  --ym-panel-border: #e4e7ed;
+  --ym-problem-border: #efeff5;
+  --ym-problem-text: #333639;
+  --ym-profile-fill: #f7f7fa;
+  --ym-profile-shadow: rgba(0, 0, 0, 0.08);
+  --ym-regular-text: #606266;
+  --ym-sample-accent: #51a2f4;
+  --ym-sample-border: #dedede;
+  --ym-search-border: #dce7fa;
+  --ym-search-icon: #7186a6;
+  --ym-success-color: #67c23a;
+  --ym-surface: #fff;
+  --ym-table-header: #f8f8f9;
+  --ym-table-heading: #515a6e;
+  --ym-table-link: #000305;
+  --ym-upload-border: #eee;
+  --ym-warning-panel: #fdf6ec;
+}
+
+html.dark {
+  --ym-auth-muted: var(--ym-text-secondary);
+  --ym-code-gutter: var(--ym-surface-sidebar);
+  --ym-code-comment: var(--ym-syntax-comment);
+  --ym-code-keyword: var(--ym-syntax-keyword);
+  --ym-code-string: var(--ym-syntax-string);
+  --ym-code-number: var(--ym-syntax-number);
+  --ym-code-title: var(--ym-syntax-title);
+  --ym-problem-link-hover: var(--ym-primary);
+  --ym-readonly-fill: var(--ym-surface-muted);
+  --ym-auth-foreground: var(--ym-auth-text);
+  --ym-surface-page: #000000;
+  --ym-surface-sidebar: var(--el-bg-color);
+  --ym-surface-card: var(--el-bg-color);
+  --ym-surface-overlay: var(--el-bg-color-overlay);
+  --ym-surface-muted: var(--el-fill-color-light);
+  --ym-surface-hover: var(--el-fill-color);
+  --ym-text-primary: var(--el-text-color-primary);
+  --ym-text-regular: var(--el-text-color-regular);
+  --ym-text-secondary: var(--el-text-color-secondary);
+  --ym-text-placeholder: var(--el-text-color-placeholder);
+  --ym-border: var(--el-border-color-light);
+  --ym-border-control: var(--el-border-color);
+  --ym-primary: var(--el-color-primary);
+  --ym-primary-hover: var(--el-color-primary-dark-2);
+  --ym-success: var(--el-color-success);
+  --ym-warning: var(--el-color-warning);
+  --ym-danger: var(--el-color-danger);
+  --ym-on-solid: var(--el-color-white);
+  --ym-shadow-color: rgba(0, 0, 0, 0.28);
+  --ym-loading-mask: var(--el-mask-color);
+  --ym-syntax-comment: #a4b0c2;
+  --ym-syntax-keyword: #d9a5e8;
+  --ym-syntax-string: #a5cf96;
+  --ym-syntax-number: #ebc184;
+  --ym-syntax-title: #8cbfff;
+  --ym-syntax-type: #e7c889;
+  --ym-syntax-literal: #8ed4df;
+  --ym-syntax-name: #efa4ab;
+  --ym-auth-surface: var(--el-bg-color-overlay);
+  --ym-auth-text: var(--el-text-color-primary);
+  --ym-auth-secondary: var(--el-text-color-regular);
+  --ym-auth-link: var(--el-color-primary);
+  --ym-auth-border: var(--el-border-color);
+  --ym-auth-caption: var(--ym-auth-secondary);
+  --ym-auth-description: var(--ym-auth-secondary);
+  --ym-auth-divider: var(--ym-auth-border);
+  --ym-auth-fill: var(--el-fill-color-blank);
+  --ym-auth-hover: var(--ym-auth-link);
+  --ym-auth-page: var(--ym-surface-page);
+  --ym-auth-panel: var(--ym-auth-surface);
+  --ym-auth-placeholder: var(--ym-text-placeholder);
+  --ym-auth-shadow: var(--ym-shadow-color);
+  --ym-code-border: var(--ym-border);
+  --ym-code-literal: var(--ym-syntax-literal);
+  --ym-code-name: var(--ym-syntax-name);
+  --ym-code-surface: var(--ym-surface-muted);
+  --ym-code-text: var(--ym-text-primary);
+  --ym-code-type: var(--ym-syntax-type);
+  --ym-content-text: var(--ym-text-primary);
+  --ym-danger-color: var(--ym-danger);
+  --ym-divider-soft: var(--ym-border);
+  --ym-editor-border: var(--ym-border);
+  --ym-editor-fill: var(--ym-surface-muted);
+  --ym-editor-panel: var(--ym-surface-muted);
+  --ym-error-heading: var(--ym-text-primary);
+  --ym-error-description: var(--ym-text-secondary);
+  --ym-error-link: var(--ym-primary);
+  --ym-header-shadow: var(--ym-shadow-color);
+  --ym-link: var(--ym-primary);
+  --ym-loading-overlay: var(--ym-loading-mask);
+  --ym-login-heading: var(--ym-text-secondary);
+  --ym-menu-text: var(--ym-text-regular);
+  --ym-muted-text: var(--ym-text-secondary);
+  --ym-output-text: var(--ym-text-primary);
+  --ym-page: var(--ym-surface-page);
+  --ym-panel-border: var(--ym-border);
+  --ym-problem-border: var(--ym-border);
+  --ym-problem-text: var(--ym-text-primary);
+  --ym-profile-fill: var(--ym-surface-muted);
+  --ym-profile-shadow: var(--ym-shadow-color);
+  --ym-regular-text: var(--ym-text-regular);
+  --ym-sample-accent: var(--ym-primary);
+  --ym-sample-border: var(--ym-border);
+  --ym-search-border: var(--ym-border-control);
+  --ym-search-icon: var(--ym-text-secondary);
+  --ym-success-color: var(--ym-success);
+  --ym-surface: var(--ym-surface-card);
+  --ym-table-header: var(--el-fill-color-blank);
+  --ym-table-heading: var(--ym-text-secondary);
+  --ym-table-link: var(--ym-text-primary);
+  --ym-upload-border: var(--ym-border);
+  --ym-warning-panel: var(--ym-surface-muted);
+  --color-background: var(--ym-surface-page);
+  --color-background-soft: var(--ym-surface-card);
+  --color-background-mute: var(--ym-surface-muted);
+  --color-border: var(--ym-border);
+  --color-border-hover: var(--ym-border-control);
+  --color-heading: var(--ym-text-primary);
+  --color-text: var(--ym-text-primary);
+}
+
+html.dark .el-input__inner:autofill {
+  box-shadow: 0 0 0 1000px var(--el-input-bg-color) inset;
+  -webkit-text-fill-color: var(--el-input-text-color);
+  caret-color: var(--el-input-text-color);
+}
+
+/*
+ * 整页快照统一淡入淡出，组件保留各自的原生主题
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 400ms;
+  animation-timing-function: ease-in-out;
+}
+
+/*
+ * 仅在整页过渡期间停止局部 transition，避免新快照出现组件变色不同步
+ * important 用于覆盖组件的 scoped 与行内过渡，结束后自动恢复
+ * 日月开关保留自身的滑动反馈
+ */
+:root:active-view-transition *:not(.theme-toggle, .theme-toggle *) {
+  transition: none !important;
+}

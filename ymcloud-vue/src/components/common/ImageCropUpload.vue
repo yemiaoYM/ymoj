@@ -305,7 +305,7 @@ defineExpose({ open });
 }
 .crop-stage :deep(.cropper-view-box) {
   outline-color: var(--el-color-primary);
-  background-color: #fff;
+  background-color: var(--ym-surface);
 }
 .crop-stage :deep(.cropper-point) {
   width: 8px;
@@ -319,7 +319,7 @@ defineExpose({ open });
   aspect-ratio: 1;
   flex-shrink: 0;
   overflow: hidden;
-  background: #fff;
+  background: var(--ym-surface);
   outline: 1px solid var(--el-border-color);
   outline-offset: -1px;
 }

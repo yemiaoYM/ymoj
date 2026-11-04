@@ -1,12 +1,44 @@
 <!DOCTYPE html>
-<html lang="">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
+    <script>
+      //首屏同步读取偏好,未选择或存储不可用时默认浅色
+      let preference='light';
+      try{
+        const saved = localStorage.getItem('ymoj-theme');
+        if (['light','dark'].includes(saved)) {
+          preference=saved;
+        }
+      }catch{
+        //浏览器隐私设置可能拒绝 localStorage
+        //默认light
+        preference='light';
+      }
+      const dark=preference==='dark';
+      document.documentElement.dataset.themePreference=preference;
+      document.documentElement.classList.toggle('dark', dark);
+      document.documentElement.style.colorScheme=dark?'dark':'light';
+    </script>
     <link rel="icon" type="image/png" href="/ymoj-icon.png">
     <link rel="apple-touch-icon" href="/ymoj-icon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YMOJ</title>
     <style>
+      :root {
+        --ym-surface-page: #f8f8f9;
+        --ym-primary: #2d8cf0;
+        --ym-warning: #ff9900;
+        --ym-loader-text: #3498db;
+      }
+
+      html.dark {
+        --ym-surface-page: #000000;
+        --ym-primary: #409eff;
+        --ym-warning: #e6a23c;
+        --ym-loader-text: #409eff;
+      }
+
       @-webkit-keyframes enter {
         0% {
           opacity: 0;
@@ -74,7 +106,7 @@
       }
   
       body {
-        background: #f8f8f9;
+        background: var(--ym-surface-page);
       }
   
       #app-loader {
@@ -86,7 +118,7 @@
       }
   
       #app-loader .square {
-        background: #2d8cf0;
+        background: var(--ym-primary);
         width: 15px;
         height: 15px;
         float: left;
@@ -120,7 +152,7 @@
         -webkit-animation-delay: 2.4s;
         -moz-animation-delay: 2.4s;
         animation-delay: 2.4s;
-        background: #ff9900;
+        background: var(--ym-warning);
       }
   
       #app-loader .square:nth-child(4) {
@@ -162,7 +194,7 @@
       }
   
       #app-loader .loader-content {
-        color: #3498db;
+        color: var(--ym-loader-text);
         font-size: 16px;
         font-weight: 600;
       }

@@ -6,6 +6,7 @@
 
 <script lang="ts">
 import { defineComponent, onMounted, onBeforeUnmount, watch, type PropType } from "vue";
+import { useThemeStore } from "@/stores/theme";
 import * as echarts from "echarts/core";
 import {
   TitleComponent,
@@ -63,6 +64,7 @@ export default defineComponent({
     },
   },
   setup(props) {
+    const theme = useThemeStore();
     var myChart: echarts.ECharts | null = null;
 
     const initChart = () => {
@@ -71,10 +73,8 @@ export default defineComponent({
         myChart.dispose();
         myChart = null;
       }
-      myChart = echarts.init(chartDom);
-      var option: EChartsOption;
-
-      option = {
+      myChart = echarts.init(chartDom, theme.isDark ? 'dark' : undefined);
+      const option: EChartsOption = {
         tooltip: {
           trigger: 'axis'
         },
@@ -125,9 +125,9 @@ export default defineComponent({
       option && myChart.setOption(option);
     };
 
-    watch(()=>[props.dates, props.totalSubmissions, props.acceptedSubmissions], () => {
+    watch(()=>[props.dates, props.totalSubmissions, props.acceptedSubmissions, theme.resolvedTheme], () => {
       initChart();
-    });
+    }, { flush: "post" });
 
     onMounted(() => {
       initChart();

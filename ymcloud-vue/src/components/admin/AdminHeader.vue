@@ -16,6 +16,7 @@
         </el-breadcrumb-item>
       </el-breadcrumb>
     </div>
+    <ThemeSelect />
     <el-dropdown trigger="click" placement="bottom-end">
       <el-button class="user-menu" text aria-label="账户菜单">
         <Avatar :size="32" :src="user.avatar" :text="user.username" />
@@ -33,6 +34,7 @@
 </template>
 
 <script setup lang="ts">
+import ThemeSelect from '@/components/common/ThemeSelect.vue';
 import { computed, defineAsyncComponent } from 'vue';
 import { ArrowDown, Expand, Fold } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';

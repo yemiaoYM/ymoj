@@ -401,7 +401,7 @@ const formatDate = (dateStr: string) => {
 
 .announcement-item {
   padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--ym-divider-soft);
 }
 
 .announcement-item:last-child {
@@ -417,13 +417,13 @@ const formatDate = (dateStr: string) => {
 }
 
 .announcement-title:hover {
-  color: #409eff;
+  color: var(--ym-link);
 }
 
 
 :deep(.el-card__header) {
   padding: 16px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--ym-divider-soft);
 }
 
 :deep(.el-card__body) {

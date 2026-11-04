@@ -222,7 +222,7 @@ import {
   getContestStatusType,
 } from "@/utils/utils";
 import { getPublicCarousel } from "@/api/carousel";
-import banner from "@/assets/image/banner.jpg";
+import banner from "@/assets/image/banner.png";
 
 
 const Avatar = defineAsyncComponent(
@@ -309,7 +309,7 @@ const handleGetUserAcRank = () => {
   width: 100%;
   height: 100%;
   display: block;
-  background: #eff3f5;
+  background: var(--ym-page);
 }
 .section-title {
   font-size: 20px;

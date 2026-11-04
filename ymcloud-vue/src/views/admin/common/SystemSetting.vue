@@ -188,6 +188,10 @@ onBeforeUnmount(() => {
   margin-bottom: 20px;
 }
 
+html.dark .system-setting-management :deep(.el-divider__text) {
+  background-color: var(--el-card-bg-color);
+}
+
 @media (max-width: 768px) {
   .system-setting-management {
     padding: 12px;

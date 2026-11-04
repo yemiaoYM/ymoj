@@ -26,11 +26,15 @@
           :lock-scroll="false"
         >
           <el-scrollbar height="100%">
+            <x-flex class="mobile-theme" align="center" justify="space-between">
+              <span>外观主题</span>
+              <ThemeSelect />
+            </x-flex>
             <el-menu
               mode="vertical"
               background-color="transparent"
               active-text-color="#2196f3"
-              text-color="#495060"
+              text-color="var(--ym-menu-text)"
               router
               :default-active="activeMenu"
               @select="onCloseMobileMenu"
@@ -65,7 +69,7 @@
           mode="horizontal"
           router
           active-text-color="#2196f3"
-          text-color="#495060"
+          text-color="var(--ym-menu-text)"
         >
           <el-menu-item index="/">
             <el-icon><HomeFilled /></el-icon>
@@ -90,6 +94,7 @@
         </el-menu>
       </x-flex>
       <x-flex class="r-content" align="center" style="margin-right: 25px;">
+        <ThemeSelect v-if="!isMobile" />
         <el-button v-if="!isLogin" type="primary" plain round size="large" @click="Login">登录 | 注册</el-button>
         <x-flex v-else>
           <Avatar
@@ -120,6 +125,7 @@
 </template>
 
 <script setup lang="ts">
+import ThemeSelect from '@/components/common/ThemeSelect.vue';
 import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
@@ -196,9 +202,9 @@ const toAdmin=()=>{
   height: 100%;
   display: flex;
   overflow: hidden;
-  background-color: #fff;
-  box-shadow: 0 1px 5px 0 rgba(0, 0, 0, 0.1);
-  border-bottom: 1px solid #f0f0f0;
+  background-color: var(--ym-surface);
+  box-shadow: 0 1px 5px 0 var(--ym-header-shadow);
+  border-bottom: 1px solid var(--ym-divider-soft);
   box-sizing: border-box;
 }
 .l-content {
@@ -218,5 +224,8 @@ const toAdmin=()=>{
   min-height: 0;
   padding: 0;
   overflow: hidden;
+}
+.mobile-theme {
+  padding: 12px 20px;
 }
 </style>

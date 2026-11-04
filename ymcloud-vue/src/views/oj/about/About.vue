@@ -4,17 +4,17 @@
       <el-col :md="12" :sm="24">
         <el-card class="compiler">
           <template #header>
-            <span style="font-size: 20px;color: #409EFF;">编译器 & 例题</span>
+            <span style="font-size: 20px;color: var(--ym-link);">编译器 & 例题</span>
           </template>
           <div class="content">
             <ul>
               <li v-for="lang in languages" :key="lang.name">
                 {{ lang.name }} ( {{ lang.version }} )
-                <p style="color: #409EFF;font-size:16px;margin-top: 10px;">
+                <p style="color: var(--ym-link);font-size:16px;margin-top: 10px;">
                   编译器
                 </p>
                 <pre>{{ lang.compileCmd }}</pre>
-                <p style="color: #409EFF;font-size:16px">
+                <p style="color: var(--ym-link);font-size:16px">
                   A+B 例题
                 </p>
                 <Highlight style="margin: 10px 0px;" v-if="lang.templateCode" :code="lang.templateCode"
@@ -28,7 +28,7 @@
       <el-col :md="12" :sm="24">
         <el-card>
           <template #header>
-            <span style="font-size: 20px;color: #409EFF;">结果说明</span>
+            <span style="font-size: 20px;color: var(--ym-link);">结果说明</span>
           </template>
           <ul class="result">
             <li>
@@ -96,7 +96,7 @@
         </el-card>
         <el-card style="margin-top: 20px;">
           <template #header>
-            <span style="font-size: 20px;color: #409EFF;">帮助</span>
+            <span style="font-size: 20px;color: var(--ym-link);">帮助</span>
           </template>
           <ul class="result">
             <li>1. __int64不是ANSI标准定义，只能在VC使用，在 GNU C++ 中应写成 long long 类型， scanf和printf 请使用%lld作为格式</li>
@@ -150,9 +150,9 @@ const initLanguages = () => {
   white-space: pre-wrap;
   margin-top: 15px;
   margin-bottom: 15px;
-  background: #f8f8f9;
-  border: 1px dashed #e9eaec;
-  color: black;
+  background: var(--ym-table-header);
+  border: 1px dashed var(--ym-code-border);
+  color: var(--ym-content-text);
   font-family: Consolas;
 }
 

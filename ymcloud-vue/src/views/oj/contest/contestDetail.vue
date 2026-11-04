@@ -370,7 +370,7 @@ watch(
 }
 
 :deep(.el-tabs__nav-wrap) {
-  background: #fff;
+  background: var(--ym-surface);
   border-radius: 3px;
 }
 

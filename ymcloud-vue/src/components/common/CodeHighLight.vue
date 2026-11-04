@@ -41,8 +41,8 @@ const highlighted = computed(() => largeCode.value ? null : highlightCode(source
   border: 1px solid var(--el-border-color);
   border-left: 3px solid var(--el-color-primary);
   border-radius: 4px;
-  color: #383a42;
-  background: #fafafa;
+  color: var(--ym-code-text);
+  background: var(--ym-code-surface);
 }
 
 .code-highlight :deep(.el-scrollbar__view) {
@@ -69,7 +69,7 @@ code {
   z-index: 1;
   flex-shrink: 0;
   color: var(--el-text-color-secondary);
-  background: #f1f1f1;
+  background: var(--ym-code-gutter);
   text-align: right;
   user-select: none;
 }
@@ -80,28 +80,28 @@ code {
 
 /* 沿用原组件的 Atom One Light 配色，仅作用于本组件的高亮结果。 */
 :deep(.hljs-comment), :deep(.hljs-quote) {
-  color: #a0a1a7;
+  color: var(--ym-code-comment);
   font-style: italic;
 }
 :deep(.hljs-keyword), :deep(.hljs-doctag) {
-  color: #a626a4;
+  color: var(--ym-code-keyword);
 }
 :deep(.hljs-string), :deep(.hljs-regexp), :deep(.hljs-meta .hljs-string) {
-  color: #50a14f;
+  color: var(--ym-code-string);
 }
 :deep(.hljs-number), :deep(.hljs-type), :deep(.hljs-variable), :deep(.hljs-attr) {
-  color: #986801;
+  color: var(--ym-code-number);
 }
 :deep(.hljs-title), :deep(.hljs-meta), :deep(.hljs-symbol) {
-  color: #4078f2;
+  color: var(--ym-code-title);
 }
 :deep(.hljs-built_in), :deep(.hljs-title.class_) {
-  color: #c18401;
+  color: var(--ym-code-type);
 }
 :deep(.hljs-literal) {
-  color: #0184bb;
+  color: var(--ym-code-literal);
 }
 :deep(.hljs-subst), :deep(.hljs-name) {
-  color: #e45649;
+  color: var(--ym-code-name);
 }
 </style>

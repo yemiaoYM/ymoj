@@ -5,7 +5,7 @@
         <template #header>
           <!-- 页面标题 -->
           <x-flex justify="space-between">
-            <span style="font-size: 22px; font-weight: 600; color: #409eff">
+            <span style="font-size: 22px; font-weight: 600; color: var(--ym-link)">
               测试用例管理
             </span>
             <el-button type="primary" :icon="ArrowLeft" @click="handleBack">返回题目列表</el-button>
@@ -575,8 +575,8 @@ const processUploadQueue = async () => {
 
 :deep(.el-table__header-wrapper th) {
   word-break: break-word;
-  background-color: #f8f8f9;
-  color: #515a6e;
+  background-color: var(--ym-table-header);
+  color: var(--ym-table-heading);
   height: 40px;
   font-size: 13px;
   text-align: center;
@@ -592,7 +592,7 @@ const processUploadQueue = async () => {
 
 .upload-progress__status {
   margin-bottom: 6px;
-  color: #606266;
+  color: var(--ym-regular-text);
   font-size: 13px;
 }
 
@@ -658,8 +658,8 @@ const processUploadQueue = async () => {
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
-  border-top: 1px solid #e4e7ed;
-  background: #fdf6ec;
+  border-top: 1px solid var(--ym-panel-border);
+  background: var(--ym-warning-panel);
 }
 
 @media (max-width: 900px) {
