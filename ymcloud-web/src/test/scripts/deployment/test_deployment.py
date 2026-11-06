@@ -126,15 +126,52 @@ class PreflightTest(unittest.TestCase):
     def test_matching_parallel_capacity_is_supported(self):
         PREFLIGHT.validate(parallel_environment())
 
-    def test_each_worker_budget_must_grow_with_parallelism(self):
-        for key, value in (("WORKER_HEAP_MIB", "128"), ("WORKER_MEMORY_MIB", "384"),
-                           ("WORKER_PIDS", "128"), ("WORKER_CPUS", "0.5")):
-            with self.subTest(key=key):
-                env = parallel_environment()
-                env[key] = value
-                with self.assertRaises(ValueError) as result:
+    def test_compile_wall_limit_is_independent_from_transport_timeout(self):
+        for value in (100, 90000, 120000, 300000):
+            with self.subTest(compile_wall_ms=value):
+                env = valid_environment()
+                env["YMCLOUD_GO_JUDGE_COMPILE_WALL_MS"] = str(value)
+                PREFLIGHT.validate(env)
+
+    def test_compile_wall_limit_rejects_out_of_range_values(self):
+        for value in (99, 300001):
+            with self.subTest(compile_wall_ms=value):
+                env = valid_environment()
+                env["YMCLOUD_GO_JUDGE_COMPILE_WALL_MS"] = str(value)
+                with self.assertRaisesRegex(ValueError, "YMCLOUD_GO_JUDGE_COMPILE_WALL_MS"):
                     PREFLIGHT.validate(env)
-                self.assertIn(key, str(result.exception))
+
+    def test_worker_queue_slots_are_independent_from_sandbox_parallelism(self):
+        env = valid_environment()
+        env["YMCLOUD_WORKER_CONCURRENCY"] = "2"
+        PREFLIGHT.validate(env)
+        env = parallel_environment()
+        env["YMCLOUD_WORKER_CONCURRENCY"] = "3"
+        PREFLIGHT.validate(env)
+
+    def test_automatic_parallelism_uses_sandbox_cpu_budget(self):
+        for env in (valid_environment(), parallel_environment()):
+            env.update({"YMCLOUD_WORKER_CONCURRENCY": "0", "YMCLOUD_GO_JUDGE_CONCURRENCY": "0"})
+            PREFLIGHT.validate(env)
+
+    def test_explicit_concurrency_supports_larger_machines(self):
+        env = valid_environment()
+        env.update({"YMCLOUD_WORKER_CONCURRENCY": "65", "YMCLOUD_GO_JUDGE_CONCURRENCY": "64",
+                    "YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES": str(64 * 1024 ** 3),
+                    "JUDGE_CPUS": "64", "JUDGE_PIDS": "4160"})
+        PREFLIGHT.validate(env)
+
+    def test_worker_resources_are_independent_from_sandbox_slot_count(self):
+        env = parallel_environment()
+        env.update({"WORKER_HEAP_MIB": "128", "WORKER_MEMORY_MIB": "384",
+                    "WORKER_PIDS": "128", "WORKER_CPUS": "0.5"})
+        PREFLIGHT.validate(env)
+
+    def test_worker_container_retains_native_memory_headroom(self):
+        env = parallel_environment()
+        env["WORKER_MEMORY_MIB"] = "384"
+        with self.assertRaisesRegex(ValueError, "WORKER_MEMORY_MIB"):
+            PREFLIGHT.validate(env)
 
     def test_worker_cpu_budget_rejects_invalid_numbers(self):
         for value in ("", "invalid", "nan", "inf", "-1", "0"):
@@ -166,7 +203,6 @@ class PreflightTest(unittest.TestCase):
 
     def test_mismatched_parallelism_and_insufficient_resources_are_rejected(self):
         invalid = [
-            {"YMCLOUD_WORKER_CONCURRENCY": "2"},
             {"YMCLOUD_WORKER_CONCURRENCY": "2", "YMCLOUD_GO_JUDGE_CONCURRENCY": "2"},
             {"YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES": "536870912"},
             {"JUDGE_CPUS": "0.5"},
@@ -192,6 +228,8 @@ class PreflightTest(unittest.TestCase):
                     "YMCLOUD_GO_JUDGE_PROCESS_LIMIT", "YMCLOUD_GO_JUDGE_CPU_RATE", "JUDGE_PIDS",
                     "WORKER_HEAP_MIB", "WORKER_MEMORY_MIB", "WORKER_PIDS"):
             for value in ("", "1.2", "-1", "0", "999999999999999999"):
+                if value == "0" and key in ("YMCLOUD_WORKER_CONCURRENCY", "YMCLOUD_GO_JUDGE_CONCURRENCY"):
+                    continue
                 with self.subTest(key=key, value=value):
                     env = valid_environment()
                     env[key] = value
@@ -488,7 +526,7 @@ class LifecycleTest(unittest.TestCase):
             verification.recreate_stack()
         operations = [arguments[len(verification.compose):] for arguments, _ in calls
                       if arguments[:len(verification.compose)] == verification.compose]
-        self.assertEqual([["config", "--format", "json"], ["down", "--timeout", "45"],
+        self.assertEqual([["config", "--format", "json"], ["down"],
                           ["up", "-d", "--no-build", "--wait", "--wait-timeout", "120"]], operations)
         self.assertFalse(any("-v" in arguments or "--volumes" in arguments or "rm" in arguments
                              for arguments, _ in calls))
@@ -730,6 +768,31 @@ class ComposeConfigurationTest(unittest.TestCase):
 
     def test_missing_variables_resolve_to_usable_defaults(self):
         self.assert_resolved_credentials(self.resolve(), DEFAULT_CREDENTIALS)
+
+    def test_worker_and_sandbox_concurrency_resolve_independently(self):
+        model = self.resolve()
+        worker = model["services"]["worker"]["environment"]
+        sandbox = model["services"]["go-judge"]["environment"]
+        self.assertEqual("0", worker["YMCLOUD_WORKER_CONCURRENCY"])
+        self.assertEqual("0", worker["YMCLOUD_GO_JUDGE_CONCURRENCY"])
+        self.assertNotIn("YMCLOUD_GO_JUDGE_CPUS", worker)
+        self.assertEqual("0", sandbox["YMCLOUD_GO_JUDGE_PARALLELISM"])
+        model = self.resolve({"WORKER_CONCURRENCY": "5", "JUDGE_CONCURRENCY": "2", "JUDGE_CPUS": "2.0"})
+        worker = model["services"]["worker"]["environment"]
+        sandbox = model["services"]["go-judge"]["environment"]
+        self.assertEqual("5", worker["YMCLOUD_WORKER_CONCURRENCY"])
+        self.assertEqual("2", worker["YMCLOUD_GO_JUDGE_CONCURRENCY"])
+        self.assertEqual("2", sandbox["YMCLOUD_GO_JUDGE_PARALLELISM"])
+
+    def test_worker_shutdown_wait_covers_inflight_task_and_result_confirmation(self):
+        application = (ROOT / "ymcloud-judge/src/main/resources/application.yml").read_text(encoding="utf-8")
+        lifecycle = int(re.search(r"timeout-per-shutdown-phase:\s*(\d+)m", application).group(1)) * 60
+        self.assertGreaterEqual(lifecycle, 3600 + 60 + 2 + 2 * 60)
+        standalone = (ROOT / "docker/go-judge/compose.yaml").read_text(encoding="utf-8")
+        for source in (self.source, standalone):
+            worker = source.split("\n  worker:", 1)[1]
+            grace = int(re.search(r"stop_grace_period:\s*(\d+)m", worker).group(1)) * 60
+            self.assertGreater(grace, lifecycle)
 
     def test_default_sandbox_capacity_supports_1024_mib(self):
         model = self.resolve()

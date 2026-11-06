@@ -135,7 +135,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import { Plus, Edit, Delete, Folder, FolderAdd, Refresh, Search } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
-import { useAsyncChange } from '@/composables/useAsyncChange';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 import type { Tag } from '@/type/types';
 import type { TagDTO, TagClassification, TagClassificationDTO, TagsWithClassification } from '@/type/tag';
 import {

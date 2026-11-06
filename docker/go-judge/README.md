@@ -33,7 +33,7 @@ mvn -pl ymcloud-judge -am package -DskipTests
 bash docker/build.sh
 ```
 
-ymcloud 的发布版本统一读取根 `pom.xml` 的 `<revision>`，从 `4.0.0` 开始。脚本构建 `ymcloud-go-judge:4.0.0` 和 `ymcloud-worker:4.0.0`，并把同一版本写入镜像 OCI 标签及发布锁；后续升级只修改父 POM 后重新打包、构建。Worker 输入为稳定路径 `ymcloud-judge/target/ymcloud-judge.jar`，构建前核对 JAR 中的 Maven 版本。这里的项目版本与上游 go-judge `v1.13.3` 分别记录，避免把上游版本当作网站发布版本。
+ymcloud 的发布版本统一读取根 `pom.xml` 的 `<revision>`，从 `4.0.0` 开始。脚本构建 `ymcloud-go-judge:4.0.0` 和 `ymcloud-worker:4.0.0`，并把同一版本写入镜像 OCI 标签及发布锁；后续升级由用户明确指定目标版本，按 `docs/代码规范.md` 的 G-VERSION-001 手动核对并更新前后端项目版本，再重新打包、构建；构建命令不自动改写源码版本。Worker 输入为稳定路径 `ymcloud-judge/target/ymcloud-judge.jar`，构建前核对 JAR 中的 Maven 版本。这里的项目版本与上游 go-judge `v1.13.3` 分别记录，避免把上游版本当作网站发布版本。
 
 脚本编译可信输出限制程序并验证包版本、四入口工具链及 go-judge 版本。维护者的构建记录写入 `target/phase3-verification/images.lock.json`，本地两服务 Compose 使用 `images.env` 中的 image ID；构建失败不会生成可部署的占位锁。镜像保留在本机 Docker 中，不导出镜像归档。公开发布时，将同一批构建镜像分别推送到 `docker.io/yemiao1/ymoj` 与 `ccr.ccs.tencentyun.com/ymoj/ymcloud`，使用 `go-judge-4.0.0`、`worker-4.0.0` 标签，并核对两端对应镜像的 config image ID 和平台。完整网站的 `deploy/compose.yaml` 直接使用仓库地址与版本标签，普通部署用户无需处理构建锁。
 
@@ -79,8 +79,9 @@ go-judge 保持 v1.13.3 内置默认 seccomp；入口清除外部 `ES_*` 覆盖�
 | 单题支持上限 / 编译内存 | 512MiB / 512MiB |
 | 编译墙钟 | 10 秒 |
 | 单次沙箱线程及进程合计 | 64，包含可信输出程序及 JVM 内部线程 |
-| stdout + stderr | 合计 1MiB |
-| 编译产物 / 单文件 | 16MiB / 16MiB |
+| stdout + stderr | 合计 32MiB，通过缓存文件流传输 |
+| 编译产物 / 单文件 | 64MiB / 64MiB |
+| Worker 上传请求 / 执行响应 | 65MiB / 8MiB；输出正文不进入执行响应 JSON |
 | 每个沙箱 `/w`、`/tmp` | 各 64MiB tmpfs |
 | Worker 内存 / CPU | 384MiB / 0.5 核；Java 堆 128MiB |
 

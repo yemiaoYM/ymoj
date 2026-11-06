@@ -15,6 +15,7 @@ import com.ymcloud.judge.listeners.ResultPublisher;
 import com.ymcloud.judge.listeners.WorkerExecutionStore;
 import com.ymcloud.judge.listeners.WorkerTaskValidator;
 import com.ymcloud.judge.strategy.JudgeRun;
+import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -147,6 +148,7 @@ class WorkerComponentWiringTest {
         var metrics = new SimpleMeterRegistry();
         try (var context = new AnnotationConfigApplicationContext()) {
             WorkerProperties properties = new WorkerProperties();
+            properties.setConcurrency(1);
             properties.setWorkDir(directory);
             TestDataCache cache = mock(TestDataCache.class);
             when(cache.statistics()).thenReturn(new TestDataCache.Statistics(7, 3, 0, 0, 1024, 0, 1));
@@ -154,6 +156,7 @@ class WorkerComponentWiringTest {
             SimpleMessageListenerContainer container = mock(SimpleMessageListenerContainer.class);
             when(registry.getListenerContainers()).thenReturn(List.of(container));
             when(container.isRunning()).thenReturn(true);
+            when(container.getQueueNames()).thenReturn(new String[]{JudgeProtocol.TASK_QUEUE});
             when(container.getActiveConsumerCount()).thenReturn(1);
             context.getBeanFactory().registerSingleton("workerProperties", properties);
             context.getBeanFactory().registerSingleton("testDataCache", cache);

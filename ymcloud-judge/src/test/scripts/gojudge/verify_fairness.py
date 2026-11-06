@@ -22,7 +22,7 @@ OUT = ROOT / "target/phase3-verification/fairness"
 HELPER = "/usr/local/bin/ymcloud-output-limit"
 # 本脚本只验收默认部署；高配需先扩展采样参数，不能沿用默认样本预算冒充验收。
 DEFAULT_DEPLOYMENT = {
-    "YMCLOUD_WORKER_CONCURRENCY": 1,
+    "YMCLOUD_WORKER_CONCURRENCY": 2,
     "YMCLOUD_GO_JUDGE_CONCURRENCY": 1,
     "YMCLOUD_GO_JUDGE_CPUS": 1.0,
     "YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES": 1073741824,
@@ -32,8 +32,8 @@ DEFAULT_DEPLOYMENT = {
     "YMCLOUD_GO_JUDGE_COMPILE_WALL_MS": 10000,
     "YMCLOUD_GO_JUDGE_PROCESS_LIMIT": 64,
     "YMCLOUD_GO_JUDGE_CPU_RATE": 1000,
-    "YMCLOUD_GO_JUDGE_MAX_FILE_BYTES": 16777216,
-    "YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES": 1048576,
+    "YMCLOUD_GO_JUDGE_MAX_FILE_BYTES": 67108864,
+    "YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES": 33554432,
 }
 SAMPLES = {
     "C": ("main.c", """#include <stdio.h>
@@ -120,6 +120,8 @@ def task_parameters(args):
             value = type(default)(os.environ.get(key, str(default)))
         except ValueError:
             raise SystemExit(f"部署参数不是有效数字: {key}") from None
+        if key in ("YMCLOUD_WORKER_CONCURRENCY", "YMCLOUD_GO_JUDGE_CONCURRENCY") and value == 0:
+            value = default
         if value != default:
             raise SystemExit(f"公平性脚本仅支持默认部署预算，请先扩展采样参数: {key}")
         deployment[key] = value
@@ -156,6 +158,8 @@ def collect(args):
     if args.tier in ("normal", "full") and not args.load_description:
         raise SystemExit("必须记录实际业务负载或满载来源 --load-description")
     parameters = task_parameters(args)
+    max_output_bytes = parameters["deployment"]["YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES"]
+    max_file_bytes = parameters["deployment"]["YMCLOUD_GO_JUDGE_MAX_FILE_BYTES"]
     before = docker_json(args.container, METRICS)
     verify_service_limits(before)
     report = {"tier": args.tier, "samples": args.samples, "warmups": 5,
@@ -163,10 +167,10 @@ def collect(args):
               "version": request(args.endpoint, token, "/version"), "before": before,
               "taskParameters": parameters}
     for name, (filename, source, compile_args, artifact, run_args) in SAMPLES.items():
-        compile_body = command([HELPER, "1048576", "16777216", *compile_args], 536870912)
+        compile_body = command([HELPER, str(max_output_bytes), str(max_file_bytes), *compile_args], 536870912)
         compile_body["cmd"][0].update({
             "copyIn": {filename: {"content": source}}, "copyOutCached": [artifact + "?"],
-            "copyOutMax": 16777216,
+            "copyOutMax": max_file_bytes,
         })
         file_ids = set()
         rows = []
@@ -180,7 +184,7 @@ def collect(args):
             assert compiled.get("files", {}).get("launcher", "") == "", "编译启动器基础设施异常"
             assert compiled["status"] == "Accepted" and compiled["exitStatus"] == 0, f"{name} 编译失败"
             file_id = compiled["fileIds"][artifact]
-            body = command([HELPER, "1048576", "16777216", *run_args], 536870912,
+            body = command([HELPER, str(max_output_bytes), str(max_file_bytes), *run_args], 536870912,
                            args.limit_ms * 1_000_000)
             body["cmd"][0]["copyIn"] = {artifact: {"fileId": file_id}}
             for index in range(args.samples + 5):

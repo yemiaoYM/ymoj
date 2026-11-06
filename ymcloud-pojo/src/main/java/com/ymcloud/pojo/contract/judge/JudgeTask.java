@@ -7,7 +7,9 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 /**
- * 创建任务时固定的评测快照。时间为毫秒，内存为 KiB，时间戳为 UTC epoch 毫秒。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 创建任务时固定的评测快照。时间为毫秒，内存为 KiB，时间戳为 UTC epoch 毫秒。
  * 代码与自测数据属于用户私有内容，不参与日志字符串。
  */
 @Data
@@ -48,4 +50,11 @@ public class JudgeTask {
     private JudgeLanguage languageConfig;
     private Long timeLimit;
     private Long memoryLimit;
+
+    /**
+     * 特殊判题源码快照，null 表示普通输出比较
+     * 自测仅使用普通输出比较
+     */
+    @ToString.Exclude
+    private SpjProgram spj;
 }

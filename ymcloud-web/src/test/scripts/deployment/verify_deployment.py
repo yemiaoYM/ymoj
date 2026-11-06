@@ -311,7 +311,7 @@ class Verification:
         before = self.wait_healthy()
         self.verify_container_ownership(before)
         volumes = self.volume_snapshot()
-        command(self.compose + ["down", "--timeout", str(min(45, self.args.timeout))],
+        command(self.compose + ["down"],
                 "Cannot stop and remove the isolated containers", timeout=min(180, self.args.timeout))
         require(not self.containers(), "Cold recreation did not remove all isolated containers")
         require(self.volume_snapshot() == volumes, "Cold recreation removed or replaced an isolated data volume")

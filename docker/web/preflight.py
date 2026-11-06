@@ -33,12 +33,12 @@ def validate(env):
         raise ValueError("数据库密码、缓存密码和各服务密钥不能复用同一个值")
 
     bounds = {
-        "YMCLOUD_WORKER_CONCURRENCY": (1, 32),
-        "YMCLOUD_GO_JUDGE_CONCURRENCY": (1, 32),
+        "YMCLOUD_WORKER_CONCURRENCY": (0, 2147483647),
+        "YMCLOUD_GO_JUDGE_CONCURRENCY": (0, 2147483647),
         "YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES": (256 * MIB, 1024 * 1024 * MIB),
         "YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB": (1024, 64 * 1024 * 1024),
         "YMCLOUD_GO_JUDGE_COMPILE_MEMORY_BYTES": (32 * MIB, 64 * 1024 * MIB),
-        "YMCLOUD_GO_JUDGE_COMPILE_WALL_MS": (100, 89999),
+        "YMCLOUD_GO_JUDGE_COMPILE_WALL_MS": (100, 300000),
         "YMCLOUD_GO_JUDGE_PROCESS_LIMIT": (4, 1024),
         "YMCLOUD_GO_JUDGE_CPU_RATE": (1, 64000),
         "JUDGE_PIDS": (68, 65536),
@@ -55,35 +55,31 @@ def validate(env):
         if not minimum <= value <= maximum:
             raise ValueError(f"{key} 超出支持范围 {minimum} 至 {maximum}")
         values[key] = value
-    count = values["YMCLOUD_GO_JUDGE_CONCURRENCY"]
-    if count != values["YMCLOUD_WORKER_CONCURRENCY"]:
-        raise ValueError("Worker 与沙箱并发必须一致")
+    try:
+        cpus = float(env.get("JUDGE_CPUS", ""))
+    except ValueError:
+        raise ValueError("JUDGE_CPUS 必须为数字") from None
+    if not math.isfinite(cpus) or cpus <= 0:
+        raise ValueError("JUDGE_CPUS 必须为正数")
+    count = values["YMCLOUD_GO_JUDGE_CONCURRENCY"] or max(1, math.floor(cpus))
     largest = max(values["YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB"] * 1024,
                   values["YMCLOUD_GO_JUDGE_COMPILE_MEMORY_BYTES"])
     required = max(count * (largest + 128 * MIB) + 128 * MIB,
                    count * (largest + 64 * MIB) + 256 * MIB)
     if values["YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES"] < required:
         raise ValueError("JUDGE_MEMORY_BYTES 不足以覆盖并发、单题/编译上限及服务开销")
-    try:
-        cpus = float(env.get("JUDGE_CPUS", ""))
-    except ValueError:
-        raise ValueError("JUDGE_CPUS 必须为数字") from None
-    if not math.isfinite(cpus) or cpus < count * values["YMCLOUD_GO_JUDGE_CPU_RATE"] / 1000:
+    if cpus < count * values["YMCLOUD_GO_JUDGE_CPU_RATE"] / 1000:
         raise ValueError("JUDGE_CPUS 不足以覆盖并发与每任务 CPU 预算")
     if values["JUDGE_PIDS"] < count * values["YMCLOUD_GO_JUDGE_PROCESS_LIMIT"] + 64:
         raise ValueError("JUDGE_PIDS 不足以覆盖并发进程和服务开销")
-    if values["WORKER_HEAP_MIB"] < 128 + 64 * (count - 1):
-        raise ValueError("WORKER_HEAP_MIB 不足以覆盖判题并发")
     if values["WORKER_MEMORY_MIB"] < values["WORKER_HEAP_MIB"] + 256:
         raise ValueError("WORKER_MEMORY_MIB 必须至少比 Java 堆多 256MiB")
-    if values["WORKER_PIDS"] < 64 + 64 * count:
-        raise ValueError("WORKER_PIDS 不足以覆盖判题并发")
     try:
         worker_cpus = float(env.get("WORKER_CPUS", ""))
     except ValueError:
         raise ValueError("WORKER_CPUS 必须为数字") from None
-    if not math.isfinite(worker_cpus) or worker_cpus < 0.5 * count:
-        raise ValueError("WORKER_CPUS 不足以覆盖判题并发")
+    if not math.isfinite(worker_cpus) or worker_cpus <= 0:
+        raise ValueError("WORKER_CPUS 必须为正数")
 
 
 def main():

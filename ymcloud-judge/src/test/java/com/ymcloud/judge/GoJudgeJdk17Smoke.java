@@ -172,7 +172,7 @@ public final class GoJudgeJdk17Smoke {
      * @param client 隔离或真实沙箱客户端
      * @param properties 本测试使用的容量、截止或发布配置
      * @param worker 本测试使用的 Worker 资源配置
-     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     * @return 已注入依赖并初始化共享任务额度的执行器
      */
     private static GoJudgeExecutor createGoJudgeExecutor(
             GoJudgeClient client,
@@ -182,6 +182,7 @@ public final class GoJudgeJdk17Smoke {
         ReflectionTestUtils.setField(component, "client", client);
         ReflectionTestUtils.setField(component, "properties", properties);
         ReflectionTestUtils.setField(component, "worker", worker);
+        component.initialize();
         return component;
     }
 

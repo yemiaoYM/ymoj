@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import pathlib
 import re
 import subprocess
@@ -45,13 +46,12 @@ def main():
     sandbox = services["go-judge"]
     worker = services["worker"]
     env = worker["environment"]
-    concurrency = int(env["YMCLOUD_GO_JUDGE_CONCURRENCY"])
-    if not 1 <= concurrency <= 32:
-        raise SystemExit("沙箱并发必须为 1 至 32")
-    if concurrency != int(sandbox["environment"]["YMCLOUD_GO_JUDGE_PARALLELISM"]):
+    configured = int(env["YMCLOUD_GO_JUDGE_CONCURRENCY"])
+    if configured < 0 or int(env["YMCLOUD_WORKER_CONCURRENCY"]) < 0:
+        raise SystemExit("并发必须为非负整数，0 表示自动")
+    if configured != int(sandbox["environment"]["YMCLOUD_GO_JUDGE_PARALLELISM"]):
         raise SystemExit("Worker 与 go-judge 并发配置不一致")
-    if int(env["YMCLOUD_WORKER_CONCURRENCY"]) != concurrency:
-        raise SystemExit("Worker 与 go-judge 并发必须相等")
+    concurrency = configured or max(1, math.floor(float(sandbox["cpus"])))
     for key in ("YMCLOUD_GO_JUDGE_TOKEN", "YMCLOUD_WORKER_SERVICE_TOKEN"):
         value = env[key]
         if not 32 <= len(value) <= 512 or any(ord(char) <= 32 or ord(char) >= 127 for char in value):
@@ -60,7 +60,6 @@ def main():
         raise SystemExit("go-judge 和 Web 必须使用不同的服务令牌")
     bounds = {
         "YMCLOUD_GO_JUDGE_MAX_FILE_BYTES": (1024, 256 * 1024 * 1024),
-        "YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES": (1024, 16 * 1024 * 1024),
         "YMCLOUD_GO_JUDGE_MAX_REQUEST_BYTES": (1024, 256 * 1024 * 1024),
         "YMCLOUD_GO_JUDGE_MAX_RESPONSE_BYTES": (1024, 64 * 1024 * 1024),
         "YMCLOUD_GO_JUDGE_COMPILE_MEMORY_BYTES": (32 * 1024 * 1024, 64 * 1024 * 1024 * 1024),
@@ -72,14 +71,16 @@ def main():
     for key, (minimum, maximum_value) in bounds.items():
         if not minimum <= int(env[key]) <= maximum_value:
             raise SystemExit(f"部署参数超出支持范围: {key}")
-    if int(env["YMCLOUD_GO_JUDGE_MAX_RESPONSE_BYTES"]) < 6 * int(env["YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES"]) + 65536:
-        raise SystemExit("响应预算不足以容纳最坏 JSON 转义后的 stdout/stderr")
+    if not 1024 <= int(env["YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES"]) <= int(env["YMCLOUD_GO_JUDGE_MAX_FILE_BYTES"]):
+        raise SystemExit("stdout/stderr 输出预算必须至少 1024 字节且不超过单文件预算")
+    if int(env["YMCLOUD_GO_JUDGE_MAX_REQUEST_BYTES"]) < int(env["YMCLOUD_GO_JUDGE_MAX_FILE_BYTES"]) + 1024 * 1024:
+        raise SystemExit("上传请求预算必须覆盖单文件并预留 1 MiB multipart 头尾")
     duration = re.fullmatch(r"([0-9]+)(ms|s|m)", env["YMCLOUD_GO_JUDGE_REQUEST_TIMEOUT"])
     if not duration:
         raise SystemExit("部署传输超时请使用正整数和 ms、s 或 m")
     timeout_ms = int(duration[1]) * {"ms": 1, "s": 1000, "m": 60000}[duration[2]]
-    if not 3000 <= timeout_ms <= 600000 or timeout_ms <= int(env["YMCLOUD_GO_JUDGE_COMPILE_WALL_MS"]):
-        raise SystemExit("传输超时必须覆盖连接/编译且不超过 10 分钟")
+    if not 3000 <= timeout_ms <= 600000:
+        raise SystemExit("传输超时必须为 3 秒至 10 分钟")
     if int(sandbox["environment"]["YMCLOUD_GO_JUDGE_FILE_TTL_SECONDS"]) < 3600:
         raise SystemExit("文件 TTL 不能短于最大一小时任务截止窗口")
     maximum = max(int(env["YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB"]) * 1024,

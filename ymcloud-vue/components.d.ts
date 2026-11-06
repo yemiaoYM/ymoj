@@ -103,6 +103,7 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     SidebarItem: typeof import('./src/components/admin/SidebarItem.vue')['default']
     SiteFiling: typeof import('./src/components/oj/SiteFiling.vue')['default']
+    SpjEditor: typeof import('./src/components/admin/SpjEditor.vue')['default']
     SubmissionChart: typeof import('./src/components/admin/SubmissionChart.vue')['default']
     SubmissionStatus: typeof import('./src/components/oj/SubmissionStatus.vue')['default']
     ThemeSelect: typeof import('./src/components/common/ThemeSelect.vue')['default']

@@ -7,6 +7,9 @@ spring:
     main:
         # 独立后台进程，不启动 HTTP 服务，也不连接业务数据库。
         web-application-type: none
+    lifecycle:
+        # 最大停机等待覆盖在途任务、文件清理和结果确认；任务结束后立即退出。
+        timeout-per-shutdown-phase: 64m
     rabbitmq:
         # 与同一环境的 Web 使用相同地址、账号和 virtual host。
         # 开发与生产必须隔离 virtual host，避免消费者互相抢任务。
@@ -52,8 +55,8 @@ ymcloud:
         work-dir: ${YMCLOUD_JUDGE_WORK_DIR:./files/worker/work}
         journal-dir: ${YMCLOUD_JUDGE_RESULT_DIR:./files/worker/results}
         redis-prefix: ${YMCLOUD_WORKER_REDIS_PREFIX:ymcloud:judge-worker-v2:}
-        # 同时评测的任务数，默认 1；增加前先确认 CPU、内存及磁盘容量。
-        concurrency: ${YMCLOUD_WORKER_CONCURRENCY:1}
+        # 同时处理的任务数，0 按当前 Worker 可用 CPU 加 1；管理员可独立指定正整数
+        concurrency: ${YMCLOUD_WORKER_CONCURRENCY:0}
         # 单任务最多执行次数，超过次数由最终系统错误收敛。
         max-attempts: 3
         # 以下时间单位为毫秒；租约必须大于结果确认超时的两倍。
@@ -61,8 +64,8 @@ ymcloud:
         confirm-timeout-millis: 10000
         # 已完成结果与去重状态保存 7 天，单位为毫秒。
         retention-millis: 604800000
-        # 每次受限进程 stdout + stderr 的上限，单位字节，默认 1 MiB。
-        max-output-bytes: ${YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES:1048576}
+        # 每次受限进程 stdout + stderr 的上限，单位字节，默认 32 MiB
+        max-output-bytes: ${YMCLOUD_GO_JUDGE_MAX_OUTPUT_BYTES:33554432}
         go-judge:
             # 单一执行服务；默认 HTTP 仅允许回环地址，令牌必须独立且至少 32 字符。
             base-url: ${YMCLOUD_GO_JUDGE_URL:http://127.0.0.1:5050}
@@ -70,17 +73,19 @@ ymcloud:
             allow-private-network-http: ${YMCLOUD_GO_JUDGE_ALLOW_PRIVATE_HTTP:false}
             token: ${YMCLOUD_GO_JUDGE_TOKEN:}
             connect-timeout: 3s
-            # 覆盖最高 60 秒题目限时，并为传输和返回保留边界。
+            # 文件和探针请求的传输预算，沙箱排队及执行遵循任务总截止
             request-timeout: ${YMCLOUD_GO_JUDGE_REQUEST_TIMEOUT:90s}
             max-response-bytes: ${YMCLOUD_GO_JUDGE_MAX_RESPONSE_BYTES:8388608}
-            max-request-bytes: ${YMCLOUD_GO_JUDGE_MAX_REQUEST_BYTES:25165824}
-            # 单文件和编译产物 16 MiB；内存单位明确区分 bytes 与 KiB。
-            max-file-bytes: ${YMCLOUD_GO_JUDGE_MAX_FILE_BYTES:16777216}
+            # 上传预算覆盖单文件，并为 multipart 头尾保留 1 MiB
+            max-request-bytes: ${YMCLOUD_GO_JUDGE_MAX_REQUEST_BYTES:68157440}
+            # 单文件和编译产物 64 MiB，输出通过文件流传输，不进入执行响应 JSON
+            max-file-bytes: ${YMCLOUD_GO_JUDGE_MAX_FILE_BYTES:67108864}
             max-problem-memory-ki-b: ${YMCLOUD_GO_JUDGE_MAX_MEMORY_KIB:1048576}
             compile-memory-bytes: ${YMCLOUD_GO_JUDGE_COMPILE_MEMORY_BYTES:536870912}
             compile-wall-time-millis: ${YMCLOUD_GO_JUDGE_COMPILE_WALL_MS:10000}
             process-limit: ${YMCLOUD_GO_JUDGE_PROCESS_LIMIT:64}
-            sandbox-concurrency: ${YMCLOUD_GO_JUDGE_CONCURRENCY:1}
+            # 0 由沙箱按自身可用 CPU 自动确定；管理员指定并发时用于配套容量校验
+            sandbox-concurrency: ${YMCLOUD_GO_JUDGE_CONCURRENCY:0}
             service-memory-bytes: ${YMCLOUD_GO_JUDGE_SERVICE_MEMORY_BYTES:1610612736}
             cpu-rate-limit: ${YMCLOUD_GO_JUDGE_CPU_RATE:1000}
         cache:

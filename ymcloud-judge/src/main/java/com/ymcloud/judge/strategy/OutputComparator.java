@@ -1,5 +1,8 @@
 package com.ymcloud.judge.strategy;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -8,126 +11,60 @@ import java.nio.charset.StandardCharsets;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-12
- * @Description: 分块比较标准答案，保留既有空白规则并完整读取以验证文件哈希。
+ * @Description: 分块比较标准答案，保留既有空白规则并完整读取以验证文件哈希
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class OutputComparator {
 
     /**
-     * 答案比较工具不创建实例。
-     */
-    private OutputComparator() {}
-
-    /**
-     * 流式比对标准答案，不因提前发现不同而跳过文件完整性校验。
+     * 同时顺序读取标准答案及原始输出，内存占用不随输出或空白行长度增长
      * @param expected UTF-8 标准答案流，调用结束时关闭
-     * @param actual 已受沙箱输出上限约束的程序输出
+     * @param actual UTF-8 原始输出流，调用结束时关闭
      * @return 忽略行末空白及末尾空行后是否相等
      * @throws IOException 文件读取、哈希校验或线程中断失败
      */
-    public static boolean matches(InputStream expected, String actual) throws IOException {
-        String normalized = normalize(actual);
-        try (InputStreamReader reader = new InputStreamReader(expected, StandardCharsets.UTF_8)) {
-            StringBuilder whitespace = new StringBuilder();
-            long newlines = 0;
-            long position = 0;
+    public static boolean matches(InputStream expected, InputStream actual) throws IOException {
+        try (CharacterStream left = new CharacterStream(expected); CharacterStream right = new CharacterStream(actual)) {
+            int expectedChar = left.read();
+            int actualChar = right.read();
             boolean equal = true;
-            boolean previousCr = false;
-            boolean whitespaceOverflow = false;
-            char[] buffer = new char[8192];
-            int count;
-            while ((count = reader.read(buffer)) != -1) {
-                if (Thread.currentThread().isInterrupted()) {
-                    throw new IOException("标准答案比对被中断");
-                }
-                for (int offset = 0; offset < count; offset++) {
-                    char character = buffer[offset];
-                    if (character == '\n' && previousCr) {
-                        previousCr = false;
-                        continue;
+            boolean whitespaceEqual = true;
+            while (expectedChar != -1 || actualChar != -1) {
+                boolean expectedEnd = expectedChar == -1 || expectedChar == '\n';
+                boolean actualEnd = actualChar == -1 || actualChar == '\n';
+                if (expectedEnd && actualEnd) {
+                    if (expectedChar == -1 || actualChar == -1) {
+                        equal = left.onlyBlankRemaining() && right.onlyBlankRemaining();
+                        break;
                     }
-                    previousCr = character == '\r';
-                    if (character == '\r' || character == '\n') {
-                        newlines++;
-                        whitespace.setLength(0);
-                        whitespaceOverflow = false;
-                    } else if (isBlankChar(character)) {
-                        if (equal && whitespace.length() <= normalized.length()) {
-                            whitespace.append(character);
-                        } else {
-                            whitespaceOverflow = true;
-                        }
-                    } else {
-                        if (equal) {
-                            if (newlines > normalized.length() - position || whitespaceOverflow) {
-                                equal = false;
-                            } else {
-                                while (newlines-- > 0) {
-                                    equal &= at(normalized, position++, '\n');
-                                }
-                                for (int index = 0; index < whitespace.length(); index++) {
-                                    equal &= at(normalized, position++, whitespace.charAt(index));
-                                }
-                                equal &= at(normalized, position++, character);
-                            }
-                        }
-                        newlines = 0;
-                        whitespace.setLength(0);
-                        whitespaceOverflow = false;
-                    }
+                    whitespaceEqual = true;
+                } else if (expectedEnd && isBlankChar(actualChar)) {
+                    actualChar = right.read();
+                    continue;
+                } else if (actualEnd && isBlankChar(expectedChar)) {
+                    expectedChar = left.read();
+                    continue;
+                } else if (isBlankChar(expectedChar) && isBlankChar(actualChar)) {
+                    // 暂不确认空白差异，只有后续还有正文时这些空白才参与比较
+                    whitespaceEqual &= expectedChar == actualChar;
+                } else if (!whitespaceEqual || expectedChar != actualChar) {
+                    equal = false;
+                    break;
+                } else {
+                    whitespaceEqual = true;
                 }
+                expectedChar = left.read();
+                actualChar = right.read();
             }
-            return equal && position == normalized.length();
+            // 即使答案不同也完整消费标准答案，让固定版本的长度及哈希校验生效
+            left.drain();
+            right.drain();
+            return equal;
         }
     }
 
     /**
-     * 单次遍历统一换行并去除行末空白，不按行创建数组和大量临时字符串。
-     * @param value 程序输出；null 按空串处理
-     * @return 保留行首和行内空白的归一化文本
-     */
-    public static String normalize(String value) {
-        if (value == null) {
-            return "";
-        }
-        StringBuilder normalized = new StringBuilder(value.length());
-        int lineEnd = 0;
-        int contentEnd = 0;
-        boolean previousCr = false;
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            if (character == '\n' && previousCr) {
-                previousCr = false;
-                continue;
-            }
-            previousCr = character == '\r';
-            if (character == '\r' || character == '\n') {
-                normalized.setLength(lineEnd);
-                normalized.append('\n');
-                lineEnd = normalized.length();
-            } else {
-                normalized.append(character);
-                if (!isBlankChar(character)) {
-                    lineEnd = normalized.length();
-                    contentEnd = lineEnd;
-                }
-            }
-        }
-        return normalized.substring(0, contentEnd);
-    }
-
-    /**
-     * 在有界的实际输出中比较一个字符。
-     * @param value 实际输出
-     * @param position 标准答案归一化后的字符位置
-     * @param character 当前标准字符
-     * @return 位置有效且字符相等
-     */
-    private static boolean at(String value, long position, char character) {
-        return position >= 0 && position < value.length() && value.charAt((int) position) == character;
-    }
-
-    /**
-     * 对齐原 Hutool CharUtil.isBlankChar，避免既有题目因 Unicode 空白规则变化产生 WA。
+     * 对齐原 Hutool CharUtil.isBlankChar，避免既有题目因 Unicode 空白规则变化产生 WA
      * @param character 待检查的 UTF-16 字符
      * @return 是否属于项目已有的可忽略空白
      */
@@ -135,5 +72,86 @@ public final class OutputComparator {
         return Character.isWhitespace(character) || Character.isSpaceChar(character)
                 || character == 0xFEFF || character == 0x202A || character == 0
                 || character == 0x3164 || character == 0x2800 || character == 0x200C || character == 0x180E;
+    }
+
+    /**
+     * 使用固定字符缓冲统一换行，不为超长行或连续空白创建字符串
+     */
+    private static final class CharacterStream implements AutoCloseable {
+
+        private final InputStreamReader reader;
+        private final char[] buffer = new char[8192];
+        private int position;
+        private int length;
+        private boolean previousCr;
+
+        /**
+         * 绑定 UTF-8 原始文件流
+         * @param input 由本字符流负责关闭的输入
+         */
+        private CharacterStream(InputStream input) {
+            reader = new InputStreamReader(input, StandardCharsets.UTF_8);
+        }
+
+        /**
+         * 读取统一换行后的字符，每次补充缓冲时检查任务中断
+         * @return UTF-16 字符或 EOF 标记 -1
+         * @throws IOException 读取、完整性校验或中断失败
+         */
+        private int read() throws IOException {
+            while (true) {
+                if (position == length) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        throw new IOException("标准答案比对被中断");
+                    }
+                    length = reader.read(buffer);
+                    position = 0;
+                    if (length == -1) {
+                        length = 0;
+                        return -1;
+                    }
+                }
+                char character = buffer[position++];
+                if (character == '\n' && previousCr) {
+                    previousCr = false;
+                    continue;
+                }
+                previousCr = character == '\r';
+                return previousCr ? '\n' : character;
+            }
+        }
+
+        /**
+         * 检查剩余文件是否仅含可忽略的末尾空白
+         * @return 后续没有正文时为 true
+         * @throws IOException 读取或中断失败
+         */
+        private boolean onlyBlankRemaining() throws IOException {
+            boolean blank = true;
+            int character;
+            while ((character = read()) != -1) {
+                blank &= isBlankChar(character);
+            }
+            return blank;
+        }
+
+        /**
+         * 消费尚未读取的内容，以完成文件容量和哈希校验
+         * @throws IOException 读取、校验或中断失败
+         */
+        private void drain() throws IOException {
+            while (read() != -1) {
+                // 读取边界执行完整性校验
+            }
+        }
+
+        /**
+         * 关闭底层文件及可能的网络响应
+         * @throws IOException 底层资源关闭失败
+         */
+        @Override
+        public void close() throws IOException {
+            reader.close();
+        }
     }
 }

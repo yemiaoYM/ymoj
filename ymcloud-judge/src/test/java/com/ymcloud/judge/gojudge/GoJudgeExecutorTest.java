@@ -7,6 +7,7 @@ import com.ymcloud.judge.exception.CompileException;
 import com.ymcloud.pojo.contract.judge.JudgeLanguage;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -15,6 +16,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +34,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,9 +52,14 @@ class GoJudgeExecutorTest {
     private WorkerProperties worker;
     private JudgeTask task;
 
+    /**
+     * 准备固定任务和独立文件流，所有沙箱调用均由测试控制
+     * @throws Exception 模拟客户端配置失败
+     */
     @BeforeEach
-    void setup() {
+    void setup() throws Exception {
         client = mock(GoJudgeClient.class);
+        when(client.openFile(anyString(), anyLong())).thenAnswer(invocation -> stream(""));
         worker = new WorkerProperties();
         executor = createGoJudgeExecutor(client, new GoJudgeProperties(), worker);
         JudgeLanguage language = new JudgeLanguage();
@@ -88,6 +96,32 @@ class GoJudgeExecutorTest {
         assertEquals(JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED, executor.classify(response, task).status());
         task.setMemoryLimit(1048577L);
         assertNotNull(executor.capacityFailure(task));
+    }
+
+    /**
+     * 编译及题目运行时限独立于文件传输预算，发送到沙箱的墙钟限制保持原值
+     * @throws Exception 模拟沙箱调用失败
+     */
+    @Test
+    void executionLimitsAreIndependentOfTransferTimeout() throws Exception {
+        GoJudgeProperties properties = new GoJudgeProperties();
+        properties.setToken("test-go-judge-token-0000000000000000000");
+        properties.setRequestTimeout(Duration.ofSeconds(3));
+        properties.validate();
+        executor = createGoJudgeExecutor(client, properties, worker);
+        task.setTimeLimit(60000L);
+        assertNull(executor.capacityFailure(task));
+        when(client.upload(any(InputStream.class), eq("stdin"), anyLong())).thenReturn("input-id");
+        when(client.execute(any(), anyLong())).thenAnswer(invocation -> {
+            Map<?, ?> request = invocation.getArgument(0);
+            Map<?, ?> command = (Map<?, ?>) ((List<?>) request.get("cmd")).get(0);
+            assertEquals(60_000_000_000L, command.get("clockLimit"));
+            return List.of(result("Accepted"));
+        });
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            var program = new GoJudgeExecutor.PreparedProgram("Java", "program.jar", "artifact-id");
+            assertEquals(JudgeVerdict.STATUS_ACCEPTED, executor.run(session, program, stream("")).status());
+        }
     }
 
     @Test
@@ -140,12 +174,16 @@ class GoJudgeExecutorTest {
         assertThrows(IOException.class, () -> executor.classify(missingOutput, task));
     }
 
+    /**
+     * 成功执行必须保留原始输出引用，缺失文件不能退化为空答案
+     * @throws Exception 响应解析失败
+     */
     @Test
-    void decodedReplacementCharactersCannotInflateTheRawLauncherOutputBudget() throws Exception {
+    void successfulExecutionRequiresRawOutputReference() throws Exception {
         ObjectNode response = result("Accepted");
-        response.putObject("files").put("stdout", "\uFFFD".repeat(700000))
-                .put("stderr", "").put("launcher", "");
         assertEquals(JudgeVerdict.STATUS_ACCEPTED, executor.classify(response, task).status());
+        ((ObjectNode) response.get("fileIds")).remove("stdout");
+        assertThrows(IOException.class, () -> executor.classify(response, task));
     }
 
     @Test
@@ -183,17 +221,18 @@ class GoJudgeExecutorTest {
             task.getLanguageConfig().setName(language);
             String artifact = language.equals("Java") ? "program.jar" : language.equals("Python") ? "main.py" : "program";
             ObjectNode response = result("Accepted");
-            response.putObject("fileIds").put(artifact, "artifact-id");
+            ((ObjectNode) response.get("fileIds")).put(artifact, "artifact-id");
             doAnswer(invocation -> {
                 Map<?, ?> request = invocation.getArgument(0);
                 Map<?, ?> command = (Map<?, ?>) ((List<?>) request.get("cmd")).get(0);
                 String arguments = command.get("args").toString();
                 assertFalse(arguments.contains("untrusted legacy"));
-                assertTrue(arguments.startsWith("[/usr/local/bin/ymcloud-output-limit, 1048576, 16777216,"));
+                assertTrue(arguments.startsWith("[/usr/local/bin/ymcloud-output-limit, "
+                        + worker.getMaxOutputBytes() + ", " + new GoJudgeProperties().getMaxFileBytes() + ","));
                 assertEquals(512L * 1024 * 1024, command.get("memoryLimit"));
                 assertEquals(10_000_000_000L, command.get("clockLimit"));
                 assertEquals(false, command.get("copyOutTruncate"));
-                assertEquals(List.of(artifact + "?"), command.get("copyOutCached"));
+                assertEquals(List.of("stdout", "stderr", artifact + "?"), command.get("copyOutCached"));
                 assertEquals(Map.of("name", "launcher", "max", 256, "pipe", true),
                         ((List<?>) command.get("files")).get(3));
                 if (language.equals("Java")) {
@@ -223,7 +262,7 @@ class GoJudgeExecutorTest {
         for (String status : List.of("Nonzero Exit Status", "Time Limit Exceeded", "Memory Limit Exceeded",
                 "Output Limit Exceeded", "Signalled")) {
             ObjectNode response = result(status);
-            response.putObject("fileIds").put("program.jar", "partial-artifact");
+            ((ObjectNode) response.get("fileIds")).put("program.jar", "partial-artifact");
             when(client.execute(any(), anyLong())).thenReturn(List.of(response));
             try (GoJudgeTaskSession session = executor.openTask(task)) {
                 assertThrows(CompileException.class, () -> executor.compile(session));
@@ -247,7 +286,7 @@ class GoJudgeExecutorTest {
         when(client.upload(any(InputStream.class), anyString(), anyLong())).thenReturn("source-id");
         for (String field : List.of("runTime", "memory")) {
             ObjectNode response = result("Accepted");
-            response.putObject("fileIds").put("program.jar", "artifact-id");
+            ((ObjectNode) response.get("fileIds")).put("program.jar", "artifact-id");
             response.put(field, field.equals("runTime") ? 10_000_000_001L : 512L * 1024 * 1024 + 1);
             when(client.execute(any(), anyLong())).thenReturn(List.of(response));
             try (GoJudgeTaskSession session = executor.openTask(task)) {
@@ -264,7 +303,7 @@ class GoJudgeExecutorTest {
             Map<?, ?> request = invocation.getArgument(0);
             Map<?, ?> command = (Map<?, ?>) ((List<?>) request.get("cmd")).get(0);
             assertEquals(Map.of("program.jar", Map.of("fileId", "artifact-id")), command.get("copyIn"));
-            assertFalse(command.containsKey("copyOutCached"));
+            assertEquals(List.of("stdout", "stderr"), command.get("copyOutCached"));
             return List.of(result("Accepted"));
         });
         try (GoJudgeTaskSession session = executor.openTask(task)) {
@@ -273,6 +312,43 @@ class GoJudgeExecutorTest {
             verify(client).delete(eq("input-one"), anyLong());
             executor.run(session, program, stream("second"));
             verify(client).delete(eq("input-two"), anyLong());
+        }
+    }
+
+    /**
+     * 普通判题仅下载短预览，完整输出留给流式比较且 stderr 立即回收
+     * @throws Exception 模拟执行或文件读取失败
+     */
+    @Test
+    void normalRunKeepsFullOutputCachedAndReturnsOnlyPreview() throws Exception {
+        when(client.upload(any(InputStream.class), eq("stdin"), anyLong())).thenReturn("input-id");
+        when(client.execute(any(), anyLong())).thenReturn(List.of(result("Accepted")));
+        when(client.openFile(eq("stdout-id"), anyLong())).thenAnswer(invocation -> stream("x".repeat(20000)));
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            var result = executor.run(session,
+                    new GoJudgeExecutor.PreparedProgram("Java", "program.jar", "artifact-id"), stream("input"));
+            assertEquals("x".repeat(301), result.stdout());
+            assertEquals("stdout-id", result.stdoutFileId());
+            verify(client).delete(eq("stderr-id"), anyLong());
+            verify(client, never()).openFile(eq("stderr-id"), anyLong());
+        }
+        verify(client).delete(eq("stdout-id"), anyLong());
+    }
+
+    /**
+     * 大编译诊断同样缓存为文件，用户错误消息维持既有 4000 字符上限
+     * @throws Exception 模拟编译或文件读取失败
+     */
+    @Test
+    void compilerDiagnosticsKeepExistingCharacterLimitAndReleaseCachedStreams() throws Exception {
+        when(client.upload(any(InputStream.class), anyString(), anyLong())).thenReturn("source-id");
+        when(client.execute(any(), anyLong())).thenReturn(List.of(result("Nonzero Exit Status")));
+        when(client.openFile(eq("stderr-id"), anyLong())).thenAnswer(invocation -> stream("E".repeat(20000)));
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            CompileException failure = assertThrows(CompileException.class, () -> executor.compile(session));
+            assertEquals("编译失败（Nonzero Exit Status）：" + "E".repeat(4000), failure.getMessage());
+            verify(client).delete(eq("stdout-id"), anyLong());
+            verify(client).delete(eq("stderr-id"), anyLong());
         }
     }
 
@@ -321,9 +397,9 @@ class GoJudgeExecutorTest {
         when(client.upload(any(InputStream.class), anyString(), anyLong()))
                 .thenReturn("source-one", "input-one", "source-two", "input-two");
         ObjectNode first = result("Accepted");
-        first.putObject("fileIds").put("program.jar", "artifact-one");
+        ((ObjectNode) first.get("fileIds")).put("program.jar", "artifact-one");
         ObjectNode second = result("Accepted");
-        second.putObject("fileIds").put("program.jar", "artifact-two");
+        ((ObjectNode) second.get("fileIds")).put("program.jar", "artifact-two");
         when(client.execute(any(), anyLong()))
                 .thenReturn(List.of(first))
                 .thenThrow(new GoJudgeFileMissingException())
@@ -352,7 +428,7 @@ class GoJudgeExecutorTest {
     void cancelledExecutionStillDeletesInputAndArtifactWithoutLosingTheInterrupt() throws Exception {
         when(client.upload(any(InputStream.class), anyString(), anyLong())).thenReturn("source-id", "input-id");
         ObjectNode compiled = result("Accepted");
-        compiled.putObject("fileIds").put("program.jar", "artifact-id");
+        ((ObjectNode) compiled.get("fileIds")).put("program.jar", "artifact-id");
         when(client.execute(any(), anyLong())).thenReturn(List.of(compiled)).thenAnswer(invocation -> {
             Thread.currentThread().interrupt();
             throw new GoJudgeException("cancelled");
@@ -375,6 +451,109 @@ class GoJudgeExecutorTest {
         verify(client).delete(eq("artifact-id"), anyLong());
     }
 
+    /**
+     * SPJ 编译提供真实 testlib 头文件，编译结束立即回收源码依赖。
+     * @throws Exception 沙箱模拟失败
+     */
+    @Test
+    void spjCompilerSuppliesPinnedTestlibAndReleasesDependencies() throws Exception {
+        when(client.upload(any(InputStream.class), eq("main.cpp"), anyLong())).thenReturn("source-id");
+        when(client.upload(any(InputStream.class), eq("testlib.h"), anyLong())).thenAnswer(invocation -> {
+            String header = new String(((InputStream) invocation.getArgument(0)).readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(header.contains("void registerTestlibCmd(int argc, char *argv[])"));
+            assertTrue(header.contains("#define VERSION \"0.9.49\""));
+            return "header-id";
+        });
+        ObjectNode compiled = result("Accepted");
+        ((ObjectNode) compiled.get("fileIds")).put("checker", "checker-id");
+        when(client.execute(any(), anyLong())).thenAnswer(invocation -> {
+            Map<?, ?> command = (Map<?, ?>) ((List<?>) ((Map<?, ?>) invocation.getArgument(0)).get("cmd")).get(0);
+            assertEquals(Map.of("main.cpp", Map.of("fileId", "source-id"),
+                    "testlib.h", Map.of("fileId", "header-id")), command.get("copyIn"));
+            assertTrue(command.get("args").toString().contains("-std=c++17"));
+            assertEquals(List.of("stdout", "stderr", "checker?"), command.get("copyOutCached"));
+            return List.of(compiled);
+        });
+        SpjProgram spj = new SpjProgram();
+        spj.setLanguage("C++");
+        spj.setCode("#include \"testlib.h\"");
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            assertEquals("checker", executor.compileSpj(session, spj).artifact());
+            verify(client).delete(eq("source-id"), anyLong());
+            verify(client).delete(eq("header-id"), anyLong());
+        }
+        verify(client).delete(eq("checker-id"), anyLong());
+    }
+
+    /**
+     * testlib 退出判定与校验器资源故障分开解释，不接受未知部分分协议。
+     * @throws Exception 响应解析失败
+     */
+    @Test
+    void testlibVerdictsAndCheckerFaultsRemainDistinct() throws Exception {
+        var mapping = Map.of(0, JudgeVerdict.STATUS_ACCEPTED, 1, JudgeVerdict.STATUS_WRONG_ANSWER,
+                2, JudgeVerdict.STATUS_PRESENTATION_ERROR, 3, JudgeVerdict.STATUS_SYSTEM_ERROR,
+                7, JudgeVerdict.STATUS_SYSTEM_ERROR, 50, JudgeVerdict.STATUS_SYSTEM_ERROR);
+        for (var entry : mapping.entrySet()) {
+            ObjectNode response = result(entry.getKey() == 0 ? "Accepted" : "Nonzero Exit Status");
+            response.put("exitStatus", entry.getKey());
+            assertEquals(entry.getValue(), executor.checkerVerdict(response));
+        }
+        for (String state : List.of("Time Limit Exceeded", "Memory Limit Exceeded", "Signalled", "Output Limit Exceeded")) {
+            assertEquals(JudgeVerdict.STATUS_SYSTEM_ERROR, executor.checkerVerdict(result(state)));
+        }
+        ObjectNode response = result("Accepted");
+        response.put("runTime", 2_000_000_001L);
+        assertEquals(JudgeVerdict.STATUS_SYSTEM_ERROR, executor.checkerVerdict(response));
+        response.put("runTime", 1L);
+        response.put("memory", SpjProgram.MEMORY_LIMIT_BYTES + 1);
+        assertEquals(JudgeVerdict.STATUS_SYSTEM_ERROR, executor.checkerVerdict(response));
+    }
+
+    /**
+     * 选手只得到输入与程序，原始输出以文件 ID 传给独立 checker，隐藏答案不混入选手沙箱。
+     * @throws Exception 模拟上传或执行失败
+     */
+    @Test
+    void spjUsesRawOutputAndSeparateCheckerSandbox() throws Exception {
+        task.setSpj(new SpjProgram());
+        when(client.upload(any(InputStream.class), anyString(), anyLong()))
+                .thenReturn("stdin-id", "test-input-id", "answer-id");
+        ObjectNode ran = result("Accepted");
+        ((ObjectNode) ran.get("files")).remove("stdout");
+        ((ObjectNode) ran.get("fileIds")).put("stdout", "raw-output-id");
+        when(client.execute(any(), anyLong())).thenAnswer(invocation -> {
+            Map<?, ?> command = (Map<?, ?>) ((List<?>) ((Map<?, ?>) invocation.getArgument(0)).get("cmd")).get(0);
+            if (((Map<?, ?>) command.get("copyIn")).containsKey("program.jar")) {
+                assertEquals(List.of("stdout", "stderr"), command.get("copyOutCached"));
+                assertEquals(Map.of("program.jar", Map.of("fileId", "program-id")), command.get("copyIn"));
+                return List.of(ran);
+            }
+            assertEquals(Map.of("checker", Map.of("fileId", "checker-id"),
+                    "input.txt", Map.of("fileId", "test-input-id"),
+                    "output.txt", Map.of("fileId", "raw-output-id"),
+                    "answer.txt", Map.of("fileId", "answer-id")), command.get("copyIn"));
+            assertTrue(command.get("args").toString().endsWith("./checker, input.txt, output.txt, answer.txt]"));
+            return List.of(result("Accepted"));
+        });
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            var run = executor.run(session, new GoJudgeExecutor.PreparedProgram("Java", "program.jar", "program-id"), stream("input"));
+            assertEquals("", run.stdout());
+            assertEquals("raw-output-id", run.stdoutFileId());
+            assertEquals(JudgeVerdict.STATUS_ACCEPTED, executor.check(session,
+                    new GoJudgeExecutor.PreparedProgram("C++", "checker", "checker-id"),
+                    stream("input"), stream("hidden answer"), run.stdoutFileId()));
+        }
+        for (String id : List.of("stdin-id", "test-input-id", "answer-id", "raw-output-id")) {
+            verify(client).delete(eq(id), anyLong());
+        }
+    }
+
+    /**
+     * 构造包含输出文件引用的固定沙箱响应
+     * @param status 要模拟的沙箱状态
+     * @return 带资源统计和受信诊断的响应
+     */
     private ObjectNode result(String status) {
         ObjectNode result = mapper.createObjectNode();
         result.put("status", status);
@@ -382,7 +561,8 @@ class GoJudgeExecutorTest {
         result.put("time", 100L);
         result.put("runTime", 200L);
         result.put("memory", 1024L);
-        result.putObject("files").put("stdout", "").put("stderr", "").put("launcher", "");
+        result.putObject("files").put("launcher", "");
+        result.putObject("fileIds").put("stdout", "stdout-id").put("stderr", "stderr-id");
         return result;
     }
 
@@ -395,7 +575,7 @@ class GoJudgeExecutorTest {
      * @param client 隔离或真实沙箱客户端
      * @param properties 本测试使用的容量、截止或发布配置
      * @param worker 本测试使用的 Worker 资源配置
-     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     * @return 已注入依赖并初始化共享任务额度的执行器
      */
     private static GoJudgeExecutor createGoJudgeExecutor(
             GoJudgeClient client,
@@ -405,6 +585,7 @@ class GoJudgeExecutorTest {
         ReflectionTestUtils.setField(component, "client", client);
         ReflectionTestUtils.setField(component, "properties", properties);
         ReflectionTestUtils.setField(component, "worker", worker);
+        component.initialize();
         return component;
     }
 }

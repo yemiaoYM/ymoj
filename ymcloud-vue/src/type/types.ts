@@ -271,7 +271,9 @@ export type ProblemVO = {
   source: string | null
   /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
   difficulty: number
-  /** 判题方式；当前只开放 default。 */
+  /**
+   * 判题方式，当前开放 default 和 spj
+   */
   judgeMode: ProblemJudgeMode
   /** 时间限制（单位：ms） */
   timeLimit: number
@@ -375,8 +377,15 @@ export type AdminProblemVO = {
   source?: string | null;
   /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
   difficulty: number;
-  /** 判题方式；当前只开放 default。 */
+  /**
+   * 判题方式，当前开放 default 和 spj
+   */
   judgeMode?: ProblemJudgeMode;
+  /**
+   * testlib 校验器，仅管理详情返回
+   */
+  spjLanguage: string | null;
+  spjCode: string | null;
   /** 权限：1=公开，2=私有，3=比赛专用 */
   visibility: number;
   /** 是否允许查看测试样例结果（0=否，1=是） */
@@ -437,6 +446,11 @@ export type AnnouncementDTO = {
  * 题目表单DTO
  */
 export type ProblemDTO = {
+  /**
+   * SPJ 语言与源码，普通判题时由后端清空
+   */
+  spjLanguage: string;
+  spjCode: string;
   /** 题目ID */
   id: number | null;
   /** 问题的自定义ID */
@@ -459,7 +473,9 @@ export type ProblemDTO = {
   source: string | null;
   /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
   difficulty: number;
-  /** 判题方式；当前只开放 default。 */
+  /**
+   * 判题方式，当前开放 default 和 spj
+   */
   judgeMode: ProblemJudgeMode;
   /** 可见性：1=公开，2=私有，3=比赛专用 */
   visibility: number;

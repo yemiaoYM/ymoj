@@ -34,6 +34,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -62,6 +64,8 @@ public class GoJudgeClient implements AutoCloseable {
     private final HttpClient http;
     private final Set<Future<?>> pending = ConcurrentHashMap.newKeySet();
     private final Set<InputStream> uploads = ConcurrentHashMap.newKeySet();
+    private final Set<InputStream> downloads = ConcurrentHashMap.newKeySet();
+    private final ScheduledThreadPoolExecutor deadlines;
     private final AtomicBoolean closed = new AtomicBoolean();
 
     /**
@@ -80,17 +84,24 @@ public class GoJudgeClient implements AutoCloseable {
                 .proxy(ProxySelector.of(null))
                 .connectTimeout(properties.getConnectTimeout())
                 .build();
+        this.deadlines = new ScheduledThreadPoolExecutor(1, runnable -> {
+            Thread thread = new Thread(runnable, "go-judge-file-deadline");
+            thread.setDaemon(true);
+            return thread;
+        });
+        this.deadlines.setRemoveOnCancelPolicy(true);
     }
 
     /**
-     * 执行固定命令，验证结构化响应；无效响应中的沙箱文件仍须回收。
+     * 执行固定命令，排队及运行共用任务总截止，避免传输预算中断合法排队
+     * 验证结构化响应，无效响应中的沙箱文件仍须回收
      * @param command 固定命令及资源限制
      * @param deadlineEpochMillis 任务截止时间，UTC epoch 毫秒
      * @return 与请求命令一一对应的已验证响应
      * @throws GoJudgeException 请求超限、中断或沙箱响应非法
      */
     public List<JsonNode> execute(Map<String, Object> command, long deadlineEpochMillis) throws GoJudgeException {
-        long deadline = requestDeadline(deadlineEpochMillis);
+        long deadline = taskDeadline(deadlineEpochMillis);
         byte[] body;
         try {
             body = mapper.writeValueAsBytes(command);
@@ -271,6 +282,46 @@ public class GoJudgeClient implements AutoCloseable {
     }
 
     /**
+     * 流式读取沙箱缓存文件，文件内容不经过 JSON 或整段内存缓冲
+     * @param fileId 沙箱返回的文件 ID
+     * @param deadlineEpochMillis 任务截止时间，UTC epoch 毫秒
+     * @return 受完整传输截止和单文件容量约束的流，由调用方关闭
+     * @throws GoJudgeException 文件不存在、容量超限、请求失败或已中断
+     */
+    public InputStream openFile(String fileId, long deadlineEpochMillis) throws GoJudgeException {
+        if (!validFileId(fileId)) {
+            throw new GoJudgeException("go-judge 文件 ID 无效");
+        }
+        long deadline = requestDeadline(deadlineEpochMillis);
+        HttpRequest request = requestBuilder("GET", "/file/" + fileId, HttpRequest.BodyPublishers.noBody(),
+                null, deadline, true).setHeader("Accept", "application/octet-stream").build();
+        CompletableFuture<HttpResponse<InputStream>> future = http.sendAsync(request,
+                HttpResponse.BodyHandlers.ofInputStream());
+        boolean opened = false;
+        try {
+            HttpResponse<InputStream> response = await(future, deadline);
+            if (response.statusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
+                throw new GoJudgeFileMissingException();
+            }
+            if (response.statusCode() != HttpURLConnection.HTTP_OK) {
+                throw new GoJudgeException("go-judge HTTP 状态异常：" + response.statusCode());
+            }
+            if (response.headers().firstValueAsLong("Content-Length").orElse(-1) > properties.getMaxFileBytes()) {
+                throw new GoJudgeException("go-judge 下载文件超过单文件容量上限");
+            }
+            InputStream input = new DownloadStream(response.body(), deadline);
+            opened = true;
+            return input;
+        } finally {
+            if (!opened) {
+                // 响应头和取消可能同时完成，已产生的正文也必须关闭
+                future.thenAccept(response -> closeQuietly(response.body()));
+                future.cancel(true);
+            }
+        }
+    }
+
+    /**
      * 读取沙箱版本供启动检查使用。
      * @param deadlineEpochMillis 启动检查截止时间，UTC epoch 毫秒
      * @return 原始版本 JSON
@@ -306,7 +357,7 @@ public class GoJudgeClient implements AutoCloseable {
     }
 
     /**
-     * 取消正在传输的请求并关闭上传源，禁止关闭后继续发起网络操作。
+     * 取消正在传输的请求并关闭上传源、下载正文及截止回调
      */
     @PreDestroy
     @Override
@@ -314,6 +365,8 @@ public class GoJudgeClient implements AutoCloseable {
         if (closed.compareAndSet(false, true)) {
             pending.forEach(future -> future.cancel(true));
             uploads.forEach(GoJudgeClient::closeQuietly);
+            downloads.forEach(GoJudgeClient::closeQuietly);
+            deadlines.shutdownNow();
         }
     }
 
@@ -343,6 +396,37 @@ public class GoJudgeClient implements AutoCloseable {
      */
     private byte[] request(String method, String path, HttpRequest.BodyPublisher body, String contentType,
                            long deadline, boolean authenticated, int expectedStatus) throws GoJudgeException {
+        HttpRequest.Builder builder = requestBuilder(method, path, body, contentType, deadline, authenticated);
+        HttpResponse<byte[]> response;
+        try {
+            response = await(http.sendAsync(builder.build(), info -> new LimitedBodySubscriber(
+                    properties.getMaxResponseBytes())), deadline);
+        } catch (RuntimeException e) {
+            throw new GoJudgeException("go-judge HTTP 请求未能发送");
+        }
+        if (response.statusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
+            throw new GoJudgeFileMissingException();
+        }
+        if (response.statusCode() != expectedStatus) {
+            throw new GoJudgeException("go-judge HTTP 状态异常：" + response.statusCode());
+        }
+        return response.body();
+    }
+
+    /**
+     * 为 JSON 与文件请求复用固定地址、鉴权及完整传输预算
+     * @param method HTTP 方法
+     * @param path 固定沙箱路径
+     * @param body 请求正文
+     * @param contentType 正文媒体类型，无正文时为 null
+     * @param deadline 基于 nanoTime 的截止时间
+     * @param authenticated 是否携带独立服务令牌
+     * @return 已设置安全边界的请求构造器
+     * @throws GoJudgeException 服务地址无效、任务中断或已到期
+     */
+    private HttpRequest.Builder requestBuilder(String method, String path, HttpRequest.BodyPublisher body,
+                                               String contentType, long deadline, boolean authenticated)
+            throws GoJudgeException {
         checkActive(deadline);
         URI target;
         try {
@@ -362,20 +446,7 @@ public class GoJudgeClient implements AutoCloseable {
         if (contentType != null) {
             builder.header("Content-Type", contentType);
         }
-        HttpResponse<byte[]> response;
-        try {
-            response = await(http.sendAsync(builder.build(), info -> new LimitedBodySubscriber(
-                    properties.getMaxResponseBytes())), deadline);
-        } catch (RuntimeException e) {
-            throw new GoJudgeException("go-judge HTTP 请求未能发送");
-        }
-        if (response.statusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
-            throw new GoJudgeFileMissingException();
-        }
-        if (response.statusCode() != expectedStatus) {
-            throw new GoJudgeException("go-judge HTTP 状态异常：" + response.statusCode());
-        }
-        return response.body();
+        return builder;
     }
 
     /**
@@ -438,18 +509,28 @@ public class GoJudgeClient implements AutoCloseable {
     }
 
     /**
-     * 将任务截止和单次请求超时合并为单调时钟截止。
+     * 文件和探针请求同时受任务截止及独立传输预算约束
      * @param deadlineEpochMillis 任务截止时间，UTC epoch 毫秒
      * @return 基于 nanoTime 的截止时间
      * @throws GoJudgeException 任务已经到期
      */
     private long requestDeadline(long deadlineEpochMillis) throws GoJudgeException {
+        return Math.min(taskDeadline(deadlineEpochMillis),
+                System.nanoTime() + properties.getRequestTimeout().toNanos());
+    }
+
+    /**
+     * 将任务剩余总预算转换为单调时钟截止
+     * @param deadlineEpochMillis 任务截止时间，UTC epoch 毫秒
+     * @return 基于 nanoTime 的截止时间
+     * @throws GoJudgeException 任务已经到期
+     */
+    private long taskDeadline(long deadlineEpochMillis) throws GoJudgeException {
         long now = System.currentTimeMillis();
         if (deadlineEpochMillis <= now) {
             throw new GoJudgeException("go-judge 请求已超过任务截止时间");
         }
-        long available = Math.min(properties.getRequestTimeout().toMillis(), deadlineEpochMillis - now);
-        return System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(available);
+        return System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(deadlineEpochMillis - now);
     }
 
     /**
@@ -497,13 +578,121 @@ public class GoJudgeClient implements AutoCloseable {
 
     /**
      * 在取消和清理边界释放输入，不用关闭异常替换原始失败。
-     * @param input 需要关闭的上传源
+     * @param input 需要关闭的上传源或下载正文
      */
     private static void closeQuietly(InputStream input) {
         try {
             input.close();
         } catch (IOException ignored) {
             // 取消时优先释放 HTTP 请求与任务，缓存 TTL 负责异常断连后的最后兜底。
+        }
+    }
+
+    /**
+     * 为缓存文件下载限制实际字节数，并在正文阻塞时主动关闭连接
+     */
+    private final class DownloadStream extends FilterInputStream {
+
+        private final long deadline;
+        private final ScheduledFuture<?> timer;
+        private final AtomicBoolean released = new AtomicBoolean();
+        private long count;
+
+        /**
+         * 登记下载正文及完整请求截止回调
+         * @param input JDK 可关闭的响应正文
+         * @param deadline 基于 nanoTime 的完整请求截止时间
+         * @throws GoJudgeException 客户端已停止或截止回调无法注册
+         */
+        private DownloadStream(InputStream input, long deadline) throws GoJudgeException {
+            super(input);
+            this.deadline = deadline;
+            downloads.add(input);
+            try {
+                this.timer = deadlines.schedule(() -> closeQuietly(input),
+                        Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            } catch (RuntimeException e) {
+                downloads.remove(input);
+                closeQuietly(input);
+                throw new GoJudgeException("go-judge 文件客户端已停止");
+            }
+        }
+
+        /**
+         * 单字节读取也执行相同的容量与截止检查
+         * @return 无符号字节，EOF 为 -1
+         * @throws IOException 正文读取失败、超限或请求已停止
+         */
+        @Override
+        public int read() throws IOException {
+            byte[] single = new byte[1];
+            return read(single, 0, 1) < 0 ? -1 : Byte.toUnsignedInt(single[0]);
+        }
+
+        /**
+         * 有界读取原始字节，禁止将超限文件截断后误判为完整答案
+         * @param buffer 接收正文的缓冲
+         * @param offset 写入起点
+         * @param length 最多读取字节数
+         * @return 实际字节数，EOF 为 -1
+         * @throws IOException 超限、超时、中断或网络正文不完整
+         */
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            checkActive(deadline);
+            if (released.get()) {
+                throw new GoJudgeException("go-judge 下载文件已经关闭");
+            }
+            int read;
+            try {
+                read = in.read(buffer, offset, (int) Math.min(length, properties.getMaxFileBytes() - count + 1));
+            } catch (IOException e) {
+                if (e.getCause() instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                throw new GoJudgeException("go-judge 文件读取失败、中断或超时");
+            }
+            checkActive(deadline);
+            if (read > 0) {
+                count += read;
+                if (count > properties.getMaxFileBytes()) {
+                    throw new GoJudgeException("go-judge 下载文件超过单文件容量上限");
+                }
+            }
+            return read;
+        }
+
+        /**
+         * 跳过数据仍按实际字节执行容量及截止检查
+         * @param amount 请求跳过的字节数
+         * @return 实际跳过的字节数
+         * @throws IOException 正文读取失败或请求已停止
+         */
+        @Override
+        public long skip(long amount) throws IOException {
+            byte[] buffer = new byte[8192];
+            long skipped = 0;
+            while (skipped < amount) {
+                int read = read(buffer, 0, (int) Math.min(buffer.length, amount - skipped));
+                if (read < 0) {
+                    break;
+                }
+                skipped += read;
+            }
+            return skipped;
+        }
+
+        /**
+         * 幂等释放网络正文及截止回调
+         * @throws IOException 底层正文关闭失败
+         */
+        @Override
+        public void close() throws IOException {
+            if (released.compareAndSet(false, true)) {
+                timer.cancel(false);
+                downloads.remove(in);
+                in.close();
+            }
         }
     }
 

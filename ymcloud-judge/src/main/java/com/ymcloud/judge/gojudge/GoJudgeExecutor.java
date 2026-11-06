@@ -5,18 +5,24 @@ import com.ymcloud.judge.config.WorkerProperties;
 import com.ymcloud.judge.exception.CompileException;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -44,26 +50,43 @@ public class GoJudgeExecutor {
     @Autowired
     private WorkerProperties worker;
 
+    private Semaphore taskSlots;
+
     /**
-     * 为一次任务创建独立的沙箱文件生命周期。
-     * @param task 已通过入口校验的任务
-     * @return 由调用方关闭的任务会话
+     * 由 Worker 总任务上限建立唯一准入额度，正式判题和编译预检共用
      */
-    public GoJudgeTaskSession openTask(JudgeTask task) {
-        return new GoJudgeTaskSession(client, task);
+    @PostConstruct
+    public void initialize() {
+        taskSlots = new Semaphore(worker.getConcurrency(), true);
     }
 
     /**
-     * 检查题目资源是否超过当前部署能力，不将容量不足当作用户代码错误。
+     * 在任务截止前取得共享额度，会话关闭时归还额度并清理沙箱文件
+     * @param task 已通过入口校验的任务
+     * @return 由调用方关闭的任务会话
+     * @throws IOException 等待额度超时或被中断
+     */
+    public GoJudgeTaskSession openTask(JudgeTask task) throws IOException {
+        long remaining = task.getDeadlineEpochMs() - System.currentTimeMillis();
+        try {
+            if (remaining <= 0 || !taskSlots.tryAcquire(remaining, TimeUnit.MILLISECONDS)) {
+                throw new IOException("等待 Worker 任务额度超时");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InterruptedIOException("等待 Worker 任务额度被中断");
+        }
+        return new GoJudgeTaskSession(client, task, taskSlots);
+    }
+
+    /**
+     * 检查题目内存是否超过当前部署能力，不将容量不足当作用户代码错误
      * @param task 已验证的任务资源限制
      * @return 安全的拒绝原因；容量允许时为 null
      */
     public String capacityFailure(JudgeTask task) {
         if (task.getMemoryLimit() > properties.getMaxProblemMemoryKiB()) {
             return "题目内存限制超过当前评测部署容量（上限 " + properties.getMaxProblemMemoryKiB() + " KiB）";
-        }
-        if (task.getTimeLimit() + 2000L > properties.getRequestTimeout().toMillis()) {
-            return "题目限时超过当前评测部署的 HTTP 执行预算";
         }
         return null;
     }
@@ -77,7 +100,31 @@ public class GoJudgeExecutor {
      */
     public PreparedProgram compile(GoJudgeTaskSession session) throws IOException {
         JudgeTask task = session.task();
-        String language = task.getLanguageConfig().getName();
+        return compileSource(session, task.getLanguageConfig().getName(), task.getCode(), false);
+    }
+
+    /**
+     * 编译任务快照中的校验器，独立命名产物避免与选手程序混用
+     * @param session 当前任务会话
+     * @param spj 已验证的校验器快照
+     * @return 本会话持有的校验器编译产物
+     * @throws IOException 编译或沙箱处理失败
+     */
+    public PreparedProgram compileSpj(GoJudgeTaskSession session, SpjProgram spj) throws IOException {
+        return compileSource(session, spj.getLanguage(), spj.getCode(), true);
+    }
+
+    /**
+     * 复用固定语言编译入口，源码只作为文件内容上传
+     * @param session 当前任务会话
+     * @param language 支持的语言
+     * @param sourceCode 有界源码
+     * @param checker 是否生成校验器产物
+     * @return 已登记到会话的编译产物
+     * @throws IOException 编译或文件处理失败
+     */
+    private PreparedProgram compileSource(GoJudgeTaskSession session, String language, String sourceCode,
+                                          boolean checker) throws IOException {
         String source = switch (language) {
             case "Java" -> "Main.java";
             case "C" -> "main.c";
@@ -88,52 +135,69 @@ public class GoJudgeExecutor {
         String artifact = switch (language) {
             case "Java" -> "program.jar";
             case "Python" -> "main.py";
-            default -> "program";
+            default -> checker ? "checker" : "program";
         };
         List<String> arguments = switch (language) {
             case "Java" -> List.of("/bin/sh", "-c",
                     "mkdir classes && /usr/bin/javac -J-Xmx256m -J-XX:+UseSerialGC -encoding UTF-8"
                             + " -J-Djava.io.tmpdir=/w -d classes Main.java"
                             + " && /usr/bin/jar -J-Xmx128m -J-Djava.io.tmpdir=/w cf program.jar -C classes .");
-            case "C" -> List.of("/usr/bin/gcc", "-std=c11", "-O2", "-pipe", "main.c", "-o", "program", "-lm");
-            case "C++" -> List.of("/usr/bin/g++", "-std=c++17", "-O2", "-pipe", "main.cpp", "-o", "program");
+            case "C" -> List.of("/usr/bin/gcc", "-std=c11", "-O2", "-pipe", "main.c", "-o", artifact, "-lm");
+            case "C++" -> List.of("/usr/bin/g++", "-std=c++17", "-O2", "-pipe", "main.cpp", "-o", artifact);
             case "Python" -> List.of("/usr/bin/python3", "-I", "-m", "py_compile", "main.py");
             default -> throw new IOException("不支持的语言入口");
         };
         String sourceId;
-        try (InputStream code = new ByteArrayInputStream(task.getCode().getBytes(StandardCharsets.UTF_8))) {
+        try (InputStream code = new ByteArrayInputStream(sourceCode.getBytes(StandardCharsets.UTF_8))) {
             sourceId = session.upload(code, source);
         }
+        String headerId = null;
         try {
             Map<String, Object> command = command(arguments, properties.getCompileWallTimeMillis(),
                     properties.getCompileMemoryBytes());
-            command.put("copyIn", Map.of(source, Map.of("fileId", sourceId)));
-            // 失败编译没有产物时，不让缺少可选文件掩盖实际的编译状态。
-            command.put("copyOutCached", List.of(artifact + "?"));
-            JsonNode response = execute(session, command, "compile");
-            String status = status(response);
-            if ("File Error".equals(status)) {
-                if (fileSizeExceeded(response)) {
-                    throw new CompileException("编译产物超过大小限制");
+            Map<String, Object> copyIn = new LinkedHashMap<>();
+            copyIn.put(source, Map.of("fileId", sourceId));
+            if (checker) {
+                try (InputStream header = new ClassPathResource("testlib/testlib.h").getInputStream()) {
+                    headerId = session.upload(header, "testlib.h");
                 }
-                throw new IOException("编译文件处理失败");
+                copyIn.put("testlib.h", Map.of("fileId", headerId));
             }
-            if (!"Accepted".equals(status) || exitStatus(response) != 0) {
-                throw new CompileException("编译失败（" + status + "）：" + diagnostic(response));
+            command.put("copyIn", copyIn);
+            // 失败编译没有产物时，不让缺少可选文件掩盖实际的编译状态。
+            command.put("copyOutCached", List.of("stdout", "stderr", artifact + "?"));
+            JsonNode response = execute(session, command, "compile");
+            try {
+                String status = status(response);
+                if ("File Error".equals(status)) {
+                    if (fileSizeExceeded(response)) {
+                        throw new CompileException("编译产物超过大小限制");
+                    }
+                    throw new IOException("编译文件处理失败");
+                }
+                if (!"Accepted".equals(status) || exitStatus(response) != 0) {
+                    throw new CompileException("编译失败（" + status + "）：" + diagnostic(session, response));
+                }
+                if (nonNegative(response, "runTime") > TimeUnit.MILLISECONDS.toNanos(properties.getCompileWallTimeMillis())) {
+                    throw new CompileException("编译超过墙钟时间限制");
+                }
+                if (nonNegative(response, "memory") > properties.getCompileMemoryBytes()) {
+                    throw new CompileException("编译超过内存限制");
+                }
+                JsonNode fileId = response.path("fileIds").get(artifact);
+                if (fileId == null || !fileId.isTextual() || fileId.textValue().isBlank()) {
+                    throw new IOException("编译成功但未返回完整产物");
+                }
+                return new PreparedProgram(language, artifact, fileId.textValue());
+            } finally {
+                releaseOutput(session, response, "stdout");
+                releaseOutput(session, response, "stderr");
             }
-            if (nonNegative(response, "runTime") > TimeUnit.MILLISECONDS.toNanos(properties.getCompileWallTimeMillis())) {
-                throw new CompileException("编译超过墙钟时间限制");
-            }
-            if (nonNegative(response, "memory") > properties.getCompileMemoryBytes()) {
-                throw new CompileException("编译超过内存限制");
-            }
-            JsonNode fileId = response.path("fileIds").get(artifact);
-            if (fileId == null || !fileId.isTextual() || fileId.textValue().isBlank()) {
-                throw new IOException("编译成功但未返回完整产物");
-            }
-            return new PreparedProgram(language, artifact, fileId.textValue());
         } finally {
             session.release(sourceId);
+            if (headerId != null) {
+                session.release(headerId);
+            }
         }
     }
 
@@ -162,10 +226,86 @@ public class GoJudgeExecutor {
             command.put("files", files(Map.of("fileId", inputId)));
             command.put("copyIn", Map.of(program.artifact(), Map.of("fileId", program.fileId())));
             JsonNode response = execute(session, command, "run");
-            return classify(response, task);
+            try {
+                ExecutionResult result = classify(response, task);
+                String preview = result.stdoutFileId() == null || task.getSpj() != null
+                        ? "" : readOutput(session, result.stdoutFileId(), 301);
+                return new ExecutionResult(result.status(), preview, result.errorMessage(), result.timeMillis(),
+                        result.memoryKiB(), result.stdoutFileId());
+            } finally {
+                releaseOutput(session, response, "stderr");
+            }
         } finally {
             session.release(inputId);
         }
+    }
+
+    /**
+     * 在独立沙箱中校验原始输出，诊断正文不进入选手结果
+     * @param session 当前任务会话
+     * @param checker 已编译校验器
+     * @param input 测试输入流
+     * @param answer 标准答案流
+     * @param outputId 当前测试点的原始输出文件 ID
+     * @return 校验器协议判定，运行故障为系统错误
+     * @throws IOException 文件传输或沙箱协议失败
+     */
+    public JudgeVerdict check(GoJudgeTaskSession session, PreparedProgram checker, InputStream input,
+                              InputStream answer, String outputId) throws IOException {
+        String inputId = null;
+        String answerId = null;
+        try {
+            inputId = session.upload(input, "input.txt");
+            answerId = session.upload(answer, "answer.txt");
+            Map<String, Object> command = command(
+                    List.of("./checker", "input.txt", "output.txt", "answer.txt"),
+                    SpjProgram.TIME_LIMIT_MILLIS, SpjProgram.MEMORY_LIMIT_BYTES);
+            command.put("copyIn", Map.of(
+                    "checker", Map.of("fileId", checker.fileId()),
+                    "input.txt", Map.of("fileId", inputId),
+                    "output.txt", Map.of("fileId", outputId),
+                    "answer.txt", Map.of("fileId", answerId)));
+            JsonNode response = execute(session, command, "spj");
+            try {
+                return checkerVerdict(response);
+            } finally {
+                releaseOutput(session, response, "stdout");
+                releaseOutput(session, response, "stderr");
+            }
+        } finally {
+            if (inputId != null) {
+                session.release(inputId);
+            }
+            if (answerId != null) {
+                session.release(answerId);
+            }
+        }
+    }
+
+    /**
+     * 解释校验器的退出码，资源超限和异常不能误判为选手错误
+     * @param response 已验证的沙箱响应
+     * @return AC、WA、PE 或 SE
+     * @throws IOException 沙箱响应结构无效
+     */
+    JudgeVerdict checkerVerdict(JsonNode response) throws IOException {
+        String state = status(response);
+        if ((!"Accepted".equals(state) && !"Nonzero Exit Status".equals(state))
+                || nonNegative(response, "runTime") > TimeUnit.MILLISECONDS.toNanos(SpjProgram.TIME_LIMIT_MILLIS)
+                || nonNegative(response, "memory") > SpjProgram.MEMORY_LIMIT_BYTES) {
+            return JudgeVerdict.STATUS_SYSTEM_ERROR;
+        }
+        long exit = exitStatus(response);
+        if (exit == SpjProgram.ACCEPTED) {
+            return JudgeVerdict.STATUS_ACCEPTED;
+        }
+        if (exit == SpjProgram.WRONG_ANSWER) {
+            return JudgeVerdict.STATUS_WRONG_ANSWER;
+        }
+        if (exit == SpjProgram.PRESENTATION_ERROR) {
+            return JudgeVerdict.STATUS_PRESENTATION_ERROR;
+        }
+        return JudgeVerdict.STATUS_SYSTEM_ERROR;
     }
 
     /**
@@ -193,6 +333,7 @@ public class GoJudgeExecutor {
         command.put("cpuRateLimit", properties.getCpuRateLimit());
         command.put("copyOutMax", properties.getMaxFileBytes());
         command.put("copyOutTruncate", false);
+        command.put("copyOutCached", List.of("stdout", "stderr"));
         return command;
     }
 
@@ -228,8 +369,8 @@ public class GoJudgeExecutor {
         }
         JsonNode response = responses.get(0);
         validateLauncher(response);
-        textFile(response, "stdout");
-        textFile(response, "stderr");
+        cachedOutput(response, "stdout");
+        cachedOutput(response, "stderr");
         long cpu = nonNegative(response, "time");
         long wall = nonNegative(response, "runTime");
         long memory = nonNegative(response, "memory");
@@ -271,11 +412,10 @@ public class GoJudgeExecutor {
                 verdict = JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED;
             }
         }
-        String stdout = textFile(response, "stdout");
-        textFile(response, "stderr");
-        // 共享输出预算由可信启动器按原始字节计数；JSON 替换非法 UTF-8 后不能重新计数。
+        String stdoutFileId = cachedOutput(response, "stdout");
+        // stdout 和 stderr 的共享预算由可信启动器按原始字节计数
         String error = verdict == JudgeVerdict.STATUS_RUNTIME_ERROR ? "程序运行异常（" + status + "）" : null;
-        return new ExecutionResult(verdict, stdout, error, millis(wall), kibibytes(memory));
+        return new ExecutionResult(verdict, "", error, millis(wall), kibibytes(memory), stdoutFileId);
     }
 
     /**
@@ -367,13 +507,66 @@ public class GoJudgeExecutor {
 
     /**
      * 提取有长度上限的编译诊断，用于既有编译错误契约。
+     * @param session 当前输出文件会话
      * @param response 编译命令响应
      * @return 最多 4000 个字符的诊断或安全默认提示
      * @throws IOException stderr 字段无效
      */
-    private static String diagnostic(JsonNode response) throws IOException {
-        String message = textFile(response, "stderr");
-        return message.isBlank() ? "编译器返回失败状态" : message.substring(0, Math.min(message.length(), 4000));
+    private static String diagnostic(GoJudgeTaskSession session, JsonNode response) throws IOException {
+        String fileId = cachedOutput(response, "stderr");
+        String message = fileId == null ? "" : readOutput(session, fileId, 4000);
+        return message.isBlank() ? "编译器返回失败状态" : message;
+    }
+
+    /**
+     * 取得原始输出引用，成功命令必须返回完整输出文件
+     * @param response 沙箱结构化响应
+     * @param name 固定输出通道
+     * @return 缓存文件 ID，失败且未产生文件时为 null
+     * @throws IOException 成功响应缺少输出引用
+     */
+    private static String cachedOutput(JsonNode response, String name) throws IOException {
+        JsonNode fileId = response.path("fileIds").get(name);
+        if (fileId != null && fileId.isTextual() && !fileId.textValue().isBlank()) {
+            return fileId.textValue();
+        }
+        if ("Accepted".equals(status(response))) {
+            throw new IOException("go-judge 成功响应缺少缓存输出文件");
+        }
+        return null;
+    }
+
+    /**
+     * 仅读取预览需要的字符，完整输出仍留在沙箱缓存供比对
+     * @param session 本次任务会话
+     * @param fileId 原始输出文件 ID
+     * @param maximum 最多读取的 UTF-16 字符数
+     * @return 有界预览文本
+     * @throws IOException 缓存文件读取失败或请求被中断
+     */
+    private static String readOutput(GoJudgeTaskSession session, String fileId, int maximum) throws IOException {
+        try (InputStreamReader reader = new InputStreamReader(session.openFile(fileId), StandardCharsets.UTF_8)) {
+            char[] preview = new char[maximum];
+            int count = 0;
+            int read;
+            while (count < maximum && (read = reader.read(preview, count, maximum - count)) != -1) {
+                count += read;
+            }
+            return new String(preview, 0, count);
+        }
+    }
+
+    /**
+     * 及时释放阶段输出，失败清理由会话及沙箱 TTL 继续负责
+     * @param session 当前任务会话
+     * @param response 已验证并登记的响应
+     * @param name 固定输出通道
+     */
+    private static void releaseOutput(GoJudgeTaskSession session, JsonNode response, String name) {
+        JsonNode fileId = response.path("fileIds").get(name);
+        if (fileId != null) {
+            session.release(fileId.textValue());
+        }
     }
 
     /**
@@ -397,5 +590,5 @@ public class GoJudgeExecutor {
     public record PreparedProgram(String language, String artifact, String fileId) {}
 
     public record ExecutionResult(JudgeVerdict status, String stdout, String errorMessage,
-                                  long timeMillis, long memoryKiB) {}
+                                  long timeMillis, long memoryKiB, String stdoutFileId) {}
 }

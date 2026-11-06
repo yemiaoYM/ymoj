@@ -36,15 +36,15 @@ public class GoJudgeStartupCheck {
     private WorkerProperties workerProperties;
 
     /**
-     * 消费者启动前验证版本、鉴权、隔离和工具链，失败则阻止启动。
+     * 消费者启动前验证版本、鉴权、隔离和工具链，失败则阻止启动
      * @throws GoJudgeException 沙箱不符合部署安全约束
      */
     @PostConstruct
     public void verify() throws GoJudgeException {
         long started = System.nanoTime();
-        if (workerProperties.getConcurrency() != properties.getSandboxConcurrency()
-                || properties.getMaxResponseBytes() < 6L * workerProperties.getMaxOutputBytes() + 65536) {
-            throw new GoJudgeException("Worker 并发、沙箱并发及 HTTP 输出预算不匹配");
+        if (workerProperties.getMaxOutputBytes() > properties.getMaxFileBytes()
+                || properties.getMaxRequestBytes() < properties.getMaxFileBytes() + 1024 * 1024) {
+            throw new GoJudgeException("Worker 输出和沙箱文件传输预算不匹配");
         }
         long deadline = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(2);
         validateVersion(client.version(deadline));
@@ -63,9 +63,9 @@ public class GoJudgeStartupCheck {
                 Long.toString(properties.getMaxFileBytes()), "/usr/bin/printf", "launcher-ready"),
                 "launcher-ready", deadline);
         verifyIsolation(deadline);
-        log.info("go-judge 启动检查通过 version={} phase={} elapsedMs={} concurrency={} memoryKiB={} processes={}",
+        log.info("go-judge 启动检查通过 version={} phase={} elapsedMs={} memoryKiB={} processes={}",
                 REQUIRED_VERSION, "startup", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started),
-                properties.getSandboxConcurrency(), properties.getMaxProblemMemoryKiB(), properties.getProcessLimit());
+                properties.getMaxProblemMemoryKiB(), properties.getProcessLimit());
     }
 
     /**

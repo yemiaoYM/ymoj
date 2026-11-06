@@ -6,7 +6,10 @@ export function isDraftRecord(value: unknown): value is Record<string, unknown> 
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** 新建表单共用的本地草稿：按账号隔离，最后修改后保留七天。 */
+/**
+ * 新建表单共用的本地草稿
+ * 按账号隔离，最后修改后保留七天
+ */
 export function useLocalDraft<T>(
   kind: 'problem' | 'contest',
   data: () => T,
@@ -25,15 +28,15 @@ export function useLocalDraft<T>(
       Storage.set(key, pending);
       pending = undefined;
     } catch {
-      // 草稿属于辅助功能，存储不可用时不打断编辑
-      // 下一次变更仍可重试
+      //草稿属于辅助功能，存储不可用时不打断编辑
+      //下一次变更仍可重试
       return;
     }
   }
 
   function save() {
     if (!active()) return;
-    // 在当前事件内取快照，避免切换到编辑页后写入另一份表单
+    //在当前事件内取快照，避免切换到编辑页后写入另一份表单
     pending = { data: JSON.parse(JSON.stringify(data())), expiresAt: Date.now() + 7 * 86400000 };
     clearTimeout(timer);
     timer = setTimeout(flush, 300);
@@ -45,7 +48,7 @@ export function useLocalDraft<T>(
     try {
       Storage.remove(key);
     } catch {
-      // 缓存不可用不阻断表单操作，也不额外提示删除失败
+      //缓存不可用不阻断表单操作，也不额外提示删除失败
       return;
     }
   }

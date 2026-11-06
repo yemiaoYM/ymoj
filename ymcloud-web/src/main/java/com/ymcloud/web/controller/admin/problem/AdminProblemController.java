@@ -4,6 +4,8 @@ import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
+import com.ymcloud.pojo.dto.admin.SpjCompileDTO;
+import com.ymcloud.pojo.contract.judge.SpjCompileResult;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ProblemVO;
@@ -32,6 +34,18 @@ public class AdminProblemController {
 
     @Autowired
     private AdminProblemService adminProblemService;
+
+    /**
+     * 在保存前校验管理员编写的 SPJ，不在 Web 执行代码
+     * @param request SPJ 语言和源码
+     * @return 编译结果
+     */
+    @PreAuthorize("@ss.hasAnyPermi('problem:problem:add', 'problem:problem:edit')")
+    @PostMapping("/spj/compile")
+    public Result<SpjCompileResult> compileSpj(@Validated @RequestBody SpjCompileDTO request) {
+        log.info("请求编译 SPJ: language={}", request.getLanguage());
+        return Result.ok(adminProblemService.compileSpj(request));
+    }
 
     /**
      * 查询题目列表

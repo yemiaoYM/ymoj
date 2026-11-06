@@ -57,7 +57,7 @@ import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 import { getAdminCarousel, saveCarousel, uploadCarousel } from '@/api/carousel';
 import type { CarouselImage } from '@/type/carousel';
 import { useUserStore } from '@/stores/user';
-import { useAsyncChange } from '@/composables/useAsyncChange';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 
 const userStore = useUserStore();
 const canEdit = computed(() => userStore.hasEveryPermission(['system:setting:edit']));

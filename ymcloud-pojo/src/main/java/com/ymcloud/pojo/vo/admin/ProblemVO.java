@@ -2,6 +2,7 @@ package com.ymcloud.pojo.vo.admin;
 
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
 import lombok.Data;
+import lombok.ToString;
 
 import java.io.Serializable;
 import java.util.List;
@@ -57,9 +58,20 @@ public class ProblemVO implements Serializable {
      */
     private Integer difficulty;
     /**
-     * 判题方式：default=普通、spj=特殊、interactive=交互；当前仅支持 default
+     * 判题方式：default=普通、spj=特殊，交互判题暂不开放
      */
     private String judgeMode;
+
+    /**
+     * testlib 校验器语言
+     */
+    private String spjLanguage;
+
+    /**
+     * 仅管理详情可见的校验器源码
+     */
+    @ToString.Exclude
+    private String spjCode;
     /**
      * 可见性：1=公开，2=私有，3=比赛专用
      */

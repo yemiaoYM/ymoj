@@ -63,7 +63,7 @@ public class ProblemVO implements Serializable {
     private Integer difficulty;
     /**
      * 判题方式：default=普通、spj=特殊、interactive=交互
-     * 当前仅支持 default
+     * 当前支持 default 和基于 testlib 的 C++17 SPJ，interactive 暂不开放
      */
     private String judgeMode;
     /**

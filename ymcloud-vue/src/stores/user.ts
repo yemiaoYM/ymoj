@@ -4,7 +4,7 @@ import type { UserProfile } from '@/type/types';
 import { useRouter,useRoute } from 'vue-router';
 import Storage from '@/utils/storage';
 import { ref,computed } from 'vue';
-import { hasAnyValue,hasEveryValue,isNull } from '@/utils/utils';
+import { isNull } from '@/utils/utils';
 
 /**
  * 用户信息
@@ -42,27 +42,52 @@ export const useUserStore = defineStore('userInfo', () => {
     const isSuperAdmin = computed(() => user.value.id === 1);
 
     /**
-     * 判断用户是否拥有任意一个角色
+     * 判断单项权限，仅超级管理员可以使用全权限标识
      */
-    const hasAnyRole=(roles:string[]):boolean=>{
-        if(isNull(user.value)){
+    const hasPermission = (permission: string): boolean => {
+        if (!permission || isNull(user.value)) {
             return false;
         }
-        return hasAnyValue(user.value.roles,roles);
-    }
-
-    /**
-     * 判断用户是否拥有所有权限
-     */
-    const hasEveryPermission=(permissions:string[]):boolean=>{
-        if(isNull(user.value)){
-            return false;
-        }
-        if (isSuperAdmin.value && user.value.permissions?.includes('*:*:*')) {
+        if (isSuperAdmin.value && user.value.permissions.includes('*:*:*')) {
             return true;
         }
-        return hasEveryValue(user.value.permissions,permissions);
-    }
+        return permission !== '*:*:*' && user.value.permissions.includes(permission);
+    };
+
+    /**
+     * 判断用户是否拥有任意一项权限
+     */
+    const hasAnyPermission = (permissions: string[]): boolean => {
+        return permissions.some(hasPermission);
+    };
+
+    /**
+     * 判断用户是否拥有全部指定权限，空权限要求不授予访问
+     */
+    const hasEveryPermission = (permissions: string[]): boolean => {
+        return permissions.length > 0 && permissions.every(hasPermission);
+    };
+
+    /**
+     * 判断单项角色，角色名称不作为超级管理员身份的替代
+     */
+    const hasRole = (role: string): boolean => {
+        return !!role && !isNull(user.value) && user.value.roles.includes(role);
+    };
+
+    /**
+     * 判断用户是否拥有任意一个角色
+     */
+    const hasAnyRole = (roles: string[]): boolean => {
+        return roles.some(hasRole);
+    };
+
+    /**
+     * 判断用户是否拥有全部指定角色，空角色要求不授予访问
+     */
+    const hasEveryRole = (roles: string[]): boolean => {
+        return roles.length > 0 && roles.every(hasRole);
+    };
 
     /**
      * 异步登录
@@ -150,7 +175,11 @@ export const useUserStore = defineStore('userInfo', () => {
         getUserInfo,
         doLogout,
         doRegister,
+        hasPermission,
+        hasAnyPermission,
+        hasEveryPermission,
+        hasRole,
         hasAnyRole,
-        hasEveryPermission
+        hasEveryRole
     }
 });

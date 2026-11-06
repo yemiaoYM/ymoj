@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
 
 /**
  * @Author: Yemiao
@@ -17,18 +18,27 @@ import java.util.Set;
 @Slf4j
 public class GoJudgeTaskSession implements AutoCloseable {
 
+    /**
+     * 任务结束后回收沙箱文件的独立预算，停机等待也须覆盖此阶段
+     */
+    public static final long CLEANUP_TIMEOUT_MILLIS = 2000L;
+
     private final GoJudgeClient client;
     private final JudgeTask task;
+    private final Semaphore taskSlots;
     private final Set<String> fileIds = new LinkedHashSet<>();
+    private boolean closed;
 
     /**
-     * 为一次任务持有独立沙箱文件集合。
+     * 为一次任务持有已取得的共享额度及独立沙箱文件集合
      * @param client 受控沙箱客户端
      * @param task 固定任务快照
+     * @param taskSlots 本会话关闭时归还的 Worker 总任务额度
      */
-    public GoJudgeTaskSession(GoJudgeClient client, JudgeTask task) {
+    GoJudgeTaskSession(GoJudgeClient client, JudgeTask task, Semaphore taskSlots) {
         this.client = client;
         this.task = task;
+        this.taskSlots = taskSlots;
     }
 
     /**
@@ -50,6 +60,16 @@ public class GoJudgeTaskSession implements AutoCloseable {
         String fileId = client.upload(input, name, task.getDeadlineEpochMs());
         track(fileId);
         return fileId;
+    }
+
+    /**
+     * 在任务截止内读取已登记的缓存输出
+     * @param fileId 本次沙箱执行返回的文件 ID
+     * @return 由调用方关闭的有界原始文件流
+     * @throws IOException 下载失败、超限、超时或任务中断
+     */
+    public InputStream openFile(String fileId) throws IOException {
+        return client.openFile(fileId, task.getDeadlineEpochMs());
     }
 
     /**
@@ -91,7 +111,7 @@ public class GoJudgeTaskSession implements AutoCloseable {
      * @param fileId 待回收文件 ID
      */
     public void release(String fileId) {
-        release(fileId, System.currentTimeMillis() + 2000L);
+        release(fileId, System.currentTimeMillis() + CLEANUP_TIMEOUT_MILLIS);
     }
 
     /**
@@ -117,18 +137,26 @@ public class GoJudgeTaskSession implements AutoCloseable {
     }
 
     /**
-     * 在统一两秒清理预算内回收本会话尚未释放的文件。
+     * 在两秒清理预算内回收文件，所有退出路径均只归还一次任务额度
      */
     @Override
     public void close() {
-        long deadline = System.currentTimeMillis() + 2000L;
-        for (String fileId : Set.copyOf(fileIds)) {
-            if (System.currentTimeMillis() >= deadline) {
-                log.warn("判题缓存清理达到截止边界 execution={} version={} remaining={}",
-                        task.getExecutionId(), task.getTestDataVersionId(), fileIds.size());
-                break;
+        if (closed) {
+            return;
+        }
+        closed = true;
+        try {
+            long deadline = System.currentTimeMillis() + CLEANUP_TIMEOUT_MILLIS;
+            for (String fileId : Set.copyOf(fileIds)) {
+                if (System.currentTimeMillis() >= deadline) {
+                    log.warn("判题缓存清理达到截止边界 execution={} version={} remaining={}",
+                            task.getExecutionId(), task.getTestDataVersionId(), fileIds.size());
+                    break;
+                }
+                release(fileId, deadline);
             }
-            release(fileId, deadline);
+        } finally {
+            taskSlots.release();
         }
     }
 }

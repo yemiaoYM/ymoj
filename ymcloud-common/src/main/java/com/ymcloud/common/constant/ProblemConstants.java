@@ -8,9 +8,14 @@ package com.ymcloud.common.constant;
 public class ProblemConstants {
 
     /**
-     * 当前支持的普通判题方式，特殊判题和交互判题暂不开放。
+     * 普通判题方式
      */
     public static final String JUDGE_MODE_DEFAULT = "default";
+
+    /**
+     * 特殊判题方式
+     */
+    public static final String JUDGE_MODE_SPJ = "spj";
 
     /**
      * 可见公开

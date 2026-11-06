@@ -6,6 +6,8 @@ import os
 import pathlib
 import shutil
 
+from cpu_count import available_cpus
+
 
 def prepare_log_directory():
     logs = pathlib.Path(os.environ.get("LOGGING_FILE_PATH", "/data/logs"))
@@ -21,7 +23,7 @@ def java_command():
     if not heap.isascii() or not heap.isdecimal() or not 128 <= int(heap) <= 4096:
         raise SystemExit("YMCLOUD_WORKER_HEAP_MIB 必须是 128 至 4096 的整数，单位 MiB")
     return [
-        "java", "-Xms32m", f"-Xmx{int(heap)}m", "-XX:ActiveProcessorCount=2",
+        "java", "-Xms32m", f"-Xmx{int(heap)}m", f"-XX:ActiveProcessorCount={available_cpus()}",
         "-Dfile.encoding=UTF-8", "-jar", "/app/worker.jar", "--spring.profiles.active=prod",
     ]
 

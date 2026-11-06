@@ -7,7 +7,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Declarables;
@@ -30,6 +32,40 @@ import org.springframework.context.annotation.DependsOn;
  */
 @Configuration
 public class WorkerAmqpConfig {
+
+    /**
+     * 编译预检无需恢复任务箱，队列有界且过期请求直接移除
+     * @return SPJ 编译请求队列
+     */
+    @Bean
+    public Queue spjCompileQueue() {
+        return QueueBuilder.durable(SpjProgram.COMPILE_QUEUE)
+                .ttl((int) SpjProgram.COMPILE_TIMEOUT_MILLIS)
+                .maxLength(32)
+                .overflow(QueueBuilder.Overflow.rejectPublish)
+                .build();
+    }
+
+    /**
+     * 独立单并发执行编译检查，响应发送完成后由容器确认消息
+     * @param connectionFactory 消息连接工厂
+     * @param properties 已验证的 Worker 消息确认配置
+     * @return 编译请求消费者工厂
+     */
+    @Bean
+    @DependsOn("goJudgeStartupCheck")
+    public SimpleRabbitListenerContainerFactory spjListenerFactory(ConnectionFactory connectionFactory,
+                                                                   WorkerProperties properties) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        factory.setConnectionFactory(connectionFactory);
+        factory.setAcknowledgeMode(AcknowledgeMode.AUTO);
+        factory.setPrefetchCount(1);
+        factory.setConcurrentConsumers(1);
+        factory.setMaxConcurrentConsumers(1);
+        factory.setDefaultRequeueRejected(false);
+        factory.setContainerCustomizer(container -> container.setShutdownTimeout(shutdownTimeout(properties)));
+        return factory;
+    }
 
     /**
      * 创建 Worker 专用映射器，拒绝重复字段、尾随 JSON 和数值隐式转换。
@@ -121,6 +157,18 @@ public class WorkerAmqpConfig {
         factory.setMaxConcurrentConsumers(properties.getConcurrency());
         factory.setDefaultRequeueRejected(false);
         factory.setMissingQueuesFatal(true);
+        factory.setContainerCustomizer(container -> container.setShutdownTimeout(shutdownTimeout(properties)));
         return factory;
+    }
+
+    /**
+     * 停机最多等待既有任务截止、文件清理及终态确认；在途消息处理完成即可提前退出
+     * @param properties 已验证的 Worker 消息确认配置
+     * @return 容器停机等待上限，毫秒
+     */
+    private long shutdownTimeout(WorkerProperties properties) {
+        // 终态首次确认失败后，过期恢复最多还会再次发布一次终态
+        return JudgeProtocol.MAX_TASK_DURATION_MILLIS + JudgeProtocol.MAX_CLOCK_SKEW_MILLIS
+                + GoJudgeTaskSession.CLEANUP_TIMEOUT_MILLIS + 2 * properties.getConfirmTimeoutMillis();
     }
 }

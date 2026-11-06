@@ -1,3 +1,5 @@
+import { JUDGE_STATUS } from '@/constants/judge';
+
 //定义类型
 type AlterType = 'primary' | 'success' | 'warning' | 'info' | 'error';
 type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger';
@@ -9,29 +11,29 @@ interface StatusType {
 //状态映射表
 export const statusTypeMap: Record<string, StatusType> = {
   // success
-  'Accepted': { alter: 'success', tag: 'success' },
-  'Partial Accepted': { alter: 'success', tag: 'success' },
+  [JUDGE_STATUS.ACCEPTED.label]: { alter: 'success', tag: 'success' },
+  [JUDGE_STATUS.PARTIAL_ACCEPTED.label]: { alter: 'success', tag: 'success' },
 
   // warning
-  'Submitted Failed': { alter: 'warning', tag: 'warning' },
-  'Cancelled': { alter: 'warning', tag: 'warning' },
-  'Compile Error': { alter: 'warning', tag: 'warning' },
+  [JUDGE_STATUS.SUBMITTED_FAILED.label]: { alter: 'warning', tag: 'warning' },
+  [JUDGE_STATUS.CANCELLED.label]: { alter: 'warning', tag: 'warning' },
+  [JUDGE_STATUS.COMPILE_ERROR.label]: { alter: 'warning', tag: 'warning' },
 
   // info
-  'Compiling': { alter: 'info', tag: 'info' },
-  'Judging': { alter: 'info', tag: 'info' },
-  'Pending': { alter: 'info', tag: 'info' },
-  'Not Submitted': { alter: 'info', tag: 'info' },
-  'Submitting': { alter: 'info', tag: 'info' },
-  'No Status': { alter: 'info', tag: 'info' },
+  [JUDGE_STATUS.COMPILING.label]: { alter: 'info', tag: 'info' },
+  [JUDGE_STATUS.JUDGING.label]: { alter: 'info', tag: 'info' },
+  [JUDGE_STATUS.PENDING.label]: { alter: 'info', tag: 'info' },
+  [JUDGE_STATUS.NOT_SUBMITTED.label]: { alter: 'info', tag: 'info' },
+  [JUDGE_STATUS.SUBMITTING.label]: { alter: 'info', tag: 'info' },
+  [JUDGE_STATUS.NULL.label]: { alter: 'info', tag: 'info' },
 
   // error
-  'Presentation Error': { alter: 'error', tag: 'danger' },
-  'Wrong Answer': { alter: 'error', tag: 'danger' },
-  'Time Limit Exceeded': { alter: 'error', tag: 'danger' },
-  'Memory Limit Exceeded': { alter: 'error', tag: 'danger' },
-  'Runtime Error': { alter: 'error', tag: 'danger' },
-  'System Error': { alter: 'error', tag: 'danger' },
+  [JUDGE_STATUS.PRESENTATION_ERROR.label]: { alter: 'error', tag: 'danger' },
+  [JUDGE_STATUS.WRONG_ANSWER.label]: { alter: 'error', tag: 'danger' },
+  [JUDGE_STATUS.TIME_LIMIT_EXCEEDED.label]: { alter: 'error', tag: 'danger' },
+  [JUDGE_STATUS.MEMORY_LIMIT_EXCEEDED.label]: { alter: 'error', tag: 'danger' },
+  [JUDGE_STATUS.RUNTIME_ERROR.label]: { alter: 'error', tag: 'danger' },
+  [JUDGE_STATUS.SYSTEM_ERROR.label]: { alter: 'error', tag: 'danger' },
 };
 
 /**
@@ -182,7 +184,7 @@ export function normalizeToArray<T>(v: any): T[] {
   if (!v) return [];
   if (Array.isArray(v)) return v;
   return [v as T];
-};
+}
 
 /**
  * 判断数组中是否包含任意一个值

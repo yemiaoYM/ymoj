@@ -1,6 +1,8 @@
 package com.ymcloud.web;
 
+import com.ymcloud.common.utils.MessageQueueUtils;
 import com.ymcloud.common.utils.RedisCache;
+import com.ymcloud.core.config.RabbitMQErrorConfig;
 import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ContestEntityService;
@@ -14,16 +16,21 @@ import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import com.ymcloud.web.judge.JudgeDispatchIdAllocator;
 import com.ymcloud.web.judge.JudgeDispatchProperties;
 import com.ymcloud.web.judge.JudgeDispatchPublisher;
 import com.ymcloud.web.judge.JudgeMessageCodec;
+import com.ymcloud.web.judge.JudgeMessagingConfig;
 import com.ymcloud.web.judge.JudgeResultListener;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
+import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import org.springframework.beans.factory.UnsatisfiedDependencyException;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.core.env.MapPropertySource;
@@ -33,6 +40,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -43,6 +51,39 @@ import static org.mockito.Mockito.mock;
  * @Description: 通过真实 Spring 注入处理器验证判题组件依赖与配置，不连接外部服务。
  */
 class JudgeComponentWiringTest {
+
+    /**
+     * 正式判题、SPJ 与通用发送共享唯一模板，错误恢复可装配且编译回复等待保持有界
+     */
+    @Test
+    void messagingConfigurationSharesTemplateAcrossJudgeAndSpj() {
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.getBeanFactory().registerSingleton("connectionFactory", mock(ConnectionFactory.class));
+            context.getBeanFactory().registerSingleton("judgeMessageCodec", mock(JudgeMessageCodec.class));
+            context.getBeanFactory().registerSingleton("redisCache", mock(RedisCache.class));
+            context.getBeanFactory().registerSingleton("judgeDispatchEntityService", mock(JudgeDispatchEntityService.class));
+            context.getBeanFactory().registerSingleton("judgeResultService", mock(JudgeResultService.class));
+            context.getBeanFactory().registerSingleton("judgeDispatchProperties", mock(JudgeDispatchProperties.class));
+            context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("messaging", Map.of(
+                    "spring.rabbitmq.listener.simple.retry.enabled", "true")));
+            context.register(JudgeMessagingConfig.class, RabbitMQErrorConfig.class,
+                    MessageQueueUtils.class, JudgeDispatchPublisher.class, SpjCompilation.class);
+            context.refresh();
+
+            RabbitTemplate sharedTemplate = context.getBean("judgeRabbitTemplate", RabbitTemplate.class);
+            assertEquals(1, context.getBeansOfType(RabbitTemplate.class).size());
+            assertSame(sharedTemplate, context.getBean(RabbitTemplate.class));
+            assertEquals(SpjProgram.COMPILE_TIMEOUT_MILLIS,
+                    ReflectionTestUtils.getField(sharedTemplate, "replyTimeout"));
+            assertSame(sharedTemplate,
+                    ReflectionTestUtils.getField(context.getBean(MessageQueueUtils.class), "rabbitTemplate"));
+            assertSame(sharedTemplate,
+                    ReflectionTestUtils.getField(context.getBean(JudgeDispatchPublisher.class), "rabbitTemplate"));
+            assertSame(sharedTemplate,
+                    ReflectionTestUtils.getField(context.getBean(SpjCompilation.class), "rabbitTemplate"));
+            assertNotNull(context.getBean(MessageRecoverer.class));
+        }
+    }
 
     /**
      * 注入每个显式依赖和配置值，Web 发布器须选中专用消息模板。

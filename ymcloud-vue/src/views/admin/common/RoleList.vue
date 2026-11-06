@@ -281,8 +281,8 @@ const treeRef = ref<InstanceType<typeof ElTree>>();
 //methods
 //判断是否允许维护角色
 const canManage = (role: RoleVO) => {
-  return userStore.user.id === 1
-    || (role.code !== 'ADMIN' && !userStore.user.roles?.includes(role.code));
+  return userStore.isSuperAdmin
+    || (role.code !== 'ADMIN' && !userStore.hasRole(role.code));
 };
 
 //查询角色列表
@@ -404,9 +404,9 @@ const handleAuth = async (row: RoleVO) => {
   try {
     const [options, checked] = await Promise.all([getRoleAuthOptions(), getRoleAuthIds(row.id)]);
     authTree.value = buildAuthTree(options.data.data, auth => {
-      return userStore.user.id === 1
+      return userStore.isSuperAdmin
         || auth.type === 'M'
-        || userStore.hasEveryPermission([auth.code || '']);
+        || userStore.hasPermission(auth.code || '');
     });
     await nextTick();
     treeRef.value?.setCheckedKeys(checked.data.data);

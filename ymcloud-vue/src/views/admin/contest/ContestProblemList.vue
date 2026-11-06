@@ -300,7 +300,7 @@ import type { AdminContestProblemVO, ContestProblemPageQuery } from '@/type/cont
 import type { AdminProblemVO } from '@/type/types';
 import { Plus, Edit, Delete, Sort, ArrowUp, ArrowDown, Search } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
-import { useAsyncChange } from '@/composables/useAsyncChange';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { Balloon } from '@vicons/ionicons5';
 import {
   getAdminContestProblems,

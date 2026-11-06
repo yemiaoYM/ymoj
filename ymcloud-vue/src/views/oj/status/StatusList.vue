@@ -193,20 +193,10 @@ import {
 } from "@/utils/utils";
 import { getSubmissionTableList, getContestSubmissionList } from "@/api/api";
 import { useUserStore } from "@/stores/user";
+import { JUDGE_STATUS_FILTER_OPTIONS } from '@/constants/judge';
 
 //data
-const statusOptions: { label: string; value: number }[] = [
-  { label: "Accepted", value: 0 },
-  { label: "Wrong Answer", value: -1 },
-  { label: "Time Limit Exceeded", value: 1 },
-  { label: "Memory Limit Exceeded", value: 2 },
-  { label: "Runtime Error", value: 3 },
-  { label: "Compile Error", value: -2 },
-  { label: "Presentation Error", value: -3 },
-  { label: "Partial Accepted", value: 8 },
-  { label: "Submitted Failed", value: 10 },
-  { label: "System Error", value: 4 },
-];
+const statusOptions = JUDGE_STATUS_FILTER_OPTIONS;
 const userStore = useUserStore();
 const route = useRoute();
 const router = useRouter();

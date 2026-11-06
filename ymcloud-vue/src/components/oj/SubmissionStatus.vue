@@ -1,6 +1,6 @@
 <template>
   <el-popover
-    v-if="userStore.isSuperAdmin || canRejudge"
+    v-if="canEditStatus || canRejudge"
     v-model:visible="actionsOpen"
     trigger="click"
     placement="bottom"
@@ -21,7 +21,7 @@
       >{{ submission.status }}</el-tag>
     </template>
     <x-flex class="status-actions" :size="10">
-      <el-button v-if="userStore.isSuperAdmin" type="warning" :icon="Edit" @click="onCommand('status')">修改状态</el-button>
+      <el-button v-if="canEditStatus" type="warning" :icon="Edit" @click="onCommand('status')">修改状态</el-button>
       <el-button v-if="canRejudge" type="primary" :icon="Refresh" @click="onCommand('rejudge')">重新评测</el-button>
     </x-flex>
   </el-popover>
@@ -47,16 +47,16 @@
     <el-form class="status-form" label-width="52px">
       <el-form-item label="状态">
         <el-select v-model="status" :disabled="pending" aria-label="最终状态">
-          <el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" />
+          <el-option v-for="item in FINAL_JUDGE_STATUS_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
-      <el-form-item v-if="status === 8" label="分数">
+      <el-form-item v-if="status === JUDGE_STATUS.PARTIAL_ACCEPTED.value" label="分数">
         <el-input-number v-model="score" :min="1" :max="99" :disabled="pending" />
       </el-form-item>
     </el-form>
     <template #footer>
       <el-button :disabled="pending" @click="editing = false">取消</el-button>
-      <el-button type="primary" :loading="pending" :disabled="status === 8 && !score" @click="onSave">保存</el-button>
+      <el-button type="primary" :loading="pending" :disabled="status === JUDGE_STATUS.PARTIAL_ACCEPTED.value && !score" @click="onSave">保存</el-button>
     </template>
   </el-dialog>
 </template>
@@ -66,39 +66,30 @@ import { computed, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Edit, Refresh } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
-import { useAsyncChange } from '@/composables/useAsyncChange';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { rejudgeSubmission, updateSubmissionStatus } from '@/api/submission';
 import { getStatusType } from '@/utils/utils';
 import type { SubmissionTableVO } from '@/type/types';
+import { JUDGE_STATUS, FINAL_JUDGE_STATUS_OPTIONS, type FinalJudgeStatusCode } from '@/constants/judge';
 
 const props = defineProps<{ submission: SubmissionTableVO }>();
 const emit = defineEmits<{ changed: [] }>();
 const userStore = useUserStore();
+const canEditStatus = computed(() => userStore.isSuperAdmin
+  && userStore.hasPermission('system:submission:edit'));
 const canRejudge = computed(() => props.submission.canRejudge
-  && userStore.hasEveryPermission(['system:submission:rejudge']));
+  && userStore.hasPermission('system:submission:rejudge'));
 const { pending, beforeChange } = useAsyncChange();
 const editing = ref(false);
 const actionsOpen = ref(false);
-const status = ref(0);
+const status = ref<FinalJudgeStatusCode>(JUDGE_STATUS.ACCEPTED.value);
 const score = ref<number | undefined>(50);
-const statuses = [
-  { label: 'Accepted', value: 0 },
-  { label: 'Wrong Answer', value: -1 },
-  { label: 'Time Limit Exceeded', value: 1 },
-  { label: 'Memory Limit Exceeded', value: 2 },
-  { label: 'Runtime Error', value: 3 },
-  { label: 'Compile Error', value: -2 },
-  { label: 'Presentation Error', value: -3 },
-  { label: 'Partial Accepted', value: 8 },
-  { label: 'System Error', value: 4 },
-  { label: 'Submitted Failed', value: 10 },
-  { label: 'Cancelled', value: -4 },
-];
 
 async function onCommand(command: string) {
   actionsOpen.value = false;
   if (command === 'status') {
-    status.value = statuses.find(item => item.label === props.submission.status)?.value ?? 0;
+    status.value = FINAL_JUDGE_STATUS_OPTIONS.find(item => item.label === props.submission.status)?.value
+      ?? JUDGE_STATUS.ACCEPTED.value;
     score.value = props.submission.score !== null && props.submission.score > 0 && props.submission.score < 100
       ? props.submission.score : 50;
     editing.value = true;
@@ -122,7 +113,7 @@ async function onSave() {
     await updateSubmissionStatus(props.submission.submissionId, {
       executionId: props.submission.executionId,
       status: status.value,
-      score: status.value === 8 ? score.value! : null,
+      score: status.value === JUDGE_STATUS.PARTIAL_ACCEPTED.value ? score.value! : null,
     });
   });
   if (success) {

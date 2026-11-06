@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.pojo.contract.judge.SpjCompileRequest;
+import com.ymcloud.pojo.contract.judge.SpjCompileResult;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -21,6 +23,7 @@ public class JudgeMessageCodec {
 
     private static final int MAX_TASK_MESSAGE_BYTES = 3 * 1024 * 1024;
     private static final int MAX_RESULT_MESSAGE_BYTES = 16 * 1024 * 1024;
+    private static final int MAX_SPJ_RESULT_MESSAGE_BYTES = 64 * 1024;
     private final ObjectMapper objectMapper;
 
     /**
@@ -36,18 +39,19 @@ public class JudgeMessageCodec {
     }
 
     /**
-     * 序列化任务或结果，并按 UTF-8 字节数限制消息大小。
-     * @param message JudgeTask 或 JudgeResult，不允许 null
+     * 序列化任务、结果或 SPJ 编译请求，并按 UTF-8 字节数限制消息大小
+     * @param message JudgeTask、JudgeResult 或 SpjCompileRequest，不允许 null
      * @return JSON 消息正文
      * @throws IllegalArgumentException 类型不支持、序列化失败或超过大小限制
      */
     public String write(Object message) {
-        if (!(message instanceof JudgeTask) && !(message instanceof JudgeResult)) {
+        if (!(message instanceof JudgeTask) && !(message instanceof JudgeResult)
+                && !(message instanceof SpjCompileRequest)) {
             throw new IllegalArgumentException("判题消息类型无效");
         }
         try {
             String payload = objectMapper.writeValueAsString(message);
-            checkLength(payload, message instanceof JudgeTask ? MAX_TASK_MESSAGE_BYTES : MAX_RESULT_MESSAGE_BYTES);
+            checkLength(payload, message instanceof JudgeResult ? MAX_RESULT_MESSAGE_BYTES : MAX_TASK_MESSAGE_BYTES);
             return payload;
         } catch (JsonProcessingException e) {
             // Jackson 的异常可能携带私有代码或结果正文，不向消息框架传递原始异常。
@@ -62,7 +66,7 @@ public class JudgeMessageCodec {
      * @throws IllegalArgumentException 消息为空、超限或格式非法
      */
     public JudgeTask task(String payload) {
-        return read(payload, JudgeTask.class);
+        return read(payload, JudgeTask.class, MAX_TASK_MESSAGE_BYTES);
     }
 
     /**
@@ -72,19 +76,29 @@ public class JudgeMessageCodec {
      * @throws IllegalArgumentException 消息为空、超限或格式非法
      */
     public JudgeResult result(String payload) {
-        return read(payload, JudgeResult.class);
+        return read(payload, JudgeResult.class, MAX_RESULT_MESSAGE_BYTES);
     }
 
     /**
-     * 按固定契约解析；拒绝重复字段和尾随 JSON，不向异常传播私有正文。
+     * 严格解析 SPJ 编译响应，不信任消息类型头
+     * @param payload 有界响应 JSON
+     * @return 编译响应，身份由调用方核对
+     */
+    public SpjCompileResult spjResult(String payload) {
+        return read(payload, SpjCompileResult.class, MAX_SPJ_RESULT_MESSAGE_BYTES);
+    }
+
+    /**
+     * 按固定契约解析，拒绝重复字段和尾随 JSON，不向异常传播私有正文
      * @param payload JSON 消息正文
      * @param type 调用方指定的任务或结果契约类型
+     * @param maxBytes 当前消息类型允许的最大字节数
      * @param <T> 消息契约类型
      * @return 非 null 的消息对象
      * @throws IllegalArgumentException 消息超限或格式非法
      */
-    private <T> T read(String payload, Class<T> type) {
-        checkLength(payload, type == JudgeTask.class ? MAX_TASK_MESSAGE_BYTES : MAX_RESULT_MESSAGE_BYTES);
+    private <T> T read(String payload, Class<T> type, int maxBytes) {
+        checkLength(payload, maxBytes);
         try {
             T message = objectMapper.readerFor(type)
                     .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)

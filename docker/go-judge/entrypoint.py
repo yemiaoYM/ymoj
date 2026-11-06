@@ -7,6 +7,20 @@ import pathlib
 import shutil
 import sys
 
+from cpu_count import available_cpus
+
+
+def sandbox_parallelism():
+    """
+    按显式配置或沙箱实际可用整核数确定执行槽位
+    """
+    configured = int(os.environ.get("YMCLOUD_GO_JUDGE_PARALLELISM", "0"))
+    if configured < 0:
+        raise SystemExit("沙箱并发不能为负数")
+    if configured:
+        return configured
+    return available_cpus()
+
 
 def main():
     if len(sys.argv) != 1:
@@ -16,9 +30,9 @@ def main():
         raise SystemExit("go-judge 独立令牌必须为 32 至 512 个可打印 ASCII 字符")
     if not pathlib.Path("/sys/fs/cgroup/cgroup.controllers").is_file():
         raise SystemExit("部署需要 cgroup v2")
-    parallelism = int(os.environ.get("YMCLOUD_GO_JUDGE_PARALLELISM", "1"))
+    parallelism = sandbox_parallelism()
     ttl = int(os.environ.get("YMCLOUD_GO_JUDGE_FILE_TTL_SECONDS", "3600"))
-    max_file = int(os.environ.get("YMCLOUD_GO_JUDGE_MAX_FILE_BYTES", "16777216"))
+    max_file = int(os.environ.get("YMCLOUD_GO_JUDGE_MAX_FILE_BYTES", "67108864"))
     if parallelism < 1 or ttl < 3600 or max_file < 1:
         raise SystemExit("并发和文件 TTL 配置无效")
 

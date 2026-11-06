@@ -118,7 +118,7 @@ import { ref } from 'vue';
 import { Lock, Message, User } from '@element-plus/icons-vue';
 import { ElMessage, type FormInstance, type FormItemRule, type FormRules } from 'element-plus';
 import { forgetPasswordSendCode, forgetPasswordResetPassword } from '@/api/api';
-import { useAsyncChange } from '@/composables/useAsyncChange';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 
 //定义事件
 const emit = defineEmits<{

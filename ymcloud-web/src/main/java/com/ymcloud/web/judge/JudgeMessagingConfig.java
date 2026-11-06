@@ -1,6 +1,7 @@
 package com.ymcloud.web.judge;
 
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Binding;
@@ -145,7 +146,8 @@ public class JudgeMessagingConfig {
     }
 
     /**
-     * 创建要求处理退回消息的判题专用发送模板。
+     * 创建正式判题、SPJ 编译与通用发送共用的消息模板
+     * 回复超时仅用于请求响应，正式任务的发布确认由发布器单独控制
      * @param connectionFactory 消息连接工厂
      * @return 不使用 Java 类型头反序列化的模板
      */
@@ -154,6 +156,7 @@ public class JudgeMessagingConfig {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
         template.setMessageConverter(new SimpleMessageConverter());
         template.setMandatory(true);
+        template.setReplyTimeout(SpjProgram.COMPILE_TIMEOUT_MILLIS);
         return template;
     }
 

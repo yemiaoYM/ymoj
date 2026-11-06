@@ -33,6 +33,7 @@ import com.ymcloud.core.web.dao.UserEntityService;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import com.ymcloud.pojo.contract.judge.TestCaseResult;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
@@ -134,6 +135,36 @@ class JudgeWebWorkflowTest {
         service = createJudgeServiceImpl(judges, dispatches, problems, languages, contests, contestProblems,
                 contestUsers, testData, versions, properties, codec, cache, results,
                 createJudgeDispatchIdAllocator(dispatches, judges, mock(JdbcTemplate.class)));
+    }
+
+    /**
+     * 保存任务时固定完整 SPJ 版本，题目后续编辑不会改变已入队内容。
+     */
+    @Test
+    void spjSubmissionPinsCheckerSource() {
+        stubProblemAndLanguage();
+        Problem problem = problem();
+        problem.setJudgeMode("spj");
+        SpjProgram spj = new SpjProgram();
+        spj.setLanguage("C++");
+        spj.setCode("#include \"testlib.h\"");
+        spj.setDigest(spj.sourceDigest());
+        problem.setSpjLanguage(spj.getLanguage());
+        problem.setSpjCode(spj.getCode());
+        problem.setSpjDigest(spj.getDigest());
+        doReturn(query(problem)).when(problems).lambdaQuery();
+        when(testData.getCurrentVersion(10L)).thenReturn(77L);
+        doReturn(query(version())).when(versions).lambdaQuery();
+        when(judges.save(any())).thenReturn(true);
+        try (var security = authenticatedUser(); var ip = mockStatic(IpUtils.class)) {
+            service.submitJudge(request(false));
+        }
+        ArgumentCaptor<JudgeDispatch> dispatch = ArgumentCaptor.forClass(JudgeDispatch.class);
+        verify(dispatches).save(dispatch.capture());
+        problem.setSpjCode("changed after enqueue");
+        JudgeTask task = codec.task(dispatch.getValue().getTaskPayload());
+        assertEquals(spj, task.getSpj());
+        assertEquals(77L, task.getTestDataVersionId());
     }
 
     @Test
@@ -252,7 +283,7 @@ class JudgeWebWorkflowTest {
      */
     @ParameterizedTest
     @NullSource
-    @ValueSource(strings = {"spj", "interactive", "unknown"})
+    @ValueSource(strings = {"interactive", "unknown"})
     void unsupportedJudgeModeDoesNotEnqueue(String judgeMode) {
         Problem problem = problem();
         problem.setJudgeMode(judgeMode);

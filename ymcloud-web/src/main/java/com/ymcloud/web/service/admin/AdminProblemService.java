@@ -3,6 +3,8 @@ package com.ymcloud.web.service.admin;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
+import com.ymcloud.pojo.dto.admin.SpjCompileDTO;
+import com.ymcloud.pojo.contract.judge.SpjCompileResult;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ProblemVO;
@@ -19,6 +21,13 @@ import java.util.List;
  * @Description: 管理端题目服务接口
  */
 public interface AdminProblemService {
+
+    /**
+     * 请求沙箱编译管理员提供的 SPJ 源码
+     * @param request 已通过 HTTP 校验的语言和源码
+     * @return 编译状态及受限诊断
+     */
+    SpjCompileResult compileSpj(SpjCompileDTO request);
 
     /**
      * 检查归属后盘点或迁移历史测试数据

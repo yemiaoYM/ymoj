@@ -17,7 +17,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[5]
 def load_entrypoint(name, path):
     specification = importlib.util.spec_from_file_location(name, ROOT / path)
     module = importlib.util.module_from_spec(specification)
-    with mock.patch.dict(sys.modules, {"fcntl": mock.Mock(LOCK_EX=2, LOCK_NB=4)}):
+    with mock.patch.dict(sys.modules, {"fcntl": mock.Mock(LOCK_EX=2, LOCK_NB=4)}), \
+            mock.patch.object(sys, "path", [str((ROOT / path).parent), *sys.path]):
         specification.loader.exec_module(module)
     return module
 
@@ -117,6 +118,7 @@ class EntrypointLogsTest(unittest.TestCase):
     def test_worker_log_failure_stops_before_work_cleanup_or_java_start(self):
         entrypoint = ENTRYPOINTS["worker"]
         with (mock.patch.dict(os.environ, {"YMCLOUD_WORKER_HEAP_MIB": "128"}),
+              mock.patch.object(entrypoint, "available_cpus", return_value=1),
               mock.patch.object(entrypoint.os, "O_NOFOLLOW", 0, create=True),
               mock.patch.object(entrypoint.os, "open", return_value=7),
               mock.patch.object(entrypoint.os, "set_inheritable"),

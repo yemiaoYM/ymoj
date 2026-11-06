@@ -262,7 +262,7 @@
 <script lang="ts" setup>
 //import
 import AsyncSwitch from '@/components/common/AsyncSwitch.vue';
-import { useAsyncChange } from '@/composables/useAsyncChange';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { useUserStore } from "@/stores/user";
 import { ref, onMounted, reactive, nextTick, defineAsyncComponent } from "vue";
 import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";

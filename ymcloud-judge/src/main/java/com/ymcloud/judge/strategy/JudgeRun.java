@@ -68,6 +68,7 @@ public class JudgeRun {
             if (capacityFailure != null) {
                 return systemFailure(task, capacityFailure);
             }
+            session = executor.openTask(task);
             List<CaseSource> cases = new ArrayList<>();
             if (task.getStrategy() == 1) {
                 cases.add(new CaseSource(
@@ -89,11 +90,19 @@ public class JudgeRun {
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             checkDeadline(task);
             progress.accept(result(task, JudgeVerdict.STATUS_COMPILING, false));
-            session = executor.openTask(task);
             stage = "compile";
             long compileStarted = System.nanoTime();
             log.debug("开始编译代码 execution={}", task.getExecutionId());
             GoJudgeExecutor.PreparedProgram program = executor.compile(session);
+            GoJudgeExecutor.PreparedProgram checker = null;
+            if (task.getSpj() != null) {
+                stage = "spj-compile";
+                try {
+                    checker = executor.compileSpj(session, task.getSpj());
+                } catch (CompileException e) {
+                    return systemFailure(task, "SPJ 编译失败，请联系题目管理员");
+                }
+            }
             log.info("代码编译完成 execution={} elapsedMs={}", task.getExecutionId(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - compileStarted));
             progress.accept(result(task, JudgeVerdict.STATUS_JUDGING, false));
@@ -105,7 +114,10 @@ public class JudgeRun {
                 stage = "case";
                 caseIndex = source.id();
                 checkDeadline(task);
-                TestCaseResult current = executeCase(task, source, session, program);
+                TestCaseResult current = executeCase(task, source, session, program, checker);
+                if (current.getStatus() == JudgeVerdict.STATUS_SYSTEM_ERROR) {
+                    return systemFailure(task, "SPJ 校验程序运行失败，请联系题目管理员");
+                }
                 String output = current.getOutput();
                 if (output != null) {
                     if (output.length() <= outputBudget) {
@@ -139,19 +151,25 @@ public class JudgeRun {
             throw e;
         } finally {
             boolean interrupted = Thread.interrupted();
-            if (session != null) {
-                session.close();
-            }
-            if (lease != null) {
-                try {
-                    lease.close();
-                } catch (IOException e) {
-                    log.warn("释放本次数据缓存失败 execution={} cause={}",
-                            task.getExecutionId(), e.getClass().getSimpleName());
+            try {
+                if (lease != null) {
+                    try {
+                        lease.close();
+                    } catch (IOException e) {
+                        log.warn("释放本次数据缓存失败 execution={} cause={}",
+                                task.getExecutionId(), e.getClass().getSimpleName());
+                    }
                 }
-            }
-            if (interrupted) {
-                Thread.currentThread().interrupt();
+            } finally {
+                try {
+                    if (session != null) {
+                        session.close();
+                    }
+                } finally {
+                    if (interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
             }
         }
         result.setTerminal(true);
@@ -240,11 +258,13 @@ public class JudgeRun {
      * @param source 当前测试点输入和答案来源
      * @param session 当前沙箱会话
      * @param program 已编译程序
+     * @param checker 校验器产物，普通判题为 null
      * @return 测试点判定、分数及资源统计
      * @throws IOException 输入、执行或答案完整性校验失败
      */
     private TestCaseResult executeCase(JudgeTask task, CaseSource source, GoJudgeTaskSession session,
-                                       GoJudgeExecutor.PreparedProgram program) throws IOException {
+                                       GoJudgeExecutor.PreparedProgram program,
+                                       GoJudgeExecutor.PreparedProgram checker) throws IOException {
         long started = System.nanoTime();
         TestCaseResult result = new TestCaseResult();
         result.setJudgeId(task.getSubmissionId());
@@ -255,10 +275,24 @@ public class JudgeRun {
             result.setMemory(run.memoryKiB());
             result.setStatus(run.status());
             result.setErrorMessage(run.errorMessage());
-            if (run.status() == JudgeVerdict.STATUS_ACCEPTED) {
-                try (InputStream expected = source.output().open()) {
-                    result.setStatus(OutputComparator.matches(expected, run.stdout())
-                            ? JudgeVerdict.STATUS_ACCEPTED : JudgeVerdict.STATUS_WRONG_ANSWER);
+            try {
+                if (run.status() == JudgeVerdict.STATUS_ACCEPTED) {
+                    try (InputStream expected = source.output().open()) {
+                        if (checker == null) {
+                            try (InputStream actual = session.openFile(run.stdoutFileId())) {
+                                result.setStatus(OutputComparator.matches(expected, actual)
+                                        ? JudgeVerdict.STATUS_ACCEPTED : JudgeVerdict.STATUS_WRONG_ANSWER);
+                            }
+                        } else {
+                            try (InputStream testInput = source.input().open()) {
+                                result.setStatus(executor.check(session, checker, testInput, expected, run.stdoutFileId()));
+                            }
+                        }
+                    }
+                }
+            } finally {
+                if (run.stdoutFileId() != null) {
+                    session.release(run.stdoutFileId());
                 }
             }
             result.setOutput(preview(run.stdout()));

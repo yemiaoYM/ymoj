@@ -10,6 +10,7 @@ import com.ymcloud.judge.strategy.JudgeRun;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -69,6 +71,7 @@ class JudgeRunVersionedDataTest {
     void formalTaskUsesPinnedVersionStreamsEachPointAndKeepsMaximumStatistics() throws Exception {
         JudgeTask task = WorkerFixtures.task(0, 0);
         prepare(task);
+        when(session.openFile("raw-output")).thenAnswer(invocation -> stream("answer\n"));
         TestDataCache.Lease lease = mock(TestDataCache.Lease.class);
         TestDataCache.CachedCase first = mock(TestDataCache.CachedCase.class);
         TestDataCache.CachedCase second = mock(TestDataCache.CachedCase.class);
@@ -93,15 +96,17 @@ class JudgeRunVersionedDataTest {
         assertEquals(100, result.getScore());
         assertEquals(12L, result.getTime());
         assertEquals(30L, result.getMemory());
-        var order = inOrder(first, second, executor, lease, session);
+        var order = inOrder(first, second, executor, cache, lease, session);
+        order.verify(executor).openTask(task);
+        order.verify(cache).acquire(task.getProblemId(), task.getTestDataVersionId(), task.getManifestSha256());
         order.verify(first).openInput();
         order.verify(executor).run(eq(session), eq(program), any(InputStream.class));
         order.verify(first).openOutput();
         order.verify(second).openInput();
         order.verify(executor).run(eq(session), eq(program), any(InputStream.class));
         order.verify(second).openOutput();
-        order.verify(session).close();
         order.verify(lease).close();
+        order.verify(session).close();
         assertTrue(result.isTerminal());
         assertEquals(task.getExecutionId(), result.getExecutionId());
         assertEquals(List.of(1, 2), progress.stream().map(JudgeResult::getSequence).toList());
@@ -109,6 +114,7 @@ class JudgeRunVersionedDataTest {
 
     @Test
     void selfTestPreservesUnicodeWhitespaceAndEmptyInputWithoutDataCache() throws Exception {
+        when(session.openFile("raw-output")).thenAnswer(invocation -> stream("answer\n"));
         for (String value : List.of("", " \t中文😀\r\ntrailing  \n\n")) {
             JudgeTask task = WorkerFixtures.task(1, 0);
             task.setInput(value);
@@ -127,8 +133,24 @@ class JudgeRunVersionedDataTest {
     void normalExitStillRequiresOutputComparison() throws Exception {
         JudgeTask task = WorkerFixtures.task(1, 0);
         prepare(task);
+        when(session.openFile("raw-output")).thenAnswer(invocation -> stream("wrong"));
         when(executor.run(eq(session), eq(program), any(InputStream.class))).thenReturn(accepted("wrong", 2L, 20L));
         assertEquals(JudgeVerdict.STATUS_WRONG_ANSWER, runner.execute(task, progress::add).getStatus());
+    }
+
+    /**
+     * 普通判题下载原始输出失败时释放文件并传播故障，不将不完整正文判为 WA
+     * @throws Exception 模拟沙箱或网络边界失败
+     */
+    @Test
+    void normalOutputDownloadFailureReleasesFileAndPropagates() throws Exception {
+        JudgeTask task = WorkerFixtures.task(1, 0);
+        prepare(task);
+        when(executor.run(eq(session), eq(program), any(InputStream.class))).thenReturn(accepted("answer", 2L, 20L));
+        when(session.openFile("raw-output")).thenThrow(new IOException("download unavailable"));
+        assertThrows(IOException.class, () -> runner.execute(task, progress::add));
+        verify(session).release("raw-output");
+        verify(session).close();
     }
 
     @Test
@@ -137,7 +159,7 @@ class JudgeRunVersionedDataTest {
         prepare(task);
         when(executor.run(eq(session), eq(program), any(InputStream.class)))
                 .thenReturn(new GoJudgeExecutor.ExecutionResult(JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED,
-                        "answer", null, 5L, task.getMemoryLimit() + 1));
+                        "answer", null, 5L, task.getMemoryLimit() + 1, null));
         JudgeResult result = runner.execute(task, progress::add);
         assertEquals(JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED, result.getStatus());
         assertEquals(task.getMemoryLimit() + 1, result.getMemory());
@@ -179,14 +201,123 @@ class JudgeRunVersionedDataTest {
         verify(session).close();
     }
 
+    /**
+     * 数据准备失败也释放先取得的任务额度，截止任务则不再申请会话
+     * @throws Exception 模拟数据下载失败
+     */
     @Test
-    void cacheFailureAndDeadlinePreventSandboxStartup() throws Exception {
+    void cacheFailureReleasesTaskSlotAndExpiredTaskDoesNotAcquireIt() throws Exception {
         JudgeTask task = WorkerFixtures.task(0, 0);
+        when(executor.openTask(task)).thenReturn(session);
         when(cache.acquire(anyLong(), anyLong(), anyString())).thenThrow(new IOException("hash mismatch"));
         assertThrows(IOException.class, () -> runner.execute(task, progress::add));
         task.setDeadlineEpochMs(System.currentTimeMillis() - 1);
         assertThrows(IOException.class, () -> runner.execute(task, progress::add));
-        verifyNoInteractions(session);
+        verify(executor).openTask(task);
+        verify(session).close();
+        verify(executor, never()).compile(any());
+    }
+
+    /**
+     * 多测试点共用一个 checker，AC 不再经过字符串比较，checker 故障不能折算为 OI 部分分。
+     * @throws Exception 模拟执行失败
+     */
+    @Test
+    void spjReusesCheckerAndKeepsInfrastructureFailureOutOfOiScore() throws Exception {
+        JudgeTask task = WorkerFixtures.task(0, 1);
+        task.setSpj(new SpjProgram());
+        prepare(task);
+        var checker = new GoJudgeExecutor.PreparedProgram("C++", "checker", "checker-artifact");
+        when(executor.compileSpj(session, task.getSpj())).thenReturn(checker);
+        TestDataCache.Lease lease = mock(TestDataCache.Lease.class);
+        TestDataCache.CachedCase first = mock(TestDataCache.CachedCase.class);
+        TestDataCache.CachedCase second = mock(TestDataCache.CachedCase.class);
+        when(cache.acquire(anyLong(), anyLong(), anyString())).thenReturn(lease);
+        when(lease.entries()).thenReturn(List.of(first, second));
+        when(first.openInput()).thenAnswer(invocation -> stream("input1"));
+        when(second.openInput()).thenAnswer(invocation -> stream("input2"));
+        when(first.openOutput()).thenAnswer(invocation -> stream("different answer1"));
+        when(second.openOutput()).thenAnswer(invocation -> stream("different answer2"));
+        when(executor.run(eq(session), eq(program), any(InputStream.class)))
+                .thenReturn(new GoJudgeExecutor.ExecutionResult(JudgeVerdict.STATUS_ACCEPTED, "", null, 5, 20, "raw1"),
+                        new GoJudgeExecutor.ExecutionResult(JudgeVerdict.STATUS_ACCEPTED, "", null, 8, 15, "raw2"));
+        when(executor.check(eq(session), eq(checker), any(InputStream.class), any(InputStream.class), anyString()))
+                .thenReturn(JudgeVerdict.STATUS_ACCEPTED);
+        JudgeResult accepted = runner.execute(task, progress::add);
+        assertEquals(JudgeVerdict.STATUS_ACCEPTED, accepted.getStatus());
+        assertEquals(100, accepted.getScore());
+        assertEquals(8, accepted.getTime());
+        assertEquals(20, accepted.getMemory());
+        verify(executor).compileSpj(session, task.getSpj());
+        verify(session).release("raw1");
+        verify(session).release("raw2");
+
+        when(executor.check(eq(session), eq(checker), any(InputStream.class), any(InputStream.class), anyString()))
+                .thenReturn(JudgeVerdict.STATUS_ACCEPTED, JudgeVerdict.STATUS_SYSTEM_ERROR);
+        JudgeResult failed = runner.execute(task, progress::add);
+        assertEquals(JudgeVerdict.STATUS_SYSTEM_ERROR, failed.getStatus());
+        assertEquals(0, failed.getScore());
+        assertTrue(failed.isTerminal());
+        verify(session, times(2)).close();
+        verify(lease, times(2)).close();
+    }
+
+    /**
+     * 校验器编译失败属于题目配置错误，不能以选手编译错误返回私有源码诊断
+     * @throws Exception 模拟数据准备或编译失败
+     */
+    @Test
+    void spjCompileFailureKeepsCheckerDiagnosticsOutOfContestantResult() throws Exception {
+        JudgeTask task = WorkerFixtures.task(0, 0);
+        task.setSpj(new SpjProgram());
+        prepare(task);
+        TestDataCache.Lease lease = mock(TestDataCache.Lease.class);
+        TestDataCache.CachedCase testCase = mock(TestDataCache.CachedCase.class);
+        when(cache.acquire(anyLong(), anyLong(), anyString())).thenReturn(lease);
+        when(lease.entries()).thenReturn(List.of(testCase));
+        when(executor.compileSpj(session, task.getSpj()))
+                .thenThrow(new CompileException("private checker source and answer"));
+
+        JudgeResult result = runner.execute(task, progress::add);
+
+        assertEquals(JudgeVerdict.STATUS_SYSTEM_ERROR, result.getStatus());
+        assertEquals(0, result.getScore());
+        assertEquals("SPJ 编译失败，请联系题目管理员", result.getErrorMessage());
+        assertTrue(result.isTerminal());
+        verify(executor, never()).run(any(), any(), any());
+        verify(session).close();
+        verify(lease).close();
+    }
+
+    /**
+     * 校验器传输故障继续交由任务重试，但当前测试点的原始输出及版本租约必须释放
+     * @throws Exception 模拟数据读取或校验器执行失败
+     */
+    @Test
+    void spjTransportFailureReleasesRawOutputAndVersionLease() throws Exception {
+        JudgeTask task = WorkerFixtures.task(0, 0);
+        task.setSpj(new SpjProgram());
+        prepare(task);
+        var checker = new GoJudgeExecutor.PreparedProgram("C++", "checker", "checker-artifact");
+        when(executor.compileSpj(session, task.getSpj())).thenReturn(checker);
+        TestDataCache.Lease lease = mock(TestDataCache.Lease.class);
+        TestDataCache.CachedCase testCase = mock(TestDataCache.CachedCase.class);
+        when(cache.acquire(anyLong(), anyLong(), anyString())).thenReturn(lease);
+        when(lease.entries()).thenReturn(List.of(testCase));
+        when(testCase.openInput()).thenAnswer(invocation -> stream("input"));
+        when(testCase.openOutput()).thenAnswer(invocation -> stream("hidden answer"));
+        when(executor.run(eq(session), eq(program), any(InputStream.class)))
+                .thenReturn(new GoJudgeExecutor.ExecutionResult(
+                        JudgeVerdict.STATUS_ACCEPTED, "", null, 5, 20, "raw-output"));
+        when(executor.check(eq(session), eq(checker), any(InputStream.class), any(InputStream.class), eq("raw-output")))
+                .thenThrow(new IOException("sandbox unavailable"));
+
+        assertThrows(IOException.class, () -> runner.execute(task, progress::add));
+
+        var order = inOrder(session, lease);
+        order.verify(session).release("raw-output");
+        order.verify(lease).close();
+        order.verify(session).close();
     }
 
     private void prepare(JudgeTask task) throws IOException {
@@ -195,7 +326,7 @@ class JudgeRunVersionedDataTest {
     }
 
     private GoJudgeExecutor.ExecutionResult accepted(String output, long time, long memory) {
-        return new GoJudgeExecutor.ExecutionResult(JudgeVerdict.STATUS_ACCEPTED, output, null, time, memory);
+        return new GoJudgeExecutor.ExecutionResult(JudgeVerdict.STATUS_ACCEPTED, output, null, time, memory, "raw-output");
     }
 
     private InputStream stream(String value) {

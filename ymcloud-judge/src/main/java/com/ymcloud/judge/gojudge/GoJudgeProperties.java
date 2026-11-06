@@ -25,18 +25,23 @@ public class GoJudgeProperties {
     private Duration connectTimeout = Duration.ofSeconds(3);
     private Duration requestTimeout = Duration.ofSeconds(90);
     private int maxResponseBytes = 8 * 1024 * 1024;
-    private int maxRequestBytes = 24 * 1024 * 1024;
-    private long maxFileBytes = 16 * 1024 * 1024;
+    private int maxRequestBytes = 65 * 1024 * 1024;
+    private long maxFileBytes = 64 * 1024 * 1024;
     private long compileMemoryBytes = 512 * 1024 * 1024;
     private long compileWallTimeMillis = 10000;
     private long maxProblemMemoryKiB = 1024 * 1024;
     private int processLimit = 64;
-    private int sandboxConcurrency = 1;
+
+    /**
+     * 0 表示由沙箱自动确定并发，正数用于校验管理员指定的部署容量
+     */
+    private int sandboxConcurrency;
+
     private long serviceMemoryBytes = 1536L * 1024 * 1024;
     private int cpuRateLimit = 1000;
 
     /**
-     * 启动时校验令牌及沙箱容量，并检查内存、并发和超时是否配套。
+     * 校验令牌及部署容量，自动并发仅检查单次执行是否能容纳
      */
     @PostConstruct
     public void validate() {
@@ -53,7 +58,7 @@ public class GoJudgeProperties {
                 || maxRequestBytes < 1024 || maxRequestBytes > 256 * 1024 * 1024) {
             throw new IllegalArgumentException("go-judge 文件或 HTTP 消息大小配置无效");
         }
-        if (sandboxConcurrency < 1 || sandboxConcurrency > 32 || processLimit < 4 || processLimit > 1024
+        if (sandboxConcurrency < 0 || processLimit < 4 || processLimit > 1024
                 || cpuRateLimit < 1 || cpuRateLimit > 64000 || compileWallTimeMillis < 100
                 || compileWallTimeMillis > 300000 || compileMemoryBytes < 32L * 1024 * 1024
                 || compileMemoryBytes > 64L * 1024 * 1024 * 1024
@@ -61,10 +66,10 @@ public class GoJudgeProperties {
             throw new IllegalArgumentException("go-judge 沙箱容量配置无效");
         }
         long largestSandbox = Math.max(compileMemoryBytes, maxProblemMemoryKiB * 1024);
-        long reserved = 256L * 1024 * 1024 + sandboxConcurrency * 64L * 1024 * 1024;
-        if (serviceMemoryBytes < sandboxConcurrency * largestSandbox + reserved
-                || requestTimeout.toMillis() <= compileWallTimeMillis) {
-            throw new IllegalArgumentException("go-judge 总内存、并发及编译传输预算必须配套调整");
+        int concurrency = Math.max(1, sandboxConcurrency);
+        long reserved = 256L * 1024 * 1024 + concurrency * 64L * 1024 * 1024;
+        if (serviceMemoryBytes < concurrency * largestSandbox + reserved) {
+            throw new IllegalArgumentException("go-judge 总内存、并发及单次执行内存必须配套调整");
         }
     }
 

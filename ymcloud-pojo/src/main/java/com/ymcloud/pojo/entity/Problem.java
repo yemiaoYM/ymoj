@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
+import lombok.ToString;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDateTime;
 
@@ -53,8 +55,32 @@ public class Problem {
     /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
     private Integer difficulty;
 
-    /** 判题方式：default=普通、spj=特殊、interactive=交互；当前仅支持 default */
+    /**
+     * 判题方式：default=普通、spj=特殊，交互判题暂不开放
+     */
     private String judgeMode;
+
+    /**
+     * 校验器语言，仅在特殊判题下使用
+     */
+    @JsonIgnore
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String spjLanguage;
+
+    /**
+     * 隐藏校验器源码，只允许管理详情显式返回
+     */
+    @JsonIgnore
+    @ToString.Exclude
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String spjCode;
+
+    /**
+     * 包含编译协议的校验器源码摘要
+     */
+    @JsonIgnore
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String spjDigest;
 
     /** 可见性：1=公开，2=私有，3=比赛专用 */
     private Integer visibility;

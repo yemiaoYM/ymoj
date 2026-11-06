@@ -1,6 +1,8 @@
 package com.ymcloud.pojo.dto.admin;
 
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -9,6 +11,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.groups.Default;
 import lombok.Data;
+import lombok.ToString;
 
 import java.util.List;
 
@@ -75,11 +78,29 @@ public class ProblemDTO {
     private Integer difficulty;
 
     /**
-     * 判题方式：default=普通、spj=特殊、interactive=交互；当前仅支持 default
+     * 判题方式：default=普通、spj=特殊，交互判题暂不开放
      */
     @NotBlank(message = "请选择题目判题方式")
     @Pattern(regexp = "default|spj|interactive", message = "判题方式参数非法")
     private String judgeMode;
+
+    @Pattern(regexp = "C\\+\\+", message = "testlib SPJ 仅支持 C++")
+    private String spjLanguage;
+
+    @Size(max = 65535, message = "SPJ 源码不能超过65535个字符")
+    @ToString.Exclude
+    private String spjCode;
+
+    /**
+     * SPJ 模式必须同时提交语言和源码
+     * @return 特殊判题配置是否完整
+     */
+    @JsonIgnore
+    @AssertTrue(message = "特殊判题必须填写 SPJ 语言和源码")
+    public boolean isSpjConfigured() {
+        return !"spj".equals(judgeMode)
+                || (spjLanguage != null && spjCode != null && !spjCode.isBlank());
+    }
 
     /**
      * 题目可见性

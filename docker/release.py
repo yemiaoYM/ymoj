@@ -157,7 +157,6 @@ def build_sources():
         raise ValueError("发布构建不读取前端本地 .env 文件，请使用干净源码工作区")
     if any(key.startswith("VITE_") for key in os.environ):
         raise ValueError("发布构建不接收本机 VITE_* 环境变量，请在干净环境中重试")
-    execute([executable("node"), "scripts/sync-version.mjs"], cwd=frontend)
     npm = executable("npm")
     execute([npm, "ci"], cwd=frontend)
     execute([npm, "run", "build"], cwd=frontend)

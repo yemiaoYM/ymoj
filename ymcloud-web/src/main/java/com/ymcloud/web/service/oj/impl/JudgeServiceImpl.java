@@ -28,6 +28,7 @@ import com.ymcloud.core.web.dao.TestDataVersionEntityService;
 import com.ymcloud.pojo.contract.judge.JudgeLanguage;
 import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.SubmissionStatusDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
@@ -360,7 +361,8 @@ public class JudgeServiceImpl implements JudgeService {
      * @return 具有新执行标识的正式任务，尚未分配提交编号
      */
     private JudgeTask formalTask(Problem problem, Contest contest, String languageName, String code) {
-        if (!ProblemConstants.JUDGE_MODE_DEFAULT.equals(problem.getJudgeMode())) {
+        if (!ProblemConstants.JUDGE_MODE_DEFAULT.equals(problem.getJudgeMode())
+                && !ProblemConstants.JUDGE_MODE_SPJ.equals(problem.getJudgeMode())) {
             throw new JudgeException("该题目的判题方式尚未支持", HttpStatus.BAD_REQUEST);
         }
         Language language = requireLanguage(languageName);
@@ -386,6 +388,14 @@ public class JudgeServiceImpl implements JudgeService {
         task.setTimeLimit(problem.getTimeLimit());
         task.setMemoryLimit(problem.getMemoryLimit());
         task.setMode(resolveScoringMode(contest));
+        if (ProblemConstants.JUDGE_MODE_SPJ.equals(problem.getJudgeMode())) {
+            SpjProgram spj = new SpjProgram();
+            spj.setLanguage(problem.getSpjLanguage());
+            spj.setCode(problem.getSpjCode());
+            spj.setDigest(problem.getSpjDigest());
+            spj.validate();
+            task.setSpj(spj);
+        }
         return task;
     }
 

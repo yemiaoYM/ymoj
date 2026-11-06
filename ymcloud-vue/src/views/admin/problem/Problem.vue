@@ -22,7 +22,7 @@
           :label-position="isNarrow ? 'top' : 'right'"
           :model="problem"
           :rules="rules"
-          :disabled="saving"
+          :disabled="saving || spjCompiling"
         >
           <el-form-item label="题目展示ID" prop="problemId">
             <el-input
@@ -205,17 +205,26 @@
             />
           </el-form-item>
           <el-form-item label="判题方式" prop="judgeMode">
-            <el-radio-group v-model="problem.judgeMode" aria-label="判题方式">
+            <el-radio-group v-model="problem.judgeMode">
               <el-tooltip content="按测试数据运行程序，并比对输出结果。" placement="top">
                 <el-radio-button value="default">普通判题</el-radio-button>
               </el-tooltip>
-              <el-tooltip content="使用专用校验程序判断答案，适合多解等情况。暂未支持。" placement="top">
-                <el-radio-button value="spj" disabled>特殊判题</el-radio-button>
+              <el-tooltip content="使用专用校验程序判断答案，适合多解或自定义误差等情况。" placement="top">
+                <el-radio-button value="spj">特殊判题</el-radio-button>
               </el-tooltip>
               <el-tooltip content="用户程序与交互程序交换输入输出。暂未支持。" placement="top">
                 <el-radio-button value="interactive" disabled>交互判题</el-radio-button>
               </el-tooltip>
             </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="problem.judgeMode === 'spj'" prop="spjCode">
+            <SpjEditor
+              :key="`${mode}-${problemId}`"
+              v-model:code="problem.spjCode"
+              v-model:language="problem.spjLanguage"
+              :disabled="saving"
+              @busy="spjCompiling = $event"
+            />
           </el-form-item>
         </el-form>
       </x-flex>
@@ -225,7 +234,7 @@
           size="large"
           type="primary"
           :loading="saving"
-          :disabled="loading || loadFailed"
+          :disabled="loading || loadFailed || spjCompiling"
           @click="onSubmitProblem"
         >
           {{ mode === 'edit' ? '更新' : '保存' }}
@@ -248,12 +257,13 @@ import { useRoute, useRouter } from "vue-router";
 import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/api/api";
 import type { Tag, ProblemDTO } from "@/type/types";
 import { PROBLEM_DIFFICULTIES, PROBLEM_VISIBILITY } from "@/constants/problem";
-import { isDraftRecord, useLocalDraft } from "@/composables/useLocalDraft";
-import { useAsyncChange } from "@/composables/useAsyncChange";
+import { isDraftRecord, useLocalDraft } from "@/hooks/useLocalDraft";
+import { useAsyncChange } from "@/hooks/useAsyncChange";
 import { useRemoteProblemStore } from "@/stores/remoteProblem";
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/MarkdownEidt.vue")
 );
+const SpjEditor = defineAsyncComponent(() => import('@/components/admin/SpjEditor.vue'));
 
 type ProblemForm = Omit<ProblemDTO, "examples" | "source" | "timeLimit" | "memoryLimit"> & {
   source: string;
@@ -271,6 +281,7 @@ const loading = ref(false);
 const { pending: saving, beforeChange: saveProblem } = useAsyncChange();
 const loadFailed = ref(false);
 const tagsFailed = ref(false);
+const spjCompiling = ref(false);
 const formRef = ref<FormInstance>();
 const contentEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
 const inputEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
@@ -293,7 +304,9 @@ const localDraft = useLocalDraft<ProblemDraft>(
         .every(key => typeof value[key] === 'string')
       && ['difficulty', 'visibility'].every(key => typeof value[key] === 'number')
       && ['timeLimit', 'memoryLimit'].every(key => value[key] == null || typeof value[key] === 'number')
-      && value.judgeMode === 'default' && typeof value.openCaseResult === 'boolean'
+      && (value.judgeMode === 'default' || value.judgeMode === 'spj')
+      && typeof value.spjCode === 'string' && value.spjLanguage === 'C++'
+      && typeof value.openCaseResult === 'boolean'
       && Array.isArray(value.tagList) && value.tagList.every(tag => typeof tag === 'number')
       && Array.isArray(value.problemCaseList) && value.problemCaseList.every(item =>
         isDraftRecord(item) && typeof item.input === 'string' && typeof item.output === 'string'
@@ -365,8 +378,12 @@ const rules = computed<FormRules<ProblemForm>>(() => ({
   ],
   judgeMode: [
     { required: true, message: "请选择题目判题方式", trigger: "change" },
-    { type: "enum", enum: ['default'], message: "目前仅支持普通判题", trigger: "change" },
+    { type: "enum", enum: ['default', 'spj'], message: "目前仅支持普通判题和特殊判题", trigger: "change" },
   ],
+  spjCode: problem.value.judgeMode === 'spj' ? [
+    { required: true, whitespace: true, message: '请输入 SPJ 源码', trigger: 'blur' },
+    { max: 65535, message: 'SPJ 源码不能超过65535个字符', trigger: 'blur' },
+  ] : [],
   visibility: [
     { required: true, message: "请选择题目可见性", trigger: "change" },
     {
@@ -426,7 +443,7 @@ const onSubmitProblem = async () => {
   const contentEditor = contentEditorRef.value;
   const inputEditor = inputEditorRef.value;
   const outputEditor = outputEditorRef.value;
-  if (!form || !contentEditor || !inputEditor || !outputEditor || saving.value || loading.value || loadFailed.value) return;
+  if (!form || !contentEditor || !inputEditor || !outputEditor || saving.value || spjCompiling.value || loading.value || loadFailed.value) return;
   const current = revision;
   await saveProblem(async () => {
     await form.validate();
@@ -474,6 +491,8 @@ function handleCreateForm(): ProblemForm {
     source: "",
     difficulty: 1,
     judgeMode: "default",
+    spjLanguage: 'C++',
+    spjCode: '',
     visibility: PROBLEM_VISIBILITY.PRIVATE,
     openCaseResult: false,
     timeLimit: 1000,
@@ -507,6 +526,8 @@ const handleLoadProblem = async () => {
       source: data.source ?? "",
       difficulty: data.difficulty,
       judgeMode: data.judgeMode,
+      spjLanguage: data.spjLanguage ?? 'C++',
+      spjCode: data.spjCode ?? '',
       openCaseResult: data.openCaseResult,
       timeLimit: data.timeLimit,
       memoryLimit: Math.round(data.memoryLimit / 1024), // 后端KiB转换为表单MiB

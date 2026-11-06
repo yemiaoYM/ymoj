@@ -1,6 +1,7 @@
 package com.ymcloud.judge.config;
 
 import com.ymcloud.judge.io.WorkerPaths;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -20,11 +21,13 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Arrays;
 
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-14
- * @Description: 将实际 Rabbit 消费就绪状态写为短效探针；仅 JVM 存活不会产生健康标记。
+ * @Description: 将实际 Rabbit 消费就绪状态写为短效探针
+ * 仅 JVM 存活不会产生健康标记。
  */
 @Slf4j
 @Component
@@ -58,16 +61,21 @@ public class WorkerHealthProbe {
     }
 
     /**
-     * 仅所有消费者正常运行时写入健康标记，异常时移除标记。
+     * 判题消费者达到 Worker 并发且单并发 SPJ 编译消费者就绪时写入健康标记
+     * 任一消费者不足或停止时移除标记
      */
     @Scheduled(initialDelay = 10000, fixedDelay = 10000)
     public synchronized void refresh() {
         try {
             var listeners = registry.getListenerContainers();
-            boolean healthy = started && !listeners.isEmpty() && listeners.stream().allMatch(container ->
-                    container instanceof SimpleMessageListenerContainer simple
-                            && simple.isRunning()
-                            && simple.getActiveConsumerCount() >= properties.getConcurrency());
+            boolean healthy = started && !listeners.isEmpty() && listeners.stream().allMatch(container -> {
+                if (!(container instanceof SimpleMessageListenerContainer simple) || !simple.isRunning()) {
+                    return false;
+                }
+                int concurrency = Arrays.asList(simple.getQueueNames()).contains(SpjProgram.COMPILE_QUEUE)
+                        ? 1 : properties.getConcurrency();
+                return simple.getActiveConsumerCount() >= concurrency;
+            });
             if (healthy) {
                 writeHealth();
             } else {
@@ -75,8 +83,7 @@ public class WorkerHealthProbe {
             }
         } catch (IOException | RuntimeException e) {
             clearHealth();
-            log.warn("Worker 健康探针更新失败 worker={} cause={}",
-                    properties.getId(), e.getClass().getSimpleName());
+            log.warn("Worker 健康探针更新失败 worker={} cause={}", properties.getId(), e.getClass().getSimpleName());
         }
     }
 
@@ -124,8 +131,7 @@ public class WorkerHealthProbe {
             // 删除本身不跟随最终的符号链接，只移除异常标记，绝不访问其目标。
             Files.deleteIfExists(directory.resolve("health"));
         } catch (IOException | RuntimeException e) {
-            log.warn("Worker 健康标记清理失败 worker={} cause={}",
-                    properties.getId(), e.getClass().getSimpleName());
+            log.warn("Worker 健康标记清理失败 worker={} cause={}", properties.getId(), e.getClass().getSimpleName());
         }
     }
 

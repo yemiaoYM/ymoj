@@ -2,6 +2,8 @@ package com.ymcloud.judge;
 
 import com.ymcloud.judge.config.WorkerHealthProbe;
 import com.ymcloud.judge.config.WorkerProperties;
+import com.ymcloud.pojo.contract.judge.JudgeProtocol;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -39,10 +41,14 @@ class WorkerHealthProbeTest {
     private WorkerHealthProbe probe;
     private Path health;
 
+    /**
+     * 装配双并发判题消费者和使用临时目录的健康探针
+     */
     @BeforeEach
     void setup() {
         registry = mock(RabbitListenerEndpointRegistry.class);
         container = mock(SimpleMessageListenerContainer.class);
+        when(container.getQueueNames()).thenReturn(new String[]{JudgeProtocol.TASK_QUEUE});
         WorkerProperties properties = new WorkerProperties();
         properties.setWorkDir(directory);
         properties.setConcurrency(2);
@@ -87,6 +93,40 @@ class WorkerHealthProbeTest {
         when(registry.getListenerContainers()).thenReturn(List.of());
         probe.refresh();
         assertFalse(Files.exists(health));
+    }
+
+    /**
+     * 判题与 SPJ 编译消费者按各自并发就绪，任一丢失消费者都应撤销健康标记
+     */
+    @Test
+    void judgeAndSpjConsumersUseTheirOwnConcurrencyRequirements() {
+        SimpleMessageListenerContainer spjContainer = mock(SimpleMessageListenerContainer.class);
+        when(container.getQueueNames()).thenReturn(new String[]{"isolated.judge.tasks"});
+        when(container.isRunning()).thenReturn(true);
+        when(container.getActiveConsumerCount()).thenReturn(2);
+        when(spjContainer.getQueueNames()).thenReturn(new String[]{SpjProgram.COMPILE_QUEUE});
+        when(spjContainer.isRunning()).thenReturn(true);
+        when(spjContainer.getActiveConsumerCount()).thenReturn(1);
+        when(registry.getListenerContainers()).thenReturn(List.of(container, spjContainer));
+
+        probe.applicationReady();
+        assertTrue(Files.exists(health));
+
+        when(spjContainer.getActiveConsumerCount()).thenReturn(0);
+        probe.refresh();
+        assertFalse(Files.exists(health));
+
+        when(spjContainer.getActiveConsumerCount()).thenReturn(1);
+        probe.refresh();
+        assertTrue(Files.exists(health));
+
+        when(container.getActiveConsumerCount()).thenReturn(1);
+        probe.refresh();
+        assertFalse(Files.exists(health));
+
+        when(container.getActiveConsumerCount()).thenReturn(2);
+        probe.refresh();
+        assertTrue(Files.exists(health));
     }
 
     @Test

@@ -122,11 +122,13 @@ class GoJudgeStartupCheckTest {
     }
 
     /**
-     * 1024 MiB 单题预算须有服务预留空间，提高并发时仍要求配套扩容。
+     * 1024 MiB 单题预算须有服务预留空间，提高沙箱并发时仍要求配套扩容
+     * @throws Exception 探针响应构造失败
      */
     @Test
-    void concurrencyAndServiceMemoryCannotBeRaisedIndependently() {
+    void concurrencyAndServiceMemoryCannotBeRaisedIndependently() throws Exception {
         GoJudgeProperties properties = new GoJudgeProperties();
+        properties.setSandboxConcurrency(1);
         properties.setToken("test-go-judge-token-0000000000000000000");
         assertDoesNotThrow(properties::validate);
         properties.setSandboxConcurrency(2);
@@ -135,9 +137,75 @@ class GoJudgeStartupCheckTest {
         assertThrows(IllegalArgumentException.class, properties::validate);
         properties.setServiceMemoryBytes(3L * 1024 * 1024 * 1024);
         assertDoesNotThrow(properties::validate);
-        GoJudgeStartupCheck check = createGoJudgeStartupCheck(mock(GoJudgeClient.class), properties,
+        GoJudgeStartupCheck check = createGoJudgeStartupCheck(readyClient(), properties,
                 new WorkerProperties());
-        assertThrows(GoJudgeException.class, check::verify);
+        assertDoesNotThrow(check::verify);
+    }
+
+    /**
+     * Worker 默认使用自身 CPU 加 1，不随独立沙箱容量变化或受 32 核硬上限影响
+     * @throws Exception 探针响应构造失败
+     */
+    @Test
+    void defaultTaskConcurrencyUsesWorkerCpuIndependentlyOfSandboxCapacity() throws Exception {
+        for (int concurrency : List.of(1, 2, 64)) {
+            GoJudgeProperties properties = new GoJudgeProperties();
+            properties.setSandboxConcurrency(concurrency);
+            properties.setServiceMemoryBytes((concurrency + 1L) * 2 * 1024 * 1024 * 1024);
+            properties.setToken("test-go-judge-token-0000000000000000000");
+            properties.validate();
+            WorkerProperties worker = new WorkerProperties();
+
+            createGoJudgeStartupCheck(readyClient(), properties, worker).verify();
+
+            assertEquals(Runtime.getRuntime().availableProcessors() + 1, worker.getConcurrency());
+            assertDoesNotThrow(worker::validate);
+            worker.setConcurrency(concurrency + 1);
+            assertDoesNotThrow(worker::validate);
+        }
+    }
+
+    /**
+     * 管理员指定任务并发时保持其值，不要求与沙箱执行槽位相等
+     * @throws Exception 探针响应构造失败
+     */
+    @Test
+    void explicitTaskConcurrencyRemainsIndependentOfSandboxSlots() throws Exception {
+        GoJudgeProperties properties = new GoJudgeProperties();
+        properties.setSandboxConcurrency(1);
+        WorkerProperties worker = new WorkerProperties();
+        worker.setConcurrency(4);
+
+        createGoJudgeStartupCheck(readyClient(), properties, worker).verify();
+
+        assertEquals(4, worker.getConcurrency());
+    }
+
+    /**
+     * 输出文件与上传预算必须配套，缓存文件传输不要求响应 JSON 随输出上限扩大
+     * @throws Exception 探针响应构造失败
+     */
+    @Test
+    void cachedOutputRequiresFileAndUploadCapacityWithoutExpandingJson() throws Exception {
+        GoJudgeClient client = readyClient();
+        GoJudgeProperties properties = new GoJudgeProperties();
+        WorkerProperties worker = new WorkerProperties();
+        worker.setMaxOutputBytes(128 * 1024 * 1024);
+        properties.setMaxFileBytes(worker.getMaxOutputBytes());
+        properties.setMaxRequestBytes(129 * 1024 * 1024);
+        assertDoesNotThrow(worker::validate);
+        assertDoesNotThrow(createGoJudgeStartupCheck(client, properties, worker)::verify);
+
+        properties.setMaxFileBytes(worker.getMaxOutputBytes() - 1L);
+        assertThrows(GoJudgeException.class,
+                createGoJudgeStartupCheck(client, properties, worker)::verify);
+        properties.setMaxFileBytes(worker.getMaxOutputBytes());
+        properties.setMaxRequestBytes(129 * 1024 * 1024 - 1);
+        assertThrows(GoJudgeException.class,
+                createGoJudgeStartupCheck(client, properties, worker)::verify);
+
+        worker.setMaxOutputBytes(1023);
+        assertThrows(IllegalArgumentException.class, worker::validate);
     }
 
     private static GoJudgeStartupCheck check(GoJudgeClient client) {

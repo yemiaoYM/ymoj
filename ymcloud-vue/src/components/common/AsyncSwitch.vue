@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { useAsyncChange, type ChangeResult } from '@/composables/useAsyncChange';
+import { useAsyncChange, type ChangeResult } from '@/hooks/useAsyncChange';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{

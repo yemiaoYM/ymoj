@@ -16,6 +16,10 @@ import com.ymcloud.core.web.dao.ProblemTagEntityService;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
+import com.ymcloud.pojo.dto.admin.SpjCompileDTO;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.pojo.contract.judge.SpjCompileResult;
+import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
 import com.ymcloud.pojo.entity.User;
@@ -41,6 +45,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @Author: Yemiao
@@ -65,6 +70,24 @@ public class AdminProblemServiceImpl implements AdminProblemService {
 
     @Autowired
     private ProblemTagEntityService problemTagEntityService;
+
+    @Autowired
+    private SpjCompilation spjCompilation;
+
+    /**
+     * 校验题目管理资格后调用独立 Worker 编译通道
+     * @param request 已验证的校验器语言和源码
+     * @return 编译结果及仅管理端可见的诊断
+     */
+    @Override
+    public SpjCompileResult compileSpj(SpjCompileDTO request) {
+        resourceAccess.requireProblemManager();
+        SpjProgram program = new SpjProgram();
+        program.setLanguage(request.getLanguage());
+        program.setCode(request.getCode());
+        program.setDigest(program.sourceDigest());
+        return spjCompilation.compile(program);
+    }
 
     /**
      * 按管理归属和实时可见性分页查询题目列表
@@ -127,6 +150,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         }
         //构造实体
         Problem problem = BeanUtil.copyProperties(problemDTO, Problem.class);
+        configureSpj(problem, null);
         problem.setProblemId(problemId);
         problem.setSource(normalizeSource(problemDTO.getSource()));
         //题目创建者信息
@@ -188,6 +212,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         resourceAccess.requireManageProblem(existProblem);
         //构造实体
         Problem problem = BeanUtil.copyProperties(problemDTO, Problem.class);
+        configureSpj(problem, existProblem);
         problem.setId(id);
         problem.setVisibility(existProblem.getVisibility());
         // 题号与来源无关，编辑出处不改变已有链接和提交记录
@@ -224,14 +249,37 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 拒绝尚未实现的特殊判题和交互判题配置。
+     * 拒绝尚未实现的交互判题配置
      * @param judgeMode 题目判题方式
      * @throws ProblemException 判题方式不受支持
      */
     private void validateJudgeMode(String judgeMode) {
-        if (!ProblemConstants.JUDGE_MODE_DEFAULT.equals(judgeMode)) {
-            throw new ProblemException("目前仅支持普通判题（default）", HttpStatus.BAD_REQUEST);
+        if (!ProblemConstants.JUDGE_MODE_DEFAULT.equals(judgeMode)
+                && !ProblemConstants.JUDGE_MODE_SPJ.equals(judgeMode)) {
+            throw new ProblemException("目前仅支持普通判题和特殊判题", HttpStatus.BAD_REQUEST);
         }
+    }
+
+    /**
+     * 保存源码时要求本次编译凭据，未修改的已保存版本可直接复用
+     * @param problem 待保存的题目
+     * @param existing 已锁定的原题，新增为 null
+     */
+    private void configureSpj(Problem problem, Problem existing) {
+        if (!ProblemConstants.JUDGE_MODE_SPJ.equals(problem.getJudgeMode())) {
+            problem.setSpjCode(null);
+            problem.setSpjLanguage(null);
+            problem.setSpjDigest(null);
+            return;
+        }
+        SpjProgram program = new SpjProgram();
+        program.setLanguage(problem.getSpjLanguage());
+        program.setCode(problem.getSpjCode());
+        String digest = program.sourceDigest();
+        if (existing == null || !Objects.equals(digest, existing.getSpjDigest())) {
+            spjCompilation.requireCompiled(digest);
+        }
+        problem.setSpjDigest(digest);
     }
 
     /**

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/sync-version.mjs && vite",
-    "build": "node scripts/sync-version.mjs && vue-tsc --build && vite build",
+    "dev": "vite",
+    "build": "vue-tsc --build && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --build"
   },

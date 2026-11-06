@@ -59,6 +59,7 @@
                     <!-- 私有环境配置不进入可交付 Worker 镜像。 -->
                     <exclude>application-dev.*</exclude>
                     <exclude>application-prod.*</exclude>
+                    <exclude>native/**</exclude>
                 </excludes>
             </resource>
         </resources>

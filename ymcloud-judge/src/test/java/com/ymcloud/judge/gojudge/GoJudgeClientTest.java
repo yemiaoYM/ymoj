@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -296,6 +298,60 @@ class GoJudgeClientTest {
         }
     }
 
+    /**
+     * 沙箱排队超过文件传输预算时继续等待，任务总截止前的合法结果仍可接收
+     * @throws Exception 本地 HTTP 请求或测试线程未按时结束
+     */
+    @Test
+    void queuedExecutionCanExceedTransferTimeoutBeforeTaskDeadline() throws Exception {
+        properties.setConnectTimeout(Duration.ofMillis(100));
+        properties.setRequestTimeout(Duration.ofMillis(300));
+        CountDownLatch queued = new CountDownLatch(1);
+        CountDownLatch finishExecution = new CountDownLatch(1);
+        handler.set(exchange -> {
+            assertEquals("/run", exchange.getRequestURI().getPath());
+            queued.countDown();
+            try {
+                assertTrue(finishExecution.await(5, TimeUnit.SECONDS));
+                respond(exchange, 200, ACCEPTED);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                exchange.close();
+            }
+        });
+        var consumer = Executors.newSingleThreadExecutor();
+        try (GoJudgeClient client = client()) {
+            var reply = consumer.submit(() -> client.execute(command(), deadline()));
+            assertTrue(queued.await(3, TimeUnit.SECONDS));
+            assertThrows(TimeoutException.class, () -> reply.get(600, TimeUnit.MILLISECONDS));
+            finishExecution.countDown();
+            assertEquals("Accepted", reply.get(3, TimeUnit.SECONDS).get(0).path("status").asText());
+        } finally {
+            finishExecution.countDown();
+            consumer.shutdownNow();
+            assertTrue(consumer.awaitTermination(5, TimeUnit.SECONDS));
+        }
+    }
+
+    /**
+     * 文件传输仍在独立预算耗尽时关闭连接，不占用任务全部剩余时间
+     * @throws Exception 本地 HTTP 连接未按时释放
+     */
+    @Test
+    void fileDownloadRetainsTransferTimeoutBeforeTaskDeadline() throws Exception {
+        properties.setConnectTimeout(Duration.ofMillis(100));
+        properties.setRequestTimeout(Duration.ofMillis(300));
+        CountDownLatch disconnected = streamingResponse();
+        try (GoJudgeClient client = client()) {
+            long started = System.nanoTime();
+            try (InputStream input = client.openFile("output", deadline())) {
+                assertThrows(GoJudgeException.class, () -> input.transferTo(java.io.OutputStream.nullOutputStream()));
+            }
+            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 1500);
+            assertTrue(disconnected.await(3, TimeUnit.SECONDS), "传输预算耗尽必须关闭 HTTP 连接");
+        }
+    }
+
     @Test
     void slowResponseIsCancelledAtTaskDeadlineEvenWhileBytesArrive() throws Exception {
         CountDownLatch disconnected = streamingResponse();
@@ -415,6 +471,140 @@ class GoJudgeClientTest {
             assertEquals("large-file", client.upload(input, "stdin", System.currentTimeMillis() + 15000));
             assertTrue(received.get() > size, "服务端应收到完整正文和 multipart 边界");
             assertTrue(received.get() < size + 1024, "multipart 仅有固定大小的头尾开销");
+        }
+    }
+
+    /**
+     * 原始输出超过 JSON 响应预算时仍可边传边读，不在客户端累积整份正文
+     * @throws Exception 本地 HTTP 服务或流式读取失败
+     */
+    @Test
+    void largeDownloadIsStreamedIndependentlyOfJsonBudget() throws Exception {
+        long size = 20L * 1024 * 1024;
+        properties.setMaxResponseBytes(1024);
+        CountDownLatch consuming = new CountDownLatch(1);
+        handler.set(exchange -> {
+            assertEquals("GET", exchange.getRequestMethod());
+            assertEquals("/file/raw-output", exchange.getRequestURI().getPath());
+            assertEquals("Bearer " + TOKEN, exchange.getRequestHeaders().getFirst("Authorization"));
+            exchange.sendResponseHeaders(200, size);
+            try (exchange; var output = exchange.getResponseBody()) {
+                byte[] buffer = new byte[8192];
+                Arrays.fill(buffer, (byte) '7');
+                for (long position = 0; position < size; position += buffer.length) {
+                    output.write(buffer);
+                    if (position == 256 * 1024 && !consuming.await(2, TimeUnit.SECONDS)) {
+                        throw new IOException("下载不应先缓冲完整输出");
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        try (GoJudgeClient client = client(); InputStream input = client.openFile("raw-output", deadline())) {
+            byte[] buffer = new byte[8192];
+            long count = 0;
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                consuming.countDown();
+                count += read;
+                assertEquals('7', buffer[0]);
+                assertEquals('7', buffer[read - 1]);
+            }
+            assertEquals(size, count);
+        }
+    }
+
+    /**
+     * 下载校验声明长度和实际长度，未知文件及非法 ID 保留既有失败边界
+     * @throws Exception 本地 HTTP 下载失败
+     */
+    @Test
+    void downloadRejectsOversizedBodiesMissingFilesAndUnsafeIds() throws Exception {
+        properties.setMaxFileBytes(1024);
+        try (GoJudgeClient client = client()) {
+            assertThrows(GoJudgeException.class, () -> client.openFile("../escape", deadline()));
+            assertEquals(0, requests.get());
+            handler.set(exchange -> respond(exchange, 404, "private path"));
+            assertThrows(GoJudgeFileMissingException.class, () -> client.openFile("absent", deadline()));
+            handler.set(exchange -> respond(exchange, 200, "x".repeat(1025)));
+            assertThrows(GoJudgeException.class, () -> client.openFile("large", deadline()));
+            handler.set(exchange -> {
+                exchange.sendResponseHeaders(200, 0);
+                try (exchange; var body = exchange.getResponseBody()) {
+                    body.write(new byte[1025]);
+                }
+            });
+            try (InputStream input = client.openFile("chunked", deadline())) {
+                assertThrows(GoJudgeException.class, () -> input.transferTo(java.io.OutputStream.nullOutputStream()));
+            }
+            handler.set(exchange -> {
+                exchange.sendResponseHeaders(200, 10);
+                try (exchange; var body = exchange.getResponseBody()) {
+                    body.write('x');
+                } catch (IOException ignored) {
+                    // 服务端故意截断已声明的文件正文
+                }
+            });
+            try (InputStream input = client.openFile("truncated", deadline())) {
+                assertThrows(GoJudgeException.class, () -> input.transferTo(java.io.OutputStream.nullOutputStream()));
+            }
+        }
+    }
+
+    /**
+     * 正文完全阻塞时，任务截止、线程中断及客户端关闭都能释放连接
+     * @throws Exception 本地服务或测试线程未按时结束
+     */
+    @Test
+    void blockedDownloadIsClosedOnDeadlineInterruptAndShutdown() throws Exception {
+        for (String mode : List.of("deadline", "interrupt", "close")) {
+            CountDownLatch reading = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            AtomicReference<Boolean> interrupted = new AtomicReference<>();
+            handler.set(exchange -> {
+                exchange.sendResponseHeaders(200, 0);
+                try (exchange; var body = exchange.getResponseBody()) {
+                    body.write('x');
+                    body.flush();
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            try (GoJudgeClient client = client()) {
+                Thread worker = new Thread(() -> {
+                    long deadline = System.currentTimeMillis() + (mode.equals("deadline") ? 500 : 5000);
+                    try (InputStream input = client.openFile("blocked", deadline)) {
+                        input.read();
+                        reading.countDown();
+                        input.read();
+                    } catch (Throwable error) {
+                        failure.set(error);
+                        interrupted.set(Thread.currentThread().isInterrupted());
+                    }
+                });
+                worker.start();
+                try {
+                    assertTrue(reading.await(3, TimeUnit.SECONDS));
+                    if (mode.equals("interrupt")) {
+                        worker.interrupt();
+                    } else if (mode.equals("close")) {
+                        client.close();
+                    }
+                    worker.join(1500);
+                    assertFalse(worker.isAlive(), mode);
+                    assertTrue(failure.get() instanceof GoJudgeException, mode);
+                    if (mode.equals("interrupt")) {
+                        assertEquals(Boolean.TRUE, interrupted.get());
+                    }
+                } finally {
+                    release.countDown();
+                    worker.interrupt();
+                    worker.join(3000);
+                }
+            }
         }
     }
 

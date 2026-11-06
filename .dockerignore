@@ -14,8 +14,9 @@
 !ymcloud-judge/
 !ymcloud-judge/src/
 !ymcloud-judge/src/main/
-!ymcloud-judge/src/main/c/
-!ymcloud-judge/src/main/c/*.c
+!ymcloud-judge/src/main/resources/
+!ymcloud-judge/src/main/resources/native/
+!ymcloud-judge/src/main/resources/native/*.c
 !ymcloud-judge/target/
 !ymcloud-judge/target/ymcloud-judge.jar
 !ymcloud-web/

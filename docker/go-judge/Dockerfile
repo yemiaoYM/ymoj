@@ -33,7 +33,7 @@ RUN --mount=type=bind,from=deb-cache,target=/opt/deb-cache,readonly \
     && dpkg-query -W -f='${Package}=${Version}\n' | sort > /opt/ymcloud/packages.manifest \
     && rm -rf /var/lib/apt/lists/*
 
-COPY ymcloud-judge/src/main/c/ymcloud-output-limit.c /opt/ymcloud/output-limit.c
+COPY ymcloud-judge/src/main/resources/native/ymcloud-output-limit.c /opt/ymcloud/output-limit.c
 RUN gcc -std=c11 -O2 -Wall -Wextra -Werror /opt/ymcloud/output-limit.c \
         -o /usr/local/bin/ymcloud-output-limit \
     && chmod 0555 /usr/local/bin/ymcloud-output-limit \
@@ -46,7 +46,7 @@ ARG YMCLOUD_VERSION
 LABEL org.opencontainers.image.version="${YMCLOUD_VERSION}"
 COPY --from=upstream /opt/go-judge /opt/go-judge
 COPY docker/go-judge/mount.yaml /opt/mount.yaml
-COPY docker/go-judge/entrypoint.py /opt/ymcloud/entrypoint.py
+COPY docker/go-judge/entrypoint.py docker/go-judge/cpu_count.py /opt/ymcloud/
 RUN test -n "$YMCLOUD_VERSION" \
     && mkdir -p /var/lib/go-judge/files /var/lib/go-judge/run \
     && chmod 0700 /var/lib/go-judge/files /var/lib/go-judge/run \
@@ -67,7 +67,7 @@ RUN test -n "$YMCLOUD_VERSION" \
     && mkdir -p /app /data/work /data/cache /data/results /data/logs \
     && chown -R 10001:10001 /data
 COPY ymcloud-judge/target/ymcloud-judge.jar /app/worker.jar
-COPY docker/go-judge/worker-entrypoint.py docker/go-judge/worker-healthcheck.py /opt/ymcloud/
+COPY docker/go-judge/worker-entrypoint.py docker/go-judge/worker-healthcheck.py docker/go-judge/cpu_count.py /opt/ymcloud/
 ENV LOGGING_FILE_PATH=/data/logs
 USER 10001:10001
 WORKDIR /app

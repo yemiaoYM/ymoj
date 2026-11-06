@@ -10,6 +10,8 @@ import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
 import com.ymcloud.pojo.entity.User;
@@ -264,7 +266,7 @@ class ProblemMetadataTest {
      */
     @ParameterizedTest
     @NullAndEmptySource
-    @ValueSource(strings = {"spj", "interactive", "unknown"})
+    @ValueSource(strings = {"interactive", "unknown"})
     void unsupportedModesNeverWrite(String mode) {
         ProblemEntityService problems = mock(ProblemEntityService.class);
         ProblemTagEntityService tags = mock(ProblemTagEntityService.class);
@@ -274,6 +276,67 @@ class ProblemMetadataTest {
         assertThrows(ProblemException.class, () -> service.addProblem(dto));
         assertThrows(ProblemException.class, () -> service.updateProblem(10L, dto));
         verifyNoInteractions(problems, tags);
+    }
+
+    /**
+     * SPJ 保存校验编译凭据，旧源码摘要不能授权新源码；普通模式清除隐藏配置。
+     */
+    @Test
+    void spjSaveRequiresReceiptOnlyForNewSource() {
+        ProblemEntityService problems = mock(ProblemEntityService.class);
+        ProblemTagEntityService tags = mock(ProblemTagEntityService.class);
+        SpjCompilation compilation = mock(SpjCompilation.class);
+        AdminProblemServiceImpl service = service(problems, tags);
+        ReflectionTestUtils.setField(service, "spjCompilation", compilation);
+        Problem existing = new Problem();
+        SpjProgram program = new SpjProgram();
+        program.setLanguage("C++");
+        program.setCode("#include \"testlib.h\"");
+        existing.setSpjDigest(program.sourceDigest());
+        Problem pending = new Problem();
+        pending.setJudgeMode("spj");
+        pending.setSpjLanguage(program.getLanguage());
+        pending.setSpjCode(program.getCode());
+        ReflectionTestUtils.invokeMethod(service, "configureSpj", pending, existing);
+        assertEquals(existing.getSpjDigest(), pending.getSpjDigest());
+        verifyNoInteractions(compilation);
+        pending.setSpjCode("changed");
+        doThrow(new ProblemException("compile first")).when(compilation).requireCompiled(anyString());
+        assertThrows(ProblemException.class,
+                () -> ReflectionTestUtils.invokeMethod(service, "configureSpj", pending, existing));
+        pending.setJudgeMode("default");
+        ReflectionTestUtils.invokeMethod(service, "configureSpj", pending, existing);
+        assertNull(pending.getSpjCode());
+        assertNull(pending.getSpjLanguage());
+        assertNull(pending.getSpjDigest());
+    }
+
+    /**
+     * HTTP 参数入口只接受有源码的 testlib C++ 校验器，源码不随普通实体序列化泄露。
+     * @throws Exception 序列化失败
+     */
+    @Test
+    void spjHttpContractAndHiddenFields() throws Exception {
+        try (var factory = Validation.buildDefaultValidatorFactory()) {
+            var validator = factory.getValidator();
+            ProblemDTO dto = request();
+            dto.setJudgeMode("spj");
+            assertFalse(validator.validate(dto).isEmpty());
+            dto.setSpjLanguage("C++");
+            dto.setSpjCode("#include \"testlib.h\"");
+            assertTrue(validator.validate(dto).isEmpty());
+            dto.setSpjLanguage("C");
+            assertFalse(validator.validate(dto).isEmpty());
+            dto.setSpjLanguage("C++");
+            dto.setSpjCode("x".repeat(65536));
+            assertFalse(validator.validate(dto).isEmpty());
+        }
+        Problem problem = new Problem();
+        problem.setSpjCode("hidden checker");
+        problem.setSpjDigest("hidden digest");
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(problem);
+        assertFalse(json.contains("spjCode"));
+        assertFalse(json.contains("spjDigest"));
     }
 
     /**

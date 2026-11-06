@@ -623,6 +623,20 @@ export function getAdminProblemById(id: number) {
 }
 
 /**
+ * 在 Worker 沙箱中检查 SPJ 编译，保留完整诊断供管理员修正
+ * @param data 校验器语言和源码
+ * @returns 包含编译结果和诊断的完整响应
+ */
+export function compileSpj(data: { language: string; code: string }) {
+  return request({
+    url: '/admin/problem/spj/compile',
+    method: 'POST',
+    data,
+    timeout: 50000,
+  });
+}
+
+/**
  * 删除题目
  * @param ids 题目ID或ID数组
  */

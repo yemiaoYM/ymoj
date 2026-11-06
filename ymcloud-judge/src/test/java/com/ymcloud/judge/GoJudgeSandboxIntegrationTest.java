@@ -1,15 +1,20 @@
 package com.ymcloud.judge;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.ymcloud.judge.config.WorkerAmqpConfig;
 import com.ymcloud.judge.config.WorkerProperties;
 import com.ymcloud.judge.exception.CompileException;
 import com.ymcloud.judge.gojudge.GoJudgeClient;
+import com.ymcloud.judge.gojudge.GoJudgeException;
 import com.ymcloud.judge.gojudge.GoJudgeExecutor;
+import com.ymcloud.judge.gojudge.GoJudgeFileMissingException;
 import com.ymcloud.judge.gojudge.GoJudgeProperties;
 import com.ymcloud.judge.gojudge.GoJudgeStartupCheck;
 import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
+import com.ymcloud.judge.strategy.OutputComparator;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,9 +25,19 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,16 +49,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "YMCLOUD_RUN_GO_JUDGE_TESTS", matches = "true")
 class GoJudgeSandboxIntegrationTest {
 
-    private GoJudgeClient client;
+    private RecordingGoJudgeClient client;
     private GoJudgeExecutor executor;
     private GoJudgeProperties properties;
 
+    /**
+     * 从显式环境配置连接独立沙箱，使用当前 Worker 的默认输出容量。
+     */
     @BeforeEach
     void setup() {
         properties = new GoJudgeProperties();
         properties.setBaseUrl(System.getenv().getOrDefault("YMCLOUD_GO_JUDGE_URL", "http://127.0.0.1:5050"));
         properties.setToken(System.getenv("YMCLOUD_GO_JUDGE_TOKEN"));
-        client = new GoJudgeClient(properties, new WorkerAmqpConfig().workerObjectMapper());
+        client = new RecordingGoJudgeClient(properties);
         executor = createGoJudgeExecutor(client, properties, new WorkerProperties());
     }
 
@@ -107,6 +125,11 @@ class GoJudgeSandboxIntegrationTest {
         }
     }
 
+    /**
+     * 验证进程崩溃及两个输出通道合计超过 32 MiB 时被终止。
+     * @param language 受支持的选手语言
+     * @throws Exception 沙箱请求或编译失败
+     */
     @ParameterizedTest
     @ValueSource(strings = {"Java", "C", "C++", "Python"})
     void crashesAndCombinedOutputOverflowAreRuntimeErrors(String language) throws Exception {
@@ -145,15 +168,94 @@ class GoJudgeSandboxIntegrationTest {
         }
     }
 
+    /**
+     * 验证两百万个九位整数可完整进入普通双流比较与 testlib 校验器，正文不进入结果 JSON。
+     * @throws Exception 沙箱请求、编译或输出读取失败
+     */
     @Test
-    void stdoutCanUseMoreThanHalfOfSharedBudgetAndPrintedMarkersCannotChangeVerdict() throws Exception {
-        String source = "import sys\nsys.stdout.write('x' * 700000)\n"
+    void twentyMegabyteStdoutIsCompleteAndPrintedMarkersCannotChangeVerdict() throws Exception {
+        String source = "import sys\nsys.stdout.buffer.write(b'100000000 ' * 2000000)\n"
                 + "sys.stderr.write('java.lang.OutOfMemoryError __YMCLOUD_TIME__=999999')\n";
         try (GoJudgeTaskSession session = executor.openTask(task("Python", source))) {
             GoJudgeExecutor.PreparedProgram program = executor.compile(session);
             GoJudgeExecutor.ExecutionResult result = run(session, program, "");
             assertEquals(JudgeVerdict.STATUS_ACCEPTED, result.status());
-            assertEquals(700000, result.stdout().length());
+            assertTrue(result.stdout().length() < 1024);
+            assertTrue(client.lastResponse.toString().getBytes(StandardCharsets.UTF_8).length < 8192);
+            byte[] expectedChunk = "100000000 ".repeat(1000).getBytes(StandardCharsets.UTF_8);
+            try (InputStream output = session.openFile(result.stdoutFileId())) {
+                for (int chunk = 0; chunk < 2000; chunk++) {
+                    assertArrayEquals(expectedChunk, output.readNBytes(expectedChunk.length));
+                }
+                assertEquals(-1, output.read());
+            }
+            assertTrue(OutputComparator.matches(
+                    new ByteArrayInputStream("100000000 ".repeat(2000000).getBytes(StandardCharsets.UTF_8)),
+                    session.openFile(result.stdoutFileId())));
+
+            SpjProgram spj = new SpjProgram();
+            spj.setLanguage("C++");
+            spj.setCode("""
+                    #include "testlib.h"
+                    int main(int argc, char* argv[]) {
+                        registerTestlibCmd(argc, argv);
+                        int n = inf.readInt(1, 2000000);
+                        long long expected = ans.readLong();
+                        for (int i = 0; i < n; i++) {
+                            if (ouf.readLong() != expected) {
+                                quitf(_wa, "unexpected value");
+                            }
+                        }
+                        if (!ouf.seekEof()) {
+                            quitf(_wa, "extra output");
+                        }
+                        quitf(_ok, "accepted");
+                    }
+                    """);
+            spj.setDigest(spj.sourceDigest());
+            GoJudgeExecutor.PreparedProgram checker = executor.compileSpj(session, spj);
+            assertEquals(JudgeVerdict.STATUS_ACCEPTED, executor.check(session, checker,
+                    new ByteArrayInputStream("2000000\n".getBytes(StandardCharsets.UTF_8)),
+                    new ByteArrayInputStream("100000000\n".getBytes(StandardCharsets.UTF_8)), result.stdoutFileId()));
+            assertEquals(JudgeVerdict.STATUS_WRONG_ANSWER, executor.check(session, checker,
+                    new ByteArrayInputStream("2000000\n".getBytes(StandardCharsets.UTF_8)),
+                    new ByteArrayInputStream("99999999\n".getBytes(StandardCharsets.UTF_8)), result.stdoutFileId()));
+        }
+    }
+
+    /**
+     * 验证大量标准错误输出不会撑大响应，运行结束立即释放 stderr，任务结束释放 stdout 和产物。
+     * @throws Exception 沙箱请求、编译或输出读取失败
+     */
+    @Test
+    void largeStderrKeepsResponseBoundedAndCachedFilesAreReleased() throws Exception {
+        String source = "import sys\nsys.stdout.write('ok')\n"
+                + "sys.stderr.buffer.write(b'y' * (20 * 1024 * 1024))\n";
+        JudgeTask task = task("Python", source);
+        String stdoutId;
+        String artifactId;
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            GoJudgeExecutor.PreparedProgram program = executor.compile(session);
+            artifactId = program.fileId();
+            GoJudgeExecutor.ExecutionResult result = run(session, program, "");
+            assertEquals(JudgeVerdict.STATUS_ACCEPTED, result.status());
+            assertEquals("ok", result.stdout());
+            assertTrue(client.lastResponse.toString().getBytes(StandardCharsets.UTF_8).length < 8192);
+            String stderrId = client.lastResponse.path("fileIds").path("stderr").asText();
+            stdoutId = result.stdoutFileId();
+            assertFalse(stderrId.isBlank());
+            assertThrows(GoJudgeFileMissingException.class, () -> {
+                try (InputStream ignored = session.openFile(stderrId)) {
+                    // 如果文件仍然存在，断言失败前关闭响应流。
+                }
+            });
+        }
+        for (String fileId : List.of(stdoutId, artifactId)) {
+            assertThrows(GoJudgeFileMissingException.class, () -> {
+                try (InputStream ignored = client.openFile(fileId, task.getDeadlineEpochMs())) {
+                    // 如果文件仍然存在，断言失败前关闭响应流。
+                }
+            });
         }
     }
 
@@ -178,6 +280,10 @@ class GoJudgeSandboxIntegrationTest {
         }
     }
 
+    /**
+     * 验证容量按原始字节计算，非 UTF-8 输出仍可完整下载且预览使用替换字符。
+     * @throws Exception 沙箱请求、编译或输出读取失败
+     */
     @Test
     void invalidUtf8WithinRawOutputBudgetDoesNotBecomeRuntimeError() throws Exception {
         String source = "import sys\nsys.stdout.buffer.write(b'\\xff' * 700000)\n";
@@ -185,8 +291,68 @@ class GoJudgeSandboxIntegrationTest {
             GoJudgeExecutor.PreparedProgram program = executor.compile(session);
             GoJudgeExecutor.ExecutionResult result = run(session, program, "");
             assertEquals(JudgeVerdict.STATUS_ACCEPTED, result.status());
-            assertEquals(700000, result.stdout().length());
+            assertTrue(result.stdout().length() > 0 && result.stdout().length() < 1024);
             assertTrue(result.stdout().chars().allMatch(character -> character == '\uFFFD'));
+            byte[] expected = new byte[700000];
+            Arrays.fill(expected, (byte) 0xFF);
+            try (InputStream output = session.openFile(result.stdoutFileId())) {
+                assertArrayEquals(expected, output.readAllBytes());
+            }
+        }
+    }
+
+    /**
+     * 两个 Worker 任务共用单槽沙箱，排队不计入程序墙钟也不被文件传输预算截断
+     * @throws Exception 真实沙箱执行或任务回收失败
+     */
+    @Test
+    @EnabledIfEnvironmentVariable(named = "YMCLOUD_GO_JUDGE_TEST_PARALLELISM", matches = "1")
+    void queuedExecutionsCompleteBeyondTransferTimeoutAndReleaseTaskSlots() throws Exception {
+        properties.setConnectTimeout(Duration.ofMillis(200));
+        properties.setRequestTimeout(Duration.ofMillis(500));
+        client.close();
+        client = new RecordingGoJudgeClient(properties);
+        WorkerProperties worker = new WorkerProperties();
+        worker.setConcurrency(2);
+        executor = createGoJudgeExecutor(client, properties, worker);
+        String source = "import time\ntime.sleep(1.5)\nprint('ok', end='')\n";
+        try (GoJudgeTaskSession first = executor.openTask(task("Python", source));
+             GoJudgeTaskSession second = executor.openTask(task("Python", source))) {
+            var threads = Executors.newFixedThreadPool(2);
+            CountDownLatch start = new CountDownLatch(1);
+            try {
+                GoJudgeExecutor.PreparedProgram firstProgram = executor.compile(first);
+                GoJudgeExecutor.PreparedProgram secondProgram = executor.compile(second);
+                long started = System.nanoTime();
+                var firstResult = threads.submit(() -> {
+                    start.await();
+                    return run(first, firstProgram, "");
+                });
+                var secondResult = threads.submit(() -> {
+                    start.await();
+                    return run(second, secondProgram, "");
+                });
+                start.countDown();
+                for (var pending : List.of(firstResult, secondResult)) {
+                    GoJudgeExecutor.ExecutionResult result = pending.get(15, TimeUnit.SECONDS);
+                    assertEquals(JudgeVerdict.STATUS_ACCEPTED, result.status());
+                    assertEquals("ok", result.stdout());
+                    assertTrue(result.timeMillis() < 3000);
+                }
+                assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) >= 2800,
+                        "单槽沙箱应串行执行两个任务，至少一个任务实际等待了执行槽");
+            } finally {
+                start.countDown();
+                threads.shutdownNow();
+                assertTrue(threads.awaitTermination(5, TimeUnit.SECONDS));
+            }
+        }
+        JudgeTask next = task("Python", "print('recovered', end='')");
+        next.setDeadlineEpochMs(System.currentTimeMillis() + 5000);
+        try (GoJudgeTaskSession first = executor.openTask(next);
+             GoJudgeTaskSession second = executor.openTask(next)) {
+            GoJudgeExecutor.PreparedProgram program = executor.compile(second);
+            assertEquals("recovered", run(second, program, "").stdout());
         }
     }
 
@@ -252,12 +418,23 @@ class GoJudgeSandboxIntegrationTest {
         };
     }
 
+    /**
+     * 构造 stdout 与 stderr 各 20 MiB、合计超过默认输出预算的程序。
+     * @param language 受支持的选手语言
+     * @return 用固定大小分块写入两个输出通道的选手源码
+     */
     private String outputOverflow(String language) {
         return switch (language) {
-            case "Java" -> javaBody("System.out.print(\"x\".repeat(700000)); System.err.print(\"y\".repeat(700000));");
-            case "C", "C++" -> "#include <stdio.h>\nint main() { for(int i=0;i<700000;i++) putchar('x'); "
-                    + "for(int i=0;i<700000;i++) fputc('y',stderr); }";
-            default -> "import sys\nsys.stdout.write('x' * 700000)\nsys.stderr.write('y' * 700000)\n";
+            case "Java" -> javaBody("byte[] chunk = new byte[65536]; java.util.Arrays.fill(chunk, (byte) 'x'); "
+                    + "for (int i = 0; i < 320; i++) System.out.write(chunk); "
+                    + "for (int i = 0; i < 320; i++) System.err.write(chunk);");
+            case "C", "C++" -> "#include <stdio.h>\n#include <string.h>\n"
+                    + "int main() { char chunk[65536]; memset(chunk, 'x', sizeof(chunk)); "
+                    + "for(int i=0;i<320;i++) fwrite(chunk,1,sizeof(chunk),stdout); "
+                    + "for(int i=0;i<320;i++) fwrite(chunk,1,sizeof(chunk),stderr); }";
+            default -> "import sys\nchunk = b'x' * 65536\n"
+                    + "for _ in range(320): sys.stdout.buffer.write(chunk)\n"
+                    + "for _ in range(320): sys.stderr.buffer.write(chunk)\n";
         };
     }
 
@@ -283,7 +460,7 @@ class GoJudgeSandboxIntegrationTest {
      * @param client 隔离或真实沙箱客户端
      * @param properties 本测试使用的容量、截止或发布配置
      * @param worker 本测试使用的 Worker 资源配置
-     * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
+     * @return 已注入依赖并初始化共享任务额度的执行器
      */
     private static GoJudgeExecutor createGoJudgeExecutor(
             GoJudgeClient client,
@@ -293,6 +470,7 @@ class GoJudgeSandboxIntegrationTest {
         ReflectionTestUtils.setField(component, "client", client);
         ReflectionTestUtils.setField(component, "properties", properties);
         ReflectionTestUtils.setField(component, "worker", worker);
+        component.initialize();
         return component;
     }
 
@@ -312,5 +490,37 @@ class GoJudgeSandboxIntegrationTest {
         ReflectionTestUtils.setField(component, "properties", properties);
         ReflectionTestUtils.setField(component, "workerProperties", workerProperties);
         return component;
+    }
+
+    /**
+     * @Author: Yemiao
+     * @CreateTime: 2026-11-07
+     * @Description: 保留真实执行响应以检查传输体积及输出文件回收，不替代网络调用。
+     */
+    private static class RecordingGoJudgeClient extends GoJudgeClient {
+
+        private JsonNode lastResponse;
+
+        /**
+         * 使用集成测试的沙箱连接及容量配置。
+         * @param properties 真实沙箱配置
+         */
+        private RecordingGoJudgeClient(GoJudgeProperties properties) {
+            super(properties, new WorkerAmqpConfig().workerObjectMapper());
+        }
+
+        /**
+         * 记录真实沙箱返回的最后一个执行结果供容量和文件生命周期断言使用。
+         * @param command 固定命令及资源限制
+         * @param deadlineEpochMillis 任务截止时间
+         * @return 已通过客户端校验的真实响应
+         * @throws GoJudgeException 请求失败或响应不符合协议
+         */
+        @Override
+        public List<JsonNode> execute(Map<String, Object> command, long deadlineEpochMillis) throws GoJudgeException {
+            List<JsonNode> responses = super.execute(command, deadlineEpochMillis);
+            lastResponse = responses.get(responses.size() - 1);
+            return responses;
+        }
     }
 }

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.judge.config.WorkerAmqpConfig;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.judge.listeners.WorkerTaskValidator;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -20,6 +22,35 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WorkerMessageParsingTest {
 
     private final ObjectMapper mapper = new WorkerAmqpConfig().workerObjectMapper();
+
+    /**
+     * SPJ 快照限定 testlib C++，篡改源码、过期协议及自测携带隐藏校验器均拒绝。
+     */
+    @Test
+    void spjSnapshotRequiresExactSupportedContract() {
+        WorkerTaskValidator validator = new WorkerTaskValidator();
+        JudgeTask task = WorkerFixtures.task(0, 0);
+        SpjProgram spj = new SpjProgram();
+        spj.setLanguage("C++");
+        spj.setCode("#include \"testlib.h\"");
+        spj.setDigest(spj.sourceDigest());
+        task.setSpj(spj);
+        validator.validate(task);
+        spj.setCode("changed");
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(task));
+        spj.setDigest(spj.sourceDigest());
+        validator.validate(task);
+        spj.setLanguage("C");
+        spj.setDigest(spj.sourceDigest());
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(task));
+        spj.setLanguage("C++");
+        spj.setDigest(spj.sourceDigest());
+        task.setStrategy(1);
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(task));
+        task.setStrategy(0);
+        task.setSchemaVersion(2);
+        assertThrows(IllegalArgumentException.class, () -> validator.validate(task));
+    }
 
     /**
      * 正常任务保持往返一致，尾随 JSON 和重复身份字段不能穿过解析边界。
