@@ -1,10 +1,12 @@
 import request from "./request";
 import type { AxiosResponse } from 'axios';
+import type { MenuRoute } from '@/type/menu';
 import type { AnnouncementPageQuery, AnnouncementPageResult } from '@/type/announcement';
 import type { CloneContestRequest, ContestProblemPageQuery } from '@/type/contest';
 import type { TagDTO, TagClassificationDTO, TagClassification, TagsWithClassification, TagResult } from '@/type/tag';
 import type {
   LoginDTO,
+  UserProfile,
   RegisterDTO,
   UserDTO,
   SystemSettingDTO,
@@ -123,9 +125,9 @@ export function getCaptcha() {
 /**
  * 登录
  * @param data 登录信息
- * @returns token
+ * @returns 包含登录令牌的完整响应
  */
-export function login(data: LoginDTO) {
+export function login(data: LoginDTO): Promise<AxiosResponse<{ code: number; msg: string; data: string }>> {
   return request({
     url: "/login",
     method: "POST",
@@ -167,9 +169,9 @@ export function forgetPasswordResetPassword(data: any) {
 }
 /**
  * 获取当前用户基本信息
- * @returns 当前用户基本信息
+ * @returns 包含当前用户资料及权限的完整响应
  */
-export function getUserProfile() {
+export function getUserProfile(): Promise<AxiosResponse<{ code: number; msg: string; data: UserProfile }>> {
   return request({
     url: "/user/profile",
     method: "GET",
@@ -471,9 +473,9 @@ export function getAdminSubmissionChart() {
 }
 /**
  * 获取菜单列表
- * @returns 菜单列表
+ * @returns 包含当前用户菜单的完整响应
  */
-export function getMenus(){
+export function getMenus(): Promise<AxiosResponse<{ code: number; msg: string; data: MenuRoute[] }>> {
   return request({
     url: "/admin/menu",
     method: "GET",
@@ -713,17 +715,19 @@ export function uploadTestCaseFiles(
     timeout: 5 * 60 * 1000,
     onUploadProgress,
     skipErrorMessage: true,
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    }
   })
 }
 /**
  * 下载测试用例文件
  * @param problemId 题目ID
  * @param fileName 文件名
+ * @param skipErrorMessage 是否由调用方展示错误
  */
-export function downloadTestCaseFile(problemId: number, fileName: string) {
+export function downloadTestCaseFile(
+  problemId: number,
+  fileName: string,
+  skipErrorMessage = false
+): Promise<AxiosResponse<Blob>> {
   let params = {
     fileName
   }
@@ -732,6 +736,7 @@ export function downloadTestCaseFile(problemId: number, fileName: string) {
     method: "GET",
     params,
     timeout: 5 * 60 * 1000,
+    skipErrorMessage,
     responseType: 'blob'
   })
 }

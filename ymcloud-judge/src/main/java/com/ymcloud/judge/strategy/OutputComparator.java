@@ -50,8 +50,6 @@ public final class OutputComparator {
                 } else if (!whitespaceEqual || expectedChar != actualChar) {
                     equal = false;
                     break;
-                } else {
-                    whitespaceEqual = true;
                 }
                 expectedChar = left.read();
                 actualChar = right.read();

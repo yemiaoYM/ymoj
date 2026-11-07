@@ -1,7 +1,7 @@
 <template>
   <div>
     <el-card class="box-card" style="margin-top: 20px;">
-      <el-collapse v-model="activeName" accordion v-if="!loading">
+      <el-collapse v-model="activeName" accordion v-if="userStore.user">
         <el-collapse-item name="Account">
           <template #title>
             <el-icon class="icon"><Tools /></el-icon>账户设置
@@ -22,25 +22,12 @@
   
 </template>
 <script lang="ts" setup>
-import { ref,onMounted } from 'vue';
+import { ref } from 'vue';
 import Account from './child/account.vue';
 import UserInfo from './child/userInfo.vue';
 import { useUserStore } from '@/stores/user';
 
 const userStore=useUserStore();
-const loading=ref<boolean>(true);
-
-onMounted(async ()=>{
-  loading.value=true;
-  try{
-    await userStore.getUserInfo();
-  }catch(e){
-    console.log(e);
-  }finally{
-    loading.value=false;
-  }
-})
-
 const activeName = ref<string>('UserInfo');
 </script>
 <style scoped>

@@ -88,9 +88,11 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { User, Lock, Key } from '@element-plus/icons-vue';
 import { ElMessage, ElNotification, type FormInstance, type FormRules } from 'element-plus';
 import { useUserStore } from '@/stores/user';
+import { resolveLoginRedirect } from '@/router/loginRedirect';
 import { getCaptcha } from '@/api/api';
 import type { LoginDTO } from '@/type/types';
 import LegalAgreement from '@/components/common/LegalAgreement.vue';
@@ -106,6 +108,8 @@ const emit = defineEmits<{
 
 //数据
 const userStore = useUserStore();
+const router = useRouter();
+const route = useRoute();
 const formRef = ref<FormInstance>();
 const loading = ref(false);
 const agreementRequired = ref(false);
@@ -161,12 +165,14 @@ const handleLogin = async () => {
 
     const { username, password, code, uuid } = form.value;
     await userStore.doLogin(username, password, code, uuid);
-
-    ElNotification({
-      title: '登录成功',
-      message: '欢迎来到喵语云OJ',
-      type: 'success',
-    });
+    if (userStore.isLogin) {
+      ElNotification({
+        title: '登录成功',
+        message: '欢迎来到喵语云OJ',
+        type: 'success',
+      });
+      await router.push(resolveLoginRedirect(router, route));
+    }
   } catch {
     refreshCaptcha();
   } finally {

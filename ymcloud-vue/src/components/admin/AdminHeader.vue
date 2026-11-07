@@ -17,7 +17,7 @@
       </el-breadcrumb>
     </div>
     <ThemeSelect />
-    <el-dropdown trigger="click" placement="bottom-end">
+    <el-dropdown v-if="user" trigger="click" placement="bottom-end">
       <el-button class="user-menu" text aria-label="账户菜单">
         <Avatar :size="32" :src="user.avatar" :text="user.username" />
         <span class="username">{{ user.username }}</span>
@@ -26,7 +26,7 @@
       <template #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item @click="onClientHome">返回客户端</el-dropdown-item>
-          <el-dropdown-item @click="onLogout">退出登录</el-dropdown-item>
+          <el-dropdown-item :disabled="loggingOut" @click="onLogout">退出登录</el-dropdown-item>
         </el-dropdown-menu>
       </template>
     </el-dropdown>
@@ -41,6 +41,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useUserStore } from '@/stores/user';
 import { useAppStore } from '@/stores/app';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 
 defineProps<{ mobile: boolean; menuOpen: boolean }>();
 const emit = defineEmits<{ 'toggle-menu': [] }>();
@@ -48,12 +49,19 @@ const Avatar = defineAsyncComponent(() => import('@/components/common/Avatar.vue
 const appStore = useAppStore();
 const userStore = useUserStore();
 const { user } = storeToRefs(userStore);
+const { pending: loggingOut, beforeChange: logout } = useAsyncChange();
 const route = useRoute();
 const router = useRouter();
 const breadcrumbs = computed(() => route.matched.filter(item => item.meta.title));
 
-function onLogout() {
-  userStore.doLogout();
+async function onLogout() {
+  await logout(async () => {
+    try {
+      await userStore.doLogout();
+    } finally {
+      await router.push('/admin/login');
+    }
+  });
 }
 
 function onClientHome() {

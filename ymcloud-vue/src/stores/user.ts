@@ -1,185 +1,151 @@
 import { defineStore } from 'pinia';
-import { login, getUserProfile,logout,register } from '@/api/api';
+import { computed, ref } from 'vue';
+import { getUserProfile, login, logout, register } from '@/api/api';
 import type { UserProfile } from '@/type/types';
-import { useRouter,useRoute } from 'vue-router';
 import Storage from '@/utils/storage';
-import { ref,computed } from 'vue';
-import { isNull } from '@/utils/utils';
 
 /**
- * 用户信息
+ * 用户身份、会话及授权状态
  */
-export const useUserStore = defineStore('userInfo', () => { 
-    /**
-     * setup
-     * ref() 就是 state 属性
-     * computed() 就是 getters
-     * function() 就是 actions
-     */
-    const router=useRouter();
-    const route=useRoute();
+export const useUserStore = defineStore('userInfo', () => {
+  // Token 存在而资料为空时尚未完成身份加载，不能据此授予权限
+  const token = ref(Storage.get<string>('Authorization') || '');
+  const user = ref<UserProfile | null>(null);
+  const sessionExpired = ref(false);
+  const isLogin = computed(() => !!token.value && user.value !== null);
+  const isSuperAdmin = computed(() => isLogin.value && user.value?.id === 1);
+  let profileRequest: Promise<void> | undefined;
 
-    const user=ref<UserProfile>({} as UserProfile);
-    const token=ref<string>(Storage.get<string>('Authorization')||"");
+  /**
+   * 判断单项权限，只有ID为1的超级管理员拥有全部权限
+   */
+  const hasPermission = (permission: string): boolean => {
+    if (!permission.trim() || !token.value || !user.value) {
+      return false;
+    }
+    return isSuperAdmin.value || (permission !== '*:*:*' && user.value.permissions.includes(permission));
+  };
 
-    /**
-     * 只要token存在，就认为用户已登录
-     */
-    const isLogin=computed<boolean>(()=>{
-        return !isNull(token.value);
+  /**
+   * 判断是否拥有任意一项权限
+   */
+  const hasAnyPermission = (permissions: string[]): boolean => {
+    return permissions.some(hasPermission);
+  };
+
+  /**
+   * 判断是否拥有全部指定权限，空要求不授予访问
+   */
+  const hasEveryPermission = (permissions: string[]): boolean => {
+    return permissions.length > 0 && permissions.every(hasPermission);
+  };
+
+  /**
+   * 判断实际角色成员关系，角色名称不代表超级管理员身份
+   */
+  const hasRole = (role: string): boolean => {
+    return !!token.value && !!role && !!user.value && user.value.roles.includes(role);
+  };
+
+  /**
+   * 判断是否拥有任意一个角色
+   */
+  const hasAnyRole = (roles: string[]): boolean => {
+    return roles.some(hasRole);
+  };
+
+  /**
+   * 判断是否拥有全部指定角色，空要求不授予访问
+   */
+  const hasEveryRole = (roles: string[]): boolean => {
+    return roles.length > 0 && roles.every(hasRole);
+  };
+
+  /**
+   * 清除身份及令牌，使尚未完成的资料请求失效
+   * @param expired 是否由认证失效触发，供页面决定返回登录页
+   */
+  const clearSession = (expired = false) => {
+    profileRequest = undefined;
+    user.value = null;
+    token.value = '';
+    sessionExpired.value = expired;
+    Storage.remove('Authorization');
+  };
+
+  /**
+   * 获取当前用户资料，同一会话中的并发调用共享请求
+   * @param force 是否重新获取已加载的资料
+   * @returns 资料请求完成通知
+   */
+  const getUserInfo = (force = false): Promise<void> => {
+    if (profileRequest) {
+      return profileRequest;
+    }
+    if (!token.value || (user.value && !force)) {
+      return Promise.resolve();
+    }
+    const request = getUserProfile().then(response => {
+      if (profileRequest === request) {
+        user.value = response.data.data;
+      }
+    }).finally(() => {
+      if (profileRequest === request) {
+        profileRequest = undefined;
+      }
     });
+    profileRequest = request;
+    return request;
+  };
 
-    /**
-     * 判断是否可以刷新当前用户信息
-     */
-    const refreshUser=computed<boolean>(()=>{
-        return !isNull(token.value) && isNull(user.value);
-    })
+  /**
+   * 登录并加载新会话的身份资料
+   */
+  const doLogin = async (username: string, password: string, code: string, uuid: string) => {
+    const response = await login({ username, password, code, uuid });
+    clearSession();
+    token.value = response.data.data;
+    Storage.set('Authorization', token.value);
+    await getUserInfo();
+  };
 
-    /**
-     * 超级管理员固定为ID为1的用户
-     */
-    const isSuperAdmin = computed(() => user.value.id === 1);
+  /**
+   * 注册用户
+   */
+  const doRegister = (username: string, password: string, rePassword: string, email: string, code: string, uuid: string) => {
+    return register({ username, password, rePassword, email, code, uuid });
+  };
 
-    /**
-     * 判断单项权限，仅超级管理员可以使用全权限标识
-     */
-    const hasPermission = (permission: string): boolean => {
-        if (!permission || isNull(user.value)) {
-            return false;
-        }
-        if (isSuperAdmin.value && user.value.permissions.includes('*:*:*')) {
-            return true;
-        }
-        return permission !== '*:*:*' && user.value.permissions.includes(permission);
-    };
-
-    /**
-     * 判断用户是否拥有任意一项权限
-     */
-    const hasAnyPermission = (permissions: string[]): boolean => {
-        return permissions.some(hasPermission);
-    };
-
-    /**
-     * 判断用户是否拥有全部指定权限，空权限要求不授予访问
-     */
-    const hasEveryPermission = (permissions: string[]): boolean => {
-        return permissions.length > 0 && permissions.every(hasPermission);
-    };
-
-    /**
-     * 判断单项角色，角色名称不作为超级管理员身份的替代
-     */
-    const hasRole = (role: string): boolean => {
-        return !!role && !isNull(user.value) && user.value.roles.includes(role);
-    };
-
-    /**
-     * 判断用户是否拥有任意一个角色
-     */
-    const hasAnyRole = (roles: string[]): boolean => {
-        return roles.some(hasRole);
-    };
-
-    /**
-     * 判断用户是否拥有全部指定角色，空角色要求不授予访问
-     */
-    const hasEveryRole = (roles: string[]): boolean => {
-        return roles.length > 0 && roles.every(hasRole);
-    };
-
-    /**
-     * 异步登录
-     */
-    const doLogin=async (username:string,password:string,code:string,uuid:string)=>{
-        try {
-            const res = await login({ username, password, code, uuid });
-            token.value = res.data.data;
-            Storage.set('Authorization', res.data.data);
-            await getUserInfo();
-            //判断是否处于admin目录
-            const isAdmin = route.path.split('/')[1] === 'admin';
-            const homePath = isAdmin ? '/admin' : '/';
-            //获取重定向路径
-            const redirectPath = route.query && route.query.redirect as string || homePath;
-
-            const query = route.query
-            const otherQueryParams = Object.keys(query).reduce((acc: any, cur: string) => {
-                if (cur !== "redirect") {
-                    acc[cur] = query[cur]
-                }
-                return acc
-            }, {})
-            router.push({ path: redirectPath, query: otherQueryParams });
-        } catch (error) {
-            throw error;
-        }
+  /**
+   * 退出当前会话，请求失败时仍清除本地身份
+   */
+  const doLogout = async () => {
+    const currentToken = token.value;
+    try {
+      await logout();
+    } finally {
+      if (token.value === currentToken) {
+        clearSession();
+      }
     }
+  };
 
-    /**
-     * 异步注册
-     */
-    const doRegister=async (username:string,password:string,rePassword:string,email:string,code:string,uuid:string)=>{
-        try {
-            await register({username,password,rePassword,email,code,uuid});
-        }catch (error) {
-            throw error;
-        }
-    }
-
-    /**
-     * 异步获取当前用户信息
-     */
-    const getUserInfo = async (force = false) => {
-        if (force || refreshUser.value) {
-            try {
-                const res = await getUserProfile();
-                user.value = res.data.data;
-            } catch (error) {
-                throw error;
-            }
-        }
-    }
-
-    /**
-     * 异步登出
-     */
-    const doLogout=async ()=>{
-        try {
-            await logout();
-        } catch (error) {
-            throw error;
-        }finally{
-            //即使登出失败，也要清除用户信息
-            user.value={} as UserProfile;
-            token.value="";
-            Storage.remove('Authorization');
-            //判断是否处于admin目录
-            const isAdmin=route.path.split('/')[1]==='admin';
-            if(isAdmin){
-                router.push('/admin/login');
-            }else{
-                router.push('/login');
-            }
-        }
-    }
-
-    return {
-        user,
-        token,
-        isLogin,
-        refreshUser,
-        isSuperAdmin,
-        doLogin,
-        getUserInfo,
-        doLogout,
-        doRegister,
-        hasPermission,
-        hasAnyPermission,
-        hasEveryPermission,
-        hasRole,
-        hasAnyRole,
-        hasEveryRole
-    }
+  return {
+    user,
+    token,
+    isLogin,
+    isSuperAdmin,
+    sessionExpired,
+    clearSession,
+    doLogin,
+    getUserInfo,
+    doLogout,
+    doRegister,
+    hasPermission,
+    hasAnyPermission,
+    hasEveryPermission,
+    hasRole,
+    hasAnyRole,
+    hasEveryRole,
+  };
 });

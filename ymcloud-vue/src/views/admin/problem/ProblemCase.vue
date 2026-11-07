@@ -360,22 +360,14 @@ const formatFileSize = (size: number) => {
 
 const loadPreviewFile = async (preview: PreviewFileState) => {
   try {
-    const response = await downloadTestCaseFile(problemId.value, preview.fileName);
-    const blob = response.data instanceof Blob
-      ? response.data
-      : new Blob([response.data], { type: 'text/plain;charset=UTF-8' });
-    const contentType = String(response.headers['content-type'] || blob.type);
-    if (contentType.includes('application/json')) {
-      const result = JSON.parse(await blob.text());
-      throw new Error(result.msg || '文件内容读取失败');
-    }
+    const response = await downloadTestCaseFile(problemId.value, preview.fileName, true);
+    const blob = response.data;
     preview.blob = blob;
     preview.size = blob.size;
     preview.truncated = blob.size > PREVIEW_SIZE_LIMIT;
     preview.content = await blob.slice(0, PREVIEW_SIZE_LIMIT).text();
   } catch (error) {
-    console.error(error);
-    preview.error = error instanceof Error ? error.message : '文件内容读取失败';
+    preview.error = getFileErrorMessage(error, '文件内容读取失败');
   }
 };
 
@@ -494,12 +486,14 @@ const shouldRetryUpload = (error: any) => {
   return !error.response || error.response.status >= 500;
 };
 
-const getUploadErrorMessage = (error: any) => {
+const getFileErrorMessage = (error: any, fallbackMessage: string, timeoutMessage = '请求超时') => {
   if (error?.data?.msg) return error.data.msg;
   if (error?.response?.data?.msg) return error.response.data.msg;
-  if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) return '上传超时';
-  if (error?.message === 'Network Error') return '网络连接中断';
-  return error?.message || '上传失败';
+  if (error?.code === 'ETIMEDOUT') return timeoutMessage;
+  if (error?.code === 'ECONNABORTED') return '请求已中断';
+  if (error?.code === 'ERR_NETWORK') return '网络连接中断';
+  if (error?.code === 'ERR_BAD_RESPONSE' && error?.response?.status === 200) return '服务响应格式错误';
+  return error?.message || fallbackMessage;
 };
 
 const uploadBatch = async (
@@ -559,7 +553,7 @@ const processUploadQueue = async () => {
     ElMessage.success(`成功上传 ${pairCount} 组测试用例`);
   } catch (error) {
     const completed = uploadedPairs > 0 ? `，已成功上传 ${uploadedPairs}/${pairCount} 组` : '';
-    ElMessage.error(`${getUploadErrorMessage(error)}${completed}`);
+    ElMessage.error(`${getFileErrorMessage(error, '上传失败', '上传超时')}${completed}`);
   } finally {
     if (uploadedPairs > 0) loadTestCases();
     uploading.value = false;

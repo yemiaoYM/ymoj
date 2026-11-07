@@ -34,10 +34,21 @@ import { Refresh } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
 import { useAppStore } from "@/stores/app";
 import { useThemeStore } from "@/stores/theme";
+import { useUserStore } from "@/stores/user";
 
 const router = useRouter();
 const appStore = useAppStore();
+const userStore = useUserStore();
 useThemeStore();
+
+// 会话失效后由页面导航回登录页，Store 只清理身份
+watch(() => userStore.sessionExpired, async expired => {
+  const route = router.currentRoute.value;
+  if (expired && route.meta.requireLogin) {
+    const path = route.path.startsWith('/admin/') ? '/admin/login' : '/login';
+    await router.replace({ path, query: { redirect: route.fullPath } });
+  }
+});
 
 //消息配置
 const messageConfig = reactive({

@@ -105,13 +105,13 @@
                   重置密码
                 </el-button>
                 <el-button
+                  v-if="userStore.isSuperAdmin"
                   v-permission="['user:user:role']"
                   class="operation-button"
                   type="primary"
                   size="small"
                   text
                   :icon="Setting"
-                  :disabled="scope.row.id === userStore.user.id"
                   @click="handleAssignRoles(scope.row)"
                 >
                   分配角色
@@ -244,7 +244,16 @@
       </el-form>
       <template #footer>
         <el-button :disabled="roleSaving" @click="roleDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="roleSaving" :disabled="!roleLoaded" @click="handleSaveRoles">保存</el-button>
+        <el-button
+          v-if="userStore.isSuperAdmin"
+          v-permission="['user:user:role']"
+          type="primary"
+          :loading="roleSaving"
+          :disabled="!roleLoaded"
+          @click="handleSaveRoles"
+        >
+          保存
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -257,6 +266,7 @@ import { ref, reactive, onMounted, nextTick, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, Setting } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { getUserRoleOptions, getUserRoleIds, updateUserRoles } from '@/api/rbac';
 import type { RoleVO } from '@/type/rbac';
 import type { User, UserDTO } from '@/type/types';
@@ -276,6 +286,7 @@ const Avatar = defineAsyncComponent(() => import('@/components/common/Avatar.vue
 
 //data
 const userStore = useUserStore();
+const { beforeChange: resetPassword } = useAsyncChange();
 const roleDialogVisible = ref(false);
 const roleLoading = ref(false);
 const roleLoaded = ref(false);
@@ -351,8 +362,7 @@ onMounted(() => {
 //methods
 //已分配的停用角色允许移除，移除后不可重新选择
 const isRoleOptionDisabled = (role: RoleVO) => {
-  return (role.status === 0 && !selectedRoleIds.value.includes(role.id))
-    || (role.code === 'ADMIN' && userStore.user.id !== 1);
+  return role.status === 0 && !selectedRoleIds.value.includes(role.id);
 };
 
 //分配用户角色
@@ -463,30 +473,28 @@ const handleUpdate = (row: User) => {
   });
 };
 //重置密码
-const handleResetPwd = (row: User) => {
-  ElMessageBox.prompt(
-    `请输入 "${row.username}" 的新密码`,
-    "提示",
-    {
-      confirmButtonText: "确定",
-      cancelButtonText: "取消",
-      closeOnClickModal: false,
-      inputPattern: /^.{5,20}$/,
-      inputErrorMessage: "用户密码长度必须介于 5 和 20 之间",
-      inputValidator: (value) => {
-        if (/<|>|"|'|\||\\/.test(value)) {
-          return "不能包含非法字符：< > \" ' \\\ |"
+const handleResetPwd = async (row: User) => {
+  await resetPassword(async () => {
+    const { value } = await ElMessageBox.prompt(
+      `请输入 "${row.username}" 的新密码`,
+      "提示",
+      {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        closeOnClickModal: false,
+        inputPattern: /^.{5,20}$/,
+        inputErrorMessage: "用户密码长度必须介于 5 和 20 之间",
+        inputValidator: (value) => {
+          if (/<|>|"|'|\||\\/.test(value)) {
+            return "不能包含非法字符：< > \" ' \\\ |"
+          }
+          return true;
         }
-        return true;
       }
-    }
-  ).then(({ value }) => {
-    resetUserPassword(row.id, value).then(res => {
-      ElMessage.success(res.data.msg);
-    }).catch(e => {
-      console.log(e);
-    });
-  }).catch(() => { });
+    );
+    const res = await resetUserPassword(row.id, value);
+    ElMessage.success(res.data.msg);
+  });
 }
 //删除用户
 const handleDelete = (row: User) => {

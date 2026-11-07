@@ -20,7 +20,9 @@ export function getAdminFiles(params: FilePageQuery): Promise<AxiosResponse<Stor
   });
 }
 
-/** 下载授权文件，业务错误仍需由调用方识别 Blob 中的 JSON。 */
+/**
+ * 下载授权文件，业务错误由请求层统一处理
+ */
 export function downloadAdminFile(id: number): Promise<AxiosResponse<Blob>> {
   return request({
     url: `/admin/file/${id}/download`,

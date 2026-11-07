@@ -1,114 +1,102 @@
 import { defineStore } from 'pinia';
-import { ref, markRaw } from 'vue';
+import { ref, markRaw, watch, type Component } from 'vue';
+import type { RouteRecordRaw } from 'vue-router';
 import { getMenus } from '@/api/api';
+import type { MenuRoute } from '@/type/menu';
 import Layout from '@/components/admin/AdminLayout.vue';
 import router from '@/router';
 import { dynamicRoutes } from '@/router/modules/admin';
 import { useUserStore } from '@/stores/user';
 
-//导入views目录admin下的所有vue文件
-const modules = import.meta.glob('../views/admin/**/*.vue');
+const modules = import.meta.glob<{ default: Component }>('../views/admin/**/*.vue');
+type AuthorizedRoute = RouteRecordRaw & { permissions?: string[]; roles?: string[] };
 
 export const usePermissionStore = defineStore('permission', () => {
   const userStore = useUserStore();
-  const sidebarRouters = ref<any[]>([]);
-  const isRoutesLoaded = ref<boolean>(false);
-  const routeSignature = ref('');
+  const sidebarRouters = ref<RouteRecordRaw[]>([]);
+  const isRoutesLoaded = ref(false);
   let routeRemovers: (() => void)[] = [];
+  let routesRequest: Promise<void> | undefined;
 
-  //移除上次加载的动态路由
+  /**
+   * 移除当前身份对应的菜单及动态路由
+   */
   const resetRoutes = () => {
+    routesRequest = undefined;
     routeRemovers.forEach(remove => remove());
     routeRemovers = [];
     sidebarRouters.value = [];
-    routeSignature.value = '';
     isRoutesLoaded.value = false;
   };
 
-  const setRoutesLoaded = (value: boolean) => {
-    isRoutesLoaded.value = value;
-  };
+  watch(() => userStore.user, resetRoutes, { flush: 'sync' });
 
-  //生成侧边栏路由
-  const generateSidebarRouters = async () => {
-    await getMenus().then(res => {
-      const menus = res.data.data;
-      const signature = JSON.stringify([menus, userStore.user.permissions, userStore.user.roles]);
-      if (isRoutesLoaded.value && routeSignature.value === signature) {
+  /**
+   * 同一身份共享菜单加载，退出后不再注册迟到响应中的路由
+   */
+  const generateSidebarRouters = (): Promise<void> => {
+    if (routesRequest) {
+      return routesRequest;
+    }
+    if (!userStore.isLogin || isRoutesLoaded.value) {
+      return Promise.resolve();
+    }
+    const request = getMenus().then(response => {
+      if (routesRequest !== request) {
         return;
       }
-      resetRoutes();
-      sidebarRouters.value = filterAsyncRouter(menus);
+      sidebarRouters.value = filterAsyncRouter(response.data.data);
       sidebarRouters.value.forEach(route => routeRemovers.push(router.addRoute(route)));
-      //动态路由动态添加
-      const asyncRoutes = filterDynamicRoutes(dynamicRoutes);
-      asyncRoutes.forEach(route => {
-        routeRemovers.push(router.addRoute(route));
-      });
-      routeSignature.value = signature;
-      setRoutesLoaded(true);
+      filterDynamicRoutes(dynamicRoutes).forEach(route => routeRemovers.push(router.addRoute(route)));
+      isRoutesLoaded.value = true;
+    }).finally(() => {
+      if (routesRequest === request) {
+        routesRequest = undefined;
+      }
     });
-    return sidebarRouters.value;
+    routesRequest = request;
+    return request;
   };
 
-  //动态路由遍历，验证是否具备权限
-  const filterDynamicRoutes = (routes: any[]) => {
-    const res: any[] = [];
-    routes.forEach(route => {
+  /**
+   * 动态页面统一使用用户 Store 的权限与角色规则
+   */
+  const filterDynamicRoutes = (routes: AuthorizedRoute[]) => {
+    return routes.filter(route => {
       if (route.permissions) {
-        if (userStore.hasEveryPermission(route.permissions)) {
-          res.push(route);
-        }
-      } else if (route.roles) {
-        if (userStore.hasAnyRole(route.roles)) {
-          res.push(route);
-        }
+        return userStore.hasEveryPermission(route.permissions);
       }
-    });
-    return res;
-  };
-
-  //转换后台返回的菜单路由
-  const filterAsyncRouter = (asyncRouterMap: any[]) => {
-    return asyncRouterMap.filter(route => {
-      if (route.component) {
-        //组件处理
-        if (route.component === 'Layout') {
-          route.component = markRaw(Layout);
-        } else {
-          route.component = loadView(route.component);
-          if (!route.component) {
-            return false;
-          }
-        }
-      }
-      if (route.children != null && route.children && route.children.length) {
-        route.children = filterAsyncRouter(route.children);
-      } else {
-        delete route['children'];
-      }
-      return true;
+      return !!route.roles && userStore.hasAnyRole(route.roles);
     });
   };
 
-  //按组件路径加载页面
-  const loadView = (view: string) => {
-    let res: any;
-    for (const path in modules) {
-      const dir = path.split('views/')[1].split('.vue')[0];
-      if (dir === view) {
-        res = () => modules[path]();
+  /**
+   * 将菜单中的组件路径解析为本地页面
+   */
+  const filterAsyncRouter = (menus: MenuRoute[]): RouteRecordRaw[] => {
+    const routes: RouteRecordRaw[] = [];
+    for (const menu of menus) {
+      const component = menu.component === 'Layout'
+        ? markRaw(Layout)
+        : modules[`../views/${menu.component}.vue`];
+      if (menu.component && !component) {
+        continue;
       }
+      routes.push({
+        path: menu.path,
+        name: menu.name,
+        component,
+        meta: menu.meta,
+        children: menu.children ? filterAsyncRouter(menu.children) : [],
+      });
     }
-    return res;
+    return routes;
   };
 
   return {
     sidebarRouters,
     generateSidebarRouters,
     isRoutesLoaded,
-    setRoutesLoaded,
     resetRoutes,
-    routeSignature,
   };
 });

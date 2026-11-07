@@ -153,7 +153,7 @@
             @click="copyCode"
             >复制代码</el-button
           >
-          <template v-if="userStore.user.username == submissionData.username">
+          <template v-if="userStore.user && userStore.user.username === submissionData.username">
             <el-button
               :loading="shareLoading"
               size="large"

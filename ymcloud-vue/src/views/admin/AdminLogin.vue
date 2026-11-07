@@ -81,19 +81,23 @@
 <script setup lang="ts">
 import ThemeSelect from '@/components/common/ThemeSelect.vue';
 import { ref, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { User, Lock, Key } from '@element-plus/icons-vue';
 import type { LoginDTO } from '@/type/types';
 import { getCaptcha } from '@/api/api';
-import { ElMessage } from 'element-plus';
+import type { FormInstance, FormRules } from 'element-plus';
 import { useUserStore } from '@/stores/user';
+import { resolveLoginRedirect } from '@/router/loginRedirect';
 import LegalAgreement from '@/components/common/LegalAgreement.vue';
 import BrandLogo from '@/components/common/BrandLogo.vue';
 
 const userStore = useUserStore();
-const formRef = ref();
+const router = useRouter();
+const route = useRoute();
+const formRef = ref<FormInstance>();
 const loading = ref<boolean>(false);
-const form = ref<LoginDTO>({} as LoginDTO);
-const rules = {
+const form = ref<LoginDTO>({ username: '', password: '', code: '', uuid: '' });
+const rules: FormRules<LoginDTO> = {
   username: [
     { required: true, message: '请输入账号', trigger: 'blur' },
     { min: 2, max: 20, message: '账号长度应在2到20个字符之间', trigger: 'blur' },
@@ -122,17 +126,12 @@ const handleCaptchaEnter = (event: KeyboardEvent) => {
 
 //登录
 const handleLogin = async () => {
-  if (loading.value) {
+  if (!formRef.value || loading.value) {
     return;
   }
   loading.value = true;
   try {
-    const valid = await formRef.value.validate();
-    //检查表单是否填写正确
-    if (!valid) {
-      ElMessage.warning('请填写正确信息');
-      return;
-    }
+    await formRef.value.validate();
     //登录
     await userStore.doLogin(
       form.value.username,
@@ -140,10 +139,12 @@ const handleLogin = async () => {
       form.value.code,
       form.value.uuid
     );
-  } catch (e) {
+    if (userStore.isLogin) {
+      await router.push(resolveLoginRedirect(router, route));
+    }
+  } catch {
     //登录失败
     refreshCaptcha();
-    console.log(e);
   } finally {
     loading.value = false;
   }
@@ -153,9 +154,8 @@ const loadCaptcha = () => {
   getCaptcha().then(res => {
     form.value.uuid = res.data.data.uuid;
     captchaImage.value = res.data.data.image;
-  }).catch(error => {
-    //获取验证码失败
-    console.error(error);
+  }).catch(() => {
+    captchaImage.value = '';
   });
 };
 //刷新验证码

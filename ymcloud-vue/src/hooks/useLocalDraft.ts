@@ -1,5 +1,4 @@
 import { onBeforeUnmount, onMounted, watch } from 'vue';
-import { useUserStore } from '@/stores/user';
 import Storage from '@/utils/storage';
 
 export function isDraftRecord(value: unknown): value is Record<string, unknown> {
@@ -8,7 +7,7 @@ export function isDraftRecord(value: unknown): value is Record<string, unknown> 
 
 /**
  * 新建表单共用的本地草稿
- * 按账号隔离，最后修改后保留七天
+ * 按表单类型保存，最后修改后保留七天
  */
 export function useLocalDraft<T>(
   kind: 'problem' | 'contest',
@@ -16,8 +15,7 @@ export function useLocalDraft<T>(
   active: () => boolean,
   validate: (value: unknown) => value is T,
 ) {
-  const userStore = useUserStore();
-  const key = `ymcloud:draft:${kind}:${userStore.user.id}`;
+  const key = `ymcloud:draft:${kind}`;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: { data: T; expiresAt: number } | undefined;
 

@@ -10,6 +10,7 @@
                     :model="formPassword"
                     label-position="top"
                     :rules="rulePassword"
+                    :disabled="formPasswordLoading"
                 >
                     <el-form-item label="当前密码" prop="password">
                         <el-input 
@@ -60,6 +61,7 @@
                     :model="formEmail"
                     label-position="top"
                     :rules="ruleEmail"
+                    :disabled="formEmailLoading"
                 >
                     <el-form-item label="当前密码" prop="password">
                         <el-input v-model="formEmail.password" type="password" />
@@ -88,17 +90,18 @@
 
 <script setup lang="ts">
 //import
-import { ElMessage } from 'element-plus';
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { ref } from 'vue';
 import { useUserStore } from '@/stores/user';
 import { updateUserPassword,updateUserEmail } from '@/api/api';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 
 //data
 const userStore=useUserStore();
-const formPasswordRef = ref();
-const formEmailRef = ref();
-const formPasswordLoading=ref<boolean>(false);
-const formEmailLoading=ref<boolean>(false);
+const formPasswordRef = ref<FormInstance>();
+const formEmailRef = ref<FormInstance>();
+const { pending: formPasswordLoading, beforeChange: changePassword } = useAsyncChange();
+const { pending: formEmailLoading, beforeChange: changeEmail } = useAsyncChange();
 const formPassword = ref({
     password: '',
     newPassword: '',
@@ -113,44 +116,30 @@ const formEmail = ref({
 //methods
 
 //更新用户密码
-const handChangePassword = () => {
-    formPasswordLoading.value = true;
-    formPasswordRef.value.validate((valid: boolean) => {
-        if (valid) {
-            updateUserPassword(formPassword.value).then(res=>{
-                ElMessage.success(res.data.msg);
-            }).catch(err=>{
-                console.log(err);
-            }).finally(()=>{
-                formPasswordLoading.value=false;   
-            })
-        } else {
-            formPasswordLoading.value = false;
-            ElMessage.warning('请检查输入');
-            return false;
-        }
+const handChangePassword = async () => {
+    const form = formPasswordRef.value;
+    if (!form) return;
+    await changePassword(async () => {
+        await form.validate();
+        const res = await updateUserPassword(formPassword.value);
+        ElMessage.success(res.data.msg);
     });
 };
 //更新用户邮箱
-const handChangeEmail = () => {
-    formEmailLoading.value = true;
-    formEmailRef.value.validate((valid: boolean) => {
-        if (valid) {
-            updateUserEmail({
-                password: formEmail.value.password,
-                newEmail: formEmail.value.newEmail
-            }).then(res=>{
-                ElMessage.success(res.data.msg);
-            }).catch(err=>{
-                console.log(err);
-            }).finally(()=>{
-                formEmailLoading.value=false;
-            })
-        } else {
-            formEmailLoading.value = false;
-            ElMessage.warning('请检查输入');
-            return false;
+const handChangeEmail = async () => {
+    const form = formEmailRef.value;
+    if (!form) return;
+    await changeEmail(async () => {
+        await form.validate();
+        const res = await updateUserEmail({
+            password: formEmail.value.password,
+            newEmail: formEmail.value.newEmail
+        });
+        await userStore.getUserInfo(true);
+        if (userStore.user) {
+            formEmail.value.oldEmail = userStore.user.email;
         }
+        ElMessage.success(res.data.msg);
     });
 }
 //rule
@@ -159,12 +148,12 @@ const passwordCheck = [
   { min: 5, max: 20, trigger: 'blur', message: '密码长度在5-20位之间' }
 ]
 // 修改密码规则
-const rulePassword = {
+const rulePassword: FormRules<typeof formPassword.value> = {
   password: passwordCheck,
   newPassword: [
     ...passwordCheck,
     {
-      validator: (_rule: any, value: string, callback: any) => {
+      validator: (_rule, value: string, callback) => {
         if (value === formPassword.value.password) {
           return callback(new Error('新密码不能与旧密码相同'))
         }
@@ -173,10 +162,10 @@ const rulePassword = {
       trigger: 'blur'
     }
   ],
-  againPassword: [
+  rePassword: [
     { required: true, trigger: 'blur', message: '确认密码不能为空' },
     {
-      validator: (_rule: any, value: string, callback: any) => {
+      validator: (_rule, value: string, callback) => {
         if (value !== formPassword.value.newPassword) {
           return callback(new Error('两次输入的密码不一致'))
         }
@@ -187,13 +176,13 @@ const rulePassword = {
   ]
 }
 // 修改邮箱规则
-const ruleEmail = {
+const ruleEmail: FormRules<typeof formEmail.value> = {
   password: passwordCheck,
   newEmail: [
     { required: true, trigger: 'blur', message: '新邮箱不能为空' },
     { type: 'email', trigger: 'blur', message: '请输入正确的邮箱地址' },
     {
-      validator: (_rule: any, value: string, callback: any) => {
+      validator: (_rule, value: string, callback) => {
         if (value === formEmail.value.oldEmail) {
           return callback(new Error('新邮箱不能与旧邮箱相同'))
         }

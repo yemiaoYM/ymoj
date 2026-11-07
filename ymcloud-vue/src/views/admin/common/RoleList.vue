@@ -29,6 +29,7 @@
         </el-form>
         <x-flex :size="10" style="padding-bottom: 15px">
           <el-button
+            v-if="userStore.isSuperAdmin"
             v-permission="['system:role:add']"
             plain
             type="primary"
@@ -59,14 +60,13 @@
           </el-table-column>
           <el-table-column label="操作" min-width="230" align="center">
             <template #default="{ row }">
-              <x-flex :size="0" justify="center">
+              <x-flex v-if="userStore.isSuperAdmin" :size="0" justify="center">
                 <el-button
                   v-permission="['system:role:query', 'system:role:edit']"
                   type="success"
                   size="small"
                   text
                   :icon="Edit"
-                  :disabled="!canManage(row)"
                   @click="handleUpdate(row)"
                 >
                   修改
@@ -77,7 +77,6 @@
                   size="small"
                   text
                   :icon="Setting"
-                  :disabled="!canManage(row)"
                   @click="handleAuth(row)"
                 >
                   分配权限
@@ -88,7 +87,7 @@
                   size="small"
                   text
                   :icon="Delete"
-                  :disabled="row.builtIn || !canManage(row)"
+                  :disabled="row.builtIn"
                   @click="handleDelete(row)"
                 >
                   删除
@@ -149,7 +148,15 @@
       </el-form>
       <template #footer>
         <el-button :disabled="saving" @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSubmit">确定</el-button>
+        <el-button
+          v-if="userStore.isSuperAdmin"
+          v-permission="editingRole ? ['system:role:edit'] : ['system:role:add']"
+          type="primary"
+          :loading="saving"
+          @click="handleSubmit"
+        >
+          确定
+        </el-button>
       </template>
     </el-dialog>
     <el-dialog
@@ -209,6 +216,8 @@
       <template #footer>
         <el-button :disabled="authSaving" @click="authDialogVisible = false">取消</el-button>
         <el-button
+          v-if="userStore.isSuperAdmin"
+          v-permission="['system:role:auth']"
           type="primary"
           :loading="authSaving"
           :disabled="!authLoaded"
@@ -279,12 +288,6 @@ const authTree = ref<AuthTreeNode[]>([]);
 const treeRef = ref<InstanceType<typeof ElTree>>();
 
 //methods
-//判断是否允许维护角色
-const canManage = (role: RoleVO) => {
-  return userStore.isSuperAdmin
-    || (role.code !== 'ADMIN' && !userStore.hasRole(role.code));
-};
-
 //查询角色列表
 const loadRoles = async () => {
   loading.value = true;
@@ -403,11 +406,7 @@ const handleAuth = async (row: RoleVO) => {
   authDialogVisible.value = true;
   try {
     const [options, checked] = await Promise.all([getRoleAuthOptions(), getRoleAuthIds(row.id)]);
-    authTree.value = buildAuthTree(options.data.data, auth => {
-      return userStore.isSuperAdmin
-        || auth.type === 'M'
-        || userStore.hasPermission(auth.code || '');
-    });
+    authTree.value = buildAuthTree(options.data.data);
     await nextTick();
     treeRef.value?.setCheckedKeys(checked.data.data);
     authLoaded.value = true;
@@ -418,12 +417,10 @@ const handleAuth = async (row: RoleVO) => {
   }
 };
 
-//同步勾选或取消下级权限，保留不可授予的权限状态
+//同步勾选或取消下级权限
 const setAuthChildrenChecked = (nodes: AuthTreeNode[], checked: boolean) => {
   nodes.forEach(node => {
-    if (!node.disabled) {
-      treeRef.value?.setChecked(node.id, checked, false);
-    }
+    treeRef.value?.setChecked(node.id, checked, false);
     setAuthChildrenChecked(node.children, checked);
   });
 };

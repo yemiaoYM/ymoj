@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-container">
+  <div v-if="userStore.user" class="dashboard-container">
     <x-flex vertical :size="24">
       <!-- 欢迎横幅 -->
       <el-card class="welcome-card">

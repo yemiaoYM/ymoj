@@ -7,6 +7,8 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import { permission } from '@/directives/permission';
+import { setupRequestInterceptors } from '@/api/request';
+import { useUserStore } from '@/stores/user';
 import { config } from 'md-editor-v3';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -19,7 +21,9 @@ config({
 });
 
 const app = createApp(App);
-app.use(createPinia());
+const pinia = createPinia();
+app.use(pinia);
+setupRequestInterceptors(useUserStore(pinia));
 app.use(router);
 app.use(ElementPlus);
 app.directive('permission', permission);

@@ -1,92 +1,115 @@
-import axios from "axios";
-import { ElMessage } from 'element-plus'
-import Storage from "../utils/storage";
-import router from "@/router";
+import axios, { AxiosError, type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
+import { ElMessage } from 'element-plus';
 
-//添加请求拦截器
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    skipErrorMessage?: boolean;
+  }
+}
+
 const service = axios.create({
   baseURL: '/api',
-  withCredentials: true,
-  timeout: 5000
+  // 普通接口使用适中的等待时间，编译和文件接口按业务单独覆盖
+  timeout: 30000,
+  transitional: {
+    clarifyTimeoutError: true,
+  },
 });
 
-//添加请求拦截器
-service.interceptors.request.use(
-  config => {
-    let token = Storage.get<string>("Authorization");
-    if (token && config.headers) {
-      config.headers['Authorization'] = token;
+/**
+ * 解析下载接口返回的 JSON 错误，附件内容保持原样
+ */
+async function decodeResponse(response: AxiosResponse) {
+  if (response.data instanceof Blob
+    && !response.headers['content-disposition']
+    && String(response.headers['content-type']).includes('application/json')) {
+    try {
+      response.data = JSON.parse(await response.data.text());
+    } catch (error) {
+      throw AxiosError.from(error, AxiosError.ERR_BAD_RESPONSE, response.config, response.request, response);
+    }
+  }
+  return response;
+}
+
+/**
+ * 在安装路由前绑定当前用户会话，请求层不反向依赖 Store
+ * @param session 用户 Store 提供的令牌与身份清理能力
+ */
+export function setupRequestInterceptors(session: { token: string; clearSession: (expired?: boolean) => void }) {
+  /**
+   * 旧请求的认证失败不能清除新登录的身份
+   */
+  function invalidateSession(config?: InternalAxiosRequestConfig) {
+    if (session.token && config?.headers.Authorization === session.token) {
+      session.clearSession(true);
+    }
+  }
+
+  service.interceptors.request.use(config => {
+    if (session.token) {
+      config.headers.Authorization = session.token;
     }
     return config;
-  },
-  error => {
-    console.log(error)
-    return Promise.reject(error)
-  }
-)
-//添加响应拦截器
-service.interceptors.response.use(
-  response=>{
-    //如果是文件操作的返回，由后续进行处理
-    if (response.config.responseType === 'blob') {
-      return response;
-    }
-    const res = response.data;
-    //操作成功
-    if(res.code === 200){
-      return Promise.resolve(response);
-    }
-    //请求成功，但业务异常
-    const showErrorMessage = !(response.config as any).skipErrorMessage;
-    if(res.code === 500 && showErrorMessage){
-      ElMessage.error(res.msg);
-    }
-    //依赖服务临时异常，保留登录令牌供恢复后重试
-    if(res.code === 503 && showErrorMessage){
-      ElMessage.error(res.msg);
-    }
-    //未登录
-    if(res.code === 401){
-      if (showErrorMessage) ElMessage.error(res.msg);
-      //清除缓存
-      Storage.remove("Authorization");
-    }
-    //参数列表错误（缺少，格式不匹配）
-    if(res.code === 400 && showErrorMessage){
-      ElMessage.warning(res.msg);
-    }
-    //访问受限，权限不足，授权过期
-    if(res.code === 403 && showErrorMessage){
-      ElMessage.error(res.msg);
-    }
-    //未找到
-    if(res.code === 404 && showErrorMessage){
-      ElMessage.error(res.msg);
-    }
-    //并发操作冲突，提示刷新后重试
-    if(res.code === 409 && showErrorMessage){
-      ElMessage.warning(res.msg);
-    }
-    return Promise.reject(response);
-  },
-  error => {
-    let { message } = error;
-    if (message === "Network Error") {
-      message = "后端接口连接异常";
-    } else if (message.includes("timeout")) {
-      message = "系统接口请求超时";
-    } else if (message.includes("Request failed with status code")) {
-      message = "系统接口" + message.substr(message.length - 3) + "异常";
-    }
-    if (!(error.config as any)?.skipErrorMessage) {
-      ElMessage.error(message);
+  }, undefined, { synchronous: true });
+
+  // 先解析响应，解析失败同样进入下方统一错误处理
+  service.interceptors.response.use(decodeResponse, async (error: unknown) => {
+    if (axios.isAxiosError(error) && error.response) {
+      await decodeResponse(error.response);
     }
     return Promise.reject(error);
-  }
-);
+  });
 
-function request(options: any) {
-  options.method = options.method || "get";
+  service.interceptors.response.use(
+    response => {
+      if (response.data instanceof Blob || response.status === 204) {
+        return response;
+      }
+      const result = response.data;
+      if (result.code === 200) {
+        return response;
+      }
+      if (result.code === 401) {
+        invalidateSession(response.config);
+      }
+      if (!response.config.skipErrorMessage) {
+        if (result.code === 400 || result.code === 409) {
+          ElMessage.warning(result.msg);
+        } else {
+          ElMessage.error(result.msg);
+        }
+      }
+      return Promise.reject(response);
+    },
+    (error: unknown) => {
+      if (axios.isCancel(error) || !axios.isAxiosError(error)) {
+        return Promise.reject(error);
+      }
+      if (error.response?.status === 401) {
+        invalidateSession(error.config);
+      }
+      let message = error.message;
+      if (error.code === AxiosError.ERR_NETWORK) {
+        message = '后端接口连接异常';
+      } else if (error.code === AxiosError.ETIMEDOUT) {
+        message = '系统接口请求超时';
+      } else if (error.code === AxiosError.ECONNABORTED) {
+        message = '请求已中断';
+      } else if (error.code === AxiosError.ERR_BAD_RESPONSE && error.response?.status === 200) {
+        message = '服务响应格式错误';
+      } else if (error.response) {
+        message = error.response.data?.msg || `系统接口 ${error.response.status} 异常`;
+      }
+      if (!error.config?.skipErrorMessage) {
+        ElMessage.error(message);
+      }
+      return Promise.reject(error);
+    },
+  );
+}
+
+function request(options: AxiosRequestConfig) {
   return service(options);
 }
 

@@ -4,7 +4,7 @@
         <div class="user-avatar">
             <Avatar
                 :text="formProfile.username"
-                :src="formProfile.avatar as string" 
+                :src="formProfile.avatar"
                 :size="150" 
             />
         </div>
@@ -13,6 +13,7 @@
             drag
             :action="uploadUrl" 
             :headers="headers"
+            :disabled="loadingAvatar"
             method="post"
             :on-success="handleSuccess" 
             :on-error="handleError"    
@@ -74,7 +75,7 @@
 
 <script setup lang="ts">
 //import
-import { onMounted, ref, defineAsyncComponent } from 'vue';
+import { computed, onMounted, ref, defineAsyncComponent } from 'vue';
 import { useUserStore } from '@/stores/user';
 import { updateUserProfile } from '@/api/api';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
@@ -93,26 +94,35 @@ interface FormProfile {
     signature: string,
     avatar: string,
 }
-//初始化表单数据 避免undefined
-const formProfile=ref<FormProfile>({} as FormProfile);
+const formProfile=ref<FormProfile>({
+    username: '',
+    nickname: '',
+    school: '',
+    blog: '',
+    sex: '保密',
+    signature: '',
+    avatar: '',
+});
 const { pending: loadingSaveBtn, beforeChange: saveProfile } = useAsyncChange();
+const { pending: loadingAvatar, beforeChange: refreshAvatar } = useAsyncChange();
 const signatureEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
 //后端接口地址
 const uploadUrl = '/api/user/upload-avatar';  
-const headers={
+const headers=computed(() => ({
     Authorization : userStore.token
-};
+}));
 
 
 //methods
 onMounted(()=>{
     const userInfo=userStore.user;
-    //浅拷贝
-    Object.assign(formProfile.value, userInfo);
+    if (userInfo) {
+        Object.assign(formProfile.value, userInfo);
+    }
 })
 
 
-const checkFileType=(file:any)=> {
+const checkFileType=(file: File)=> {
   if (!/\.(gif|jpg|jpeg|png|bmp|webp|GIF|JPG|PNG|WEBP)$/.test(file.name)) {
     ElNotification({
       title: "文件类型不支持",
@@ -123,7 +133,7 @@ const checkFileType=(file:any)=> {
   }
   return true;
 }
-const checkFileSize=(file:any)=>{
+const checkFileSize=(file: File)=>{
   // max size is 2MB
   if (file.size > 2 * 1024 * 1024) {
     ElNotification({
@@ -135,24 +145,25 @@ const checkFileSize=(file:any)=>{
   }
   return true;
 }
-const handleSelectFile=(file:any)=>{
-  let isOk = checkFileType(file) && checkFileSize(file);
-  if (!isOk) {
-    return false;
-  }
-  return true;
+const handleSelectFile=(file: File)=>{
+  return checkFileType(file) && checkFileSize(file);
 }
 //上传成功回调
-const handleSuccess = (response: any, file: any) => {
-    if(response.code===200){
-        ElMessage.success(response.msg);
-    }else{
+const handleSuccess = async (response: { code: number; msg: string }) => {
+    if (response.code !== 200) {
         ElMessage.error(response.msg);
+        return;
     }
+    await refreshAvatar(async () => {
+        await userStore.getUserInfo(true);
+        if (userStore.user) {
+            formProfile.value.avatar = userStore.user.avatar;
+            ElMessage.success(response.msg);
+        }
+    });
 };
 //上传失败回调
-const handleError = (err: any, file: any) => {
-  console.log('上传失败', err);
+const handleError = () => {
   ElMessage.error("上传失败");
 };
 //更新用户信息
@@ -168,6 +179,7 @@ const handUpdateUserInfo=async ()=>{
             sex: formProfile.value.sex,
             signature: formProfile.value.signature
         });
+        await userStore.getUserInfo(true);
         ElMessage.success(res.data.msg);
     });
 }

@@ -199,6 +199,7 @@ import { ElMessage, ElMessageBox, type UploadUserFile } from 'element-plus';
 import { Search, Refresh, Upload, Download, Delete, CopyDocument } from '@element-plus/icons-vue';
 import useClipboard from 'vue-clipboard3';
 import { useUserStore } from '@/stores/user';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { deleteAdminFile, downloadAdminFile, getAdminFiles, uploadAdminFile } from '@/api/storage';
 import type { FilePageQuery, StorageFileVO } from '@/type/storage';
 
@@ -211,6 +212,7 @@ const total = ref(0);
 const loading = ref(false);
 const loaded = ref(false);
 const downloadingId = ref<number | null>(null);
+const { beforeChange: downloadFile } = useAsyncChange();
 const deletingId = ref<number | null>(null);
 const uploadVisible = ref(false);
 const uploading = ref(false);
@@ -281,8 +283,8 @@ const formatFileSize = (size: number | null) => {
   return `${(size / 1024 / 1024).toFixed(1)} MiB`;
 };
 
-const handleDownload = async (row: StorageFileVO) => {
-  if (!row.canDownload || downloadingId.value !== null) {
+const handleDownload = (row: StorageFileVO) => downloadFile(async () => {
+  if (!row.canDownload) {
     return;
   }
   downloadingId.value = row.id;
@@ -290,17 +292,7 @@ const handleDownload = async (row: StorageFileVO) => {
     const response = await downloadAdminFile(row.id);
     const blob = response.data;
     if (!response.headers['content-disposition']) {
-      const contentType = String(response.headers['content-type'] || blob.type);
-      let message = '文件下载失败';
-      if (contentType.includes('application/json')) {
-        try {
-          const result = JSON.parse(await blob.text());
-          message = result.msg || message;
-        } catch {
-          // 非文件响应不作为附件保存。
-        }
-      }
-      ElMessage.error(message);
+      ElMessage.error('文件下载失败');
       return;
     }
     const url = window.URL.createObjectURL(blob);
@@ -311,12 +303,10 @@ const handleDownload = async (row: StorageFileVO) => {
     link.click();
     link.remove();
     window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-  } catch {
-    // 请求拦截器统一提示网络及接口错误。
   } finally {
     downloadingId.value = null;
   }
-};
+});
 
 const handleCopyUrl = async (row: StorageFileVO) => {
   if (row.isPublic !== 1 || !row.url || row.bizType === 5) {

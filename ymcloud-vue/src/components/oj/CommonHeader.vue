@@ -96,7 +96,7 @@
       <x-flex class="r-content" align="center" style="margin-right: 25px;">
         <ThemeSelect v-if="!isMobile" />
         <el-button v-if="!isLogin" type="primary" plain round size="large" @click="Login">登录 | 注册</el-button>
-        <x-flex v-else>
+        <x-flex v-else-if="user">
           <Avatar
             :src="user.avatar" 
             :text="user.username" 
@@ -114,7 +114,7 @@
                 <el-dropdown-item @click="toUserHome">我的首页</el-dropdown-item>
                 <el-dropdown-item @click="toSetting">我的设置</el-dropdown-item>
                 <el-dropdown-item v-if="userStore.hasEveryPermission(['admin:access'])" @click="toAdmin">后端管理</el-dropdown-item>
-                <el-dropdown-item divided @click="LoginOut">退出登录</el-dropdown-item>
+                <el-dropdown-item divided :disabled="loggingOut" @click="LoginOut">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -129,6 +129,7 @@ import ThemeSelect from '@/components/common/ThemeSelect.vue';
 import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { storeToRefs } from 'pinia';
 import { ElMessage } from 'element-plus';
 import { Menu } from '@element-plus/icons-vue';
@@ -140,6 +141,7 @@ const userStore=useUserStore();
 const router=useRouter();
 const route=useRoute();
 const { user, isLogin }=storeToRefs(userStore);
+const { pending: loggingOut, beforeChange: logout } = useAsyncChange();
 
 const isMobile = ref<boolean>(window.innerWidth <= 1024);
 const showMobileMenu = ref<boolean>(false);
@@ -175,16 +177,20 @@ const Login = () => {
 };
 //退出登录
 const LoginOut = async () => {
-  try{
-    await userStore.doLogout();
-    ElMessage.success("退出登录成功");
-  }catch(error){
-    console.error("退出登录错误：",error);
-  }
+  await logout(async () => {
+    try {
+      await userStore.doLogout();
+      ElMessage.success("退出登录成功");
+    } finally {
+      await router.push('/login');
+    }
+  });
 };
 //跳转到用户主页
 const toUserHome=()=>{
-  router.push({ name: 'UserHome', query: { username: user.value.username } });
+  if (user.value) {
+    router.push({ name: 'UserHome', query: { username: user.value.username } });
+  }
 }
 //跳转到设置
 const toSetting=()=>{
