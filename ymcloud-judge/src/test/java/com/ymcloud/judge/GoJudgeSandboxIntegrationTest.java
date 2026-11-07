@@ -34,10 +34,13 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -356,6 +359,57 @@ class GoJudgeSandboxIntegrationTest {
         }
     }
 
+    /**
+     * 中断真实 HTTP 执行后释放单槽沙箱及 Worker 任务额度，不等待选手程序自然结束
+     * @throws Exception 编译、中断或后续任务执行失败
+     */
+    @Test
+    @EnabledIfEnvironmentVariable(named = "YMCLOUD_GO_JUDGE_TEST_PARALLELISM", matches = "1")
+    void interruptedExecutionReleasesSandboxAndWorkerCapacity() throws Exception {
+        WorkerProperties worker = new WorkerProperties();
+        worker.setConcurrency(1);
+        executor = createGoJudgeExecutor(client, properties, worker);
+        JudgeTask task = task("Java", javaBody("Thread.sleep(30000);"));
+        task.setTimeLimit(60000L);
+        AtomicReference<IOException> failure = new AtomicReference<>();
+        AtomicBoolean interrupted = new AtomicBoolean();
+        try (GoJudgeTaskSession session = executor.openTask(task)) {
+            GoJudgeExecutor.PreparedProgram program = executor.compile(session);
+            client.executionStarted = new CountDownLatch(1);
+            Thread execution = new Thread(() -> {
+                try {
+                    run(session, program, "");
+                } catch (IOException e) {
+                    failure.set(e);
+                } finally {
+                    interrupted.set(Thread.currentThread().isInterrupted());
+                }
+            }, "sandbox-interruption-test");
+            execution.start();
+            try {
+                assertTrue(client.executionStarted.await(5, TimeUnit.SECONDS));
+                Thread.sleep(1000);
+                assertTrue(execution.isAlive());
+                execution.interrupt();
+                execution.join(5000);
+                assertFalse(execution.isAlive());
+                assertNotNull(failure.get());
+                assertTrue(interrupted.get());
+            } finally {
+                execution.interrupt();
+                execution.join(5000);
+            }
+        }
+        JudgeTask next = task("Python", "print('recovered', end='')");
+        next.setDeadlineEpochMs(System.currentTimeMillis() + 5000);
+        try (GoJudgeTaskSession session = executor.openTask(next)) {
+            GoJudgeExecutor.PreparedProgram program = executor.compile(session);
+            GoJudgeExecutor.ExecutionResult result = run(session, program, "");
+            assertEquals(JudgeVerdict.STATUS_ACCEPTED, result.status());
+            assertEquals("recovered", result.stdout());
+        }
+    }
+
     private JudgeTask task(String language, String source) {
         JudgeTask task = WorkerFixtures.task(1, 0);
         task.getLanguageConfig().setName(language);
@@ -500,6 +554,7 @@ class GoJudgeSandboxIntegrationTest {
     private static class RecordingGoJudgeClient extends GoJudgeClient {
 
         private JsonNode lastResponse;
+        private CountDownLatch executionStarted;
 
         /**
          * 使用集成测试的沙箱连接及容量配置。
@@ -510,7 +565,7 @@ class GoJudgeSandboxIntegrationTest {
         }
 
         /**
-         * 记录真实沙箱返回的最后一个执行结果供容量和文件生命周期断言使用。
+         * 标记请求开始并记录真实结果，供中断、容量和文件生命周期断言使用。
          * @param command 固定命令及资源限制
          * @param deadlineEpochMillis 任务截止时间
          * @return 已通过客户端校验的真实响应
@@ -518,6 +573,9 @@ class GoJudgeSandboxIntegrationTest {
          */
         @Override
         public List<JsonNode> execute(Map<String, Object> command, long deadlineEpochMillis) throws GoJudgeException {
+            if (executionStarted != null) {
+                executionStarted.countDown();
+            }
             List<JsonNode> responses = super.execute(command, deadlineEpochMillis);
             lastResponse = responses.get(responses.size() - 1);
             return responses;

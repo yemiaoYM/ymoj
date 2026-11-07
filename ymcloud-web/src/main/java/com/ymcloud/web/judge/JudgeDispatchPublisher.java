@@ -151,14 +151,13 @@ public class JudgeDispatchPublisher {
     }
 
     /**
-     * 解析持久任务并核对执行身份，拒绝错配快照。
+     * 解析持久任务并核对执行身份，拒绝错配快照
      * @param dispatch 包含持久 JSON 的任务记录
      * @return 与记录身份一致的任务
      */
     private JudgeTask readTask(JudgeDispatch dispatch) {
         JudgeTask task = codec.task(dispatch.getTaskPayload());
-        if (task.getSchemaVersion() != JudgeProtocol.SCHEMA_VERSION
-                || !Objects.equals(task.getExecutionId(), dispatch.getExecutionId())
+        if (!Objects.equals(task.getExecutionId(), dispatch.getExecutionId())
                 || !Objects.equals(task.getSubmissionId(), dispatch.getSubmissionId())
                 || !Objects.equals(task.getStrategy(), dispatch.getStrategy())
                 || !Objects.equals(task.getProblemId(), dispatch.getProblemId())

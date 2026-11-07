@@ -377,14 +377,13 @@ public class JudgeListener {
     }
 
     /**
-     * 校验恢复结果身份和协议，损坏结果转换为当前执行的系统错误。
+     * 校验恢复结果身份和终态内容，损坏结果转换为当前执行的系统错误
      * @param task 当前任务快照
      * @param result 非 null 的待恢复结果
      * @return 合法原结果或安全系统错误
      */
     private JudgeResult recovered(JudgeTask task, JudgeResult result) {
-        boolean valid = result.getSchemaVersion() == JudgeProtocol.SCHEMA_VERSION
-                && result.isTerminal() && result.getSequence() == 3 && result.getStatus() != null
+        boolean valid = result.isTerminal() && result.getSequence() == 3 && result.getStatus() != null
                 && TERMINAL.contains(result.getStatus())
                 && Objects.equals(task.getExecutionId(), result.getExecutionId())
                 && Objects.equals(task.getSubmissionId(), result.getSubmissionId())

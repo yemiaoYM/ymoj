@@ -35,7 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 使用实际临时文件验证不可变缓存、并发下载、容量引用、安全路径与重启恢复。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 使用实际临时文件验证不可变缓存、并发下载、容量引用、安全路径与重启恢复
  */
 class TestDataCacheTest {
 
@@ -61,6 +63,10 @@ class TestDataCacheTest {
         }
     }
 
+    /**
+     * 同一题目的不同数据版本同时被引用时保持各自原始内容。
+     * @throws Exception 缓存准备或读取失败
+     */
     @Test
     void queuedOldVersionNeverReadsOrReplacesNewVersion() throws Exception {
         MemorySource source = source(7, "old\n", "answer");
@@ -70,7 +76,6 @@ class TestDataCacheTest {
              TestDataCache.Lease newer = cache.acquire(10L, 8L, source.hash(8))) {
             assertArrayEquals(bytes("old\n"), read(old.entries().get(0).openInput()));
             assertArrayEquals(bytes("new\n"), read(newer.entries().get(0).openInput()));
-            assertFalse(old.entries().get(0).inputPath().equals(newer.entries().get(0).inputPath()));
         }
     }
 
@@ -103,6 +108,10 @@ class TestDataCacheTest {
         }
     }
 
+    /**
+     * 大文件下载使用有界缓冲区，热缓存复用已校验文件而不重新下载。
+     * @throws Exception 清单生成、缓存准备或流读取失败
+     */
     @Test
     void largeVersionUsesBoundedStreamingBuffersAndWarmCacheAvoidsDownloads() throws Exception {
         long fileSize = 8L * 1024 * 1024;
@@ -163,12 +172,9 @@ class TestDataCacheTest {
             }
         };
         try (TestDataCache cache = new TestDataCache(source, properties())) {
-            long started = System.nanoTime();
-            try (TestDataCache.Lease lease = cache.acquire(10L, 7L, manifestSource.hash(7))) {
-                assertEquals(fileSize, Files.size(lease.entries().get(0).inputPath()));
+            try (TestDataCache.Lease ignored = cache.acquire(10L, 7L, manifestSource.hash(7))) {
+                assertEquals(fileSize, Files.size(directory.resolve("p10-v7/701.data")));
             }
-            long coldMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
-            started = System.nanoTime();
             try (TestDataCache.Lease lease = cache.acquire(10L, 7L, manifestSource.hash(7));
                  InputStream input = lease.entries().get(0).openInput()) {
                 long total = 0;
@@ -178,12 +184,9 @@ class TestDataCacheTest {
                 }
                 assertEquals(fileSize, total);
             }
-            long warmMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
             assertEquals(2, downloads.get());
             assertEquals(1, manifestSource.manifestReads.get());
             assertEquals(1, cache.statistics().hits());
-            System.out.printf("Worker cache benchmark: dataset=16MiB cold=%dms warmWithInputRead=%dms downloads=%d%n",
-                    coldMillis, warmMillis, downloads.get());
         }
     }
 
@@ -260,6 +263,10 @@ class TestDataCacheTest {
         }
     }
 
+    /**
+     * 合法逻辑文件名不参与磁盘寻址，缓存文件仅按服务端文件 ID 命名。
+     * @throws Exception 清单修改或缓存准备失败
+     */
     @Test
     void legalWebFilenamesWithMultipleDotsUseOnlyFileIdsOnDisk() throws Exception {
         MemorySource source = source(7, "input", "output");
@@ -270,8 +277,8 @@ class TestDataCacheTest {
         try (TestDataCache cache = cache(source);
              TestDataCache.Lease lease = cache.acquire(10L, 7L, source.hash(7))) {
             TestDataCache.CachedCase testCase = lease.entries().get(0);
-            assertEquals("701.data", testCase.inputPath().getFileName().toString());
-            assertEquals("702.data", testCase.outputPath().getFileName().toString());
+            assertTrue(Files.isRegularFile(directory.resolve("p10-v7/701.data")));
+            assertTrue(Files.isRegularFile(directory.resolve("p10-v7/702.data")));
             assertArrayEquals(bytes("input"), read(testCase.openInput()));
         }
     }
@@ -290,13 +297,17 @@ class TestDataCacheTest {
         }
     }
 
+    /**
+     * 无活动租约的缓存文件损坏后重新下载，避免复用错误输入。
+     * @throws Exception 缓存准备、故障注入或读取失败
+     */
     @Test
     void damagedWarmCacheDownloadsAgainAfterLeaseRelease() throws Exception {
         MemorySource source = source(7, "input", "output");
         try (TestDataCache cache = cache(source)) {
             Path input;
             try (TestDataCache.Lease lease = cache.acquire(10L, 7L, source.hash(7))) {
-                input = lease.entries().get(0).inputPath();
+                input = directory.resolve("p10-v7/701.data");
             }
             Files.write(input, bytes("wrong"));
             try (TestDataCache.Lease lease = cache.acquire(10L, 7L, source.hash(7))) {
@@ -323,27 +334,36 @@ class TestDataCacheTest {
         }
     }
 
+    /**
+     * 运行中的缓存损坏不删除在用目录，读取仍执行完整性校验。
+     * @throws Exception 缓存准备或故障注入失败
+     */
     @Test
     void damagedRunningCacheIsNotDeletedAndRuntimeStreamChecksHash() throws Exception {
         MemorySource source = source(7, "input", "output");
         try (TestDataCache cache = cache(source);
              TestDataCache.Lease lease = cache.acquire(10L, 7L, source.hash(7))) {
             TestDataCache.CachedCase testCase = lease.entries().get(0);
-            Files.write(testCase.inputPath(), bytes("wrong"));
+            Path input = directory.resolve("p10-v7/701.data");
+            Files.write(input, bytes("wrong"));
             assertThrows(IOException.class, () -> cache.acquire(10L, 7L, source.hash(7)));
-            assertTrue(Files.exists(testCase.inputPath()));
+            assertTrue(Files.exists(input));
             assertThrows(IOException.class, () -> read(testCase.openInput()));
             assertEquals(1, source.manifestReads.get());
         }
     }
 
+    /**
+     * 提前关闭标准答案流仍核验未读部分，不能绕过完整性检查。
+     * @throws Exception 缓存准备或故障注入失败
+     */
     @Test
     void closingPartialStreamStillVerifiesEntireFile() throws Exception {
         MemorySource source = source(7, "input", "output");
         try (TestDataCache cache = cache(source);
              TestDataCache.Lease lease = cache.acquire(10L, 7L, source.hash(7))) {
             TestDataCache.CachedCase testCase = lease.entries().get(0);
-            Files.write(testCase.outputPath(), bytes("wrong!"));
+            Files.write(directory.resolve("p10-v7/702.data"), bytes("wrong!"));
             InputStream output = testCase.openOutput();
             output.read();
             assertThrows(IOException.class, output::close);
@@ -439,6 +459,10 @@ class TestDataCacheTest {
         }
     }
 
+    /**
+     * 重启恢复缓存时收紧目录及文件权限，避免其他本机用户读取隐藏数据。
+     * @throws Exception 缓存准备或 POSIX 权限操作失败
+     */
     @Test
     void restartTightensPermissionsOfRecoveredVersionAndItsFiles() throws Exception {
         assumeTrue(directory.getFileSystem().supportedFileAttributeViews().contains("posix"),
@@ -447,7 +471,7 @@ class TestDataCacheTest {
         Path version;
         try (TestDataCache cache = cache(source);
              TestDataCache.Lease lease = cache.acquire(10L, 7L, source.hash(7))) {
-            version = lease.entries().get(0).inputPath().getParent();
+            version = directory.resolve("p10-v7");
         }
         Files.setPosixFilePermissions(version, PosixFilePermissions.fromString("rwxr-xr-x"));
         try (var paths = Files.list(version)) {
@@ -468,13 +492,17 @@ class TestDataCacheTest {
         }
     }
 
+    /**
+     * 重启丢弃损坏文件，并继续使用任务固定的清单摘要验证缓存。
+     * @throws Exception 缓存准备或故障注入失败
+     */
     @Test
     void restartDropsDamagedCacheAndValidatesPinnedHashBeforeReuse() throws Exception {
         MemorySource source = source(7, "input", "output");
         Path input;
         try (TestDataCache cache = cache(source);
              TestDataCache.Lease lease = cache.acquire(10L, 7L, source.hash(7))) {
-            input = lease.entries().get(0).inputPath();
+            input = directory.resolve("p10-v7/701.data");
         }
         Files.write(input, bytes("wrong"));
         try (TestDataCache cache = cache(source);
@@ -549,6 +577,10 @@ class TestDataCacheTest {
         assertThrows(IllegalArgumentException.class, () -> new TestDataCache(source, tooManyCases));
     }
 
+    /**
+     * 拒绝缓存根目录和数据文件符号链接，恢复时保留链接外部目标。
+     * @throws Exception 测试文件准备或缓存恢复失败
+     */
     @Test
     void symbolicLinksCannotExposeOrDeleteOutsideFiles() throws Exception {
         MemorySource source = source(7, "input", "output");
@@ -567,7 +599,7 @@ class TestDataCacheTest {
         Path cachedFile;
         try (TestDataCache cache = cache(source);
              TestDataCache.Lease lease = cache.acquire(10L, 7L, source.hash(7))) {
-            cachedFile = lease.entries().get(0).inputPath();
+            cachedFile = directory.resolve("p10-v7/701.data");
         }
         Files.delete(cachedFile);
         Files.createSymbolicLink(cachedFile, outsideFile);

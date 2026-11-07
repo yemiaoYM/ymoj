@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.judge.exception.CompileException;
 import com.ymcloud.judge.gojudge.GoJudgeExecutor;
 import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
+import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.SpjCompileRequest;
 import com.ymcloud.pojo.contract.judge.SpjCompileResult;
@@ -50,6 +51,7 @@ public class SpjCompileListener {
                     || !UUID.fromString(request.requestId()).toString().equals(request.requestId())
                     || request.deadlineEpochMs() <= now
                     || request.deadlineEpochMs() > now + SpjProgram.COMPILE_TIMEOUT_MILLIS
+                    + JudgeProtocol.MAX_CLOCK_SKEW_MILLIS
                     || request.program() == null) {
                 throw new IllegalArgumentException("编译请求身份或截止时间无效");
             }

@@ -12,34 +12,46 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** 从正式初始化脚本中提取存储测试所需的建表语句，种子数据和其他语句绝不执行。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 为独立测试库提取正式建表语句，排除种子数据和其他业务写入
+ */
 final class InitializationSqlTestSupport {
 
     private static final Set<String> TABLES = Set.of("file", "problem", "judge", "test_data_version");
     private static final Pattern CREATE_TABLE = Pattern.compile(
             "(?is)^CREATE\\s+TABLE\\s+`([a-z0-9_]+)`\\s*\\(");
     private static final Pattern REFERENCE = Pattern.compile("(?i)\\bREFERENCES\\s+`([a-z0-9_]+)`");
-    private static final Pattern CONSTRAINT = Pattern.compile("(?i)\\bCONSTRAINT\\s+`([a-z0-9_]+)`");
 
     private InitializationSqlTestSupport() {
     }
 
-    static String storageSchema(String prefix) throws IOException {
+    /**
+     * 从项目初始化 SQL 提取存储测试所需表结构
+     *
+     * @return 可在独立测试库执行的建表语句
+     * @throws IOException 初始化脚本读取失败
+     */
+    static String storageSchema() throws IOException {
         Path directory = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize();
         while (directory != null) {
             Path script = directory.resolve("sql/ymcloud.sql");
             if (Files.isRegularFile(script)) {
-                return storageSchema(Files.readString(script, StandardCharsets.UTF_8), prefix);
+                return storageSchema(Files.readString(script, StandardCharsets.UTF_8));
             }
             directory = directory.getParent();
         }
         throw new IllegalStateException("未找到 sql/ymcloud.sql，禁止使用旧表结构替代初始化脚本");
     }
 
-    static String storageSchema(String source, String prefix) {
-        if (!prefix.isEmpty() && !prefix.matches("ymcloud_storage_it_[0-9a-f]{16}_")) {
-            throw new IllegalArgumentException("测试表前缀未通过安全校验");
-        }
+    /**
+     * 提取完整建表语句，确保外键只引用本次创建的测试表
+     *
+     * @param source 初始化 SQL 内容
+     * @return 保持正式表名和约束的建表语句
+     */
+    static String storageSchema(String source) {
         Map<String, String> definitions = new LinkedHashMap<>();
         for (String statement : statements(source)) {
             Matcher table = CREATE_TABLE.matcher(statement);
@@ -56,15 +68,7 @@ final class InitializationSqlTestSupport {
                     throw new IllegalStateException("测试外键必须引用已创建的隔离表：" + reference.group(1));
                 }
             }
-            String isolated = statement;
-            for (String target : TABLES) {
-                isolated = isolated.replace("`" + target + "`", "`" + prefix + target + "`");
-            }
-            if (!prefix.isEmpty()) {
-                Matcher constraint = CONSTRAINT.matcher(isolated);
-                isolated = constraint.replaceAll(match -> "CONSTRAINT `" + prefix + match.group(1) + "`");
-            }
-            definitions.put(name, isolated);
+            definitions.put(name, statement);
         }
         if (!definitions.keySet().equals(TABLES)) {
             throw new IllegalStateException("初始化脚本必须包含 file、problem、judge、test_data_version 四张测试表");

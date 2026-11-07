@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-12
- * @Description: 仅解析明确的消息契约，忽略 AMQP 的 Java 类型头，也不启用任意类型反序列化。
+ * @Description: 按固定判题契约严格解析消息，不使用 AMQP Java 类型头或任意类型反序列化
  */
 @Component
 public class JudgeMessageCodec {
@@ -27,7 +27,7 @@ public class JudgeMessageCodec {
     private final ObjectMapper objectMapper;
 
     /**
-     * 构造时建立独立的严格映射器，保留构造器注入，避免改变项目全局 JSON 配置。
+     * 构造独立的严格消息映射器，不改变普通 HTTP 的 JSON 配置
      * @param objectMapper 项目 JSON 映射器，不修改其全局解析选项
      */
     public JudgeMessageCodec(ObjectMapper objectMapper) {
@@ -35,6 +35,7 @@ public class JudgeMessageCodec {
         this.objectMapper.setConfig(this.objectMapper.getDeserializationConfig()
                 .without(MapperFeature.ALLOW_COERCION_OF_SCALARS)
                 .without(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+                .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .with(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES));
     }
 

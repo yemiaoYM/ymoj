@@ -3,6 +3,7 @@
 
 Requires YMCLOUD_WORKER_E2E=true and an explicitly selected unused Redis DB in
 YMCLOUD_WORKER_E2E_REDIS_DATABASE. Uses only the existing local dev MySQL service.
+Requires RabbitMQ management administrator access to create an isolated vhost.
 No business schema, real files, existing queue, or existing process is modified.
 Credentials and submitted payloads are never printed or included in the report.
 """
@@ -170,6 +171,8 @@ class Regression:
         self.processes = []
         self.log_files = []
         self.created_schema = False
+        self.created_vhost = False
+        self.rabbit_vhost = "ymcloud-worker-e2e-" + self.identifier
         self.redis_claimed = False
         self.mysql_admin = None
         self.database = None
@@ -247,6 +250,13 @@ class Regression:
                                 "redisDatabase": int(selected), "workerRedisPrefix": self.worker_prefix}
         require(self.redis.dbsize() == 1, "Concurrent activity detected in the selected Redis DB")
         self.rabbit_options = copy.deepcopy(dev["spring"]["rabbitmq"])
+        self.rabbit_management("PUT", "vhosts/" + self.rabbit_vhost, {})
+        self.created_vhost = True
+        username = urllib.parse.quote(configuration_string(self.rabbit_options["username"]), safe="")
+        self.rabbit_management("PUT", "permissions/" + self.rabbit_vhost + "/" + username,
+                               {"configure": ".*", "write": ".*", "read": ".*"})
+        self.rabbit_options["virtual-host"] = self.rabbit_vhost
+        self.report["scope"]["rabbitVirtualHost"] = self.rabbit_vhost
         self.mq = self.pika.BlockingConnection(self.mq_parameters())
         self.channel = self.mq.channel()
         self.channel.confirm_delivery()
@@ -286,6 +296,32 @@ class Regression:
         if isinstance(ssl_setting, dict) and ssl_setting.get("enabled"):
             kwargs["ssl_options"] = self.pika.SSLOptions(ssl.create_default_context(), kwargs["host"])
         return self.pika.ConnectionParameters(**kwargs)
+
+    def rabbit_management(self, method, route, payload=None):
+        """
+        Manage only this fixture's virtual host
+        Missing permissions fail the test
+        """
+        endpoint = urllib.parse.urlsplit(os.environ.get("YMCLOUD_WORKER_E2E_RABBIT_MANAGEMENT_URL",
+                                                        "http://" + self.rabbit_options["host"] + ":15672"))
+        require(endpoint.scheme in ["http", "https"] and endpoint.hostname
+                and not endpoint.username and not endpoint.password and not endpoint.query
+                and not endpoint.fragment and endpoint.path in ["", "/"], "Invalid RabbitMQ management endpoint")
+        connection_type = http.client.HTTPSConnection if endpoint.scheme == "https" else http.client.HTTPConnection
+        connection = connection_type(endpoint.hostname, endpoint.port, timeout=15)
+        credentials = (configuration_string(self.rabbit_options["username"], "") + ":"
+                       + configuration_string(self.rabbit_options["password"], ""))
+        headers = {"Authorization": "Basic " + base64.b64encode(credentials.encode()).decode(),
+                   "Content-Type": "application/json"}
+        try:
+            connection.request(method, "/api/" + route,
+                               body=None if payload is None else json.dumps(payload), headers=headers)
+            response = connection.getresponse()
+            response.read()
+            require(200 <= response.status < 300,
+                    "Isolated RabbitMQ vhost management failed; administrator access is required")
+        finally:
+            connection.close()
 
     def guard_database(self):
         require(SCHEMA_PATTERN.fullmatch(self.schema), "Unsafe test schema name")
@@ -645,24 +681,12 @@ class Regression:
             output.close()
 
     def cleanup_mq(self):
-        if self.mq is None:
-            return
-        if self.mq.is_closed:
-            self.mq = self.pika.BlockingConnection(self.mq_parameters())
-        names = [self.namespace + suffix for suffix in [".task", ".task.retry", ".task.dead", ".result", ".observe"]]
-        require(all(name.startswith("phase3e2e." + self.identifier + ".") for name in names), "Unsafe MQ cleanup scope")
-        for name in names:
-            channel = self.mq.channel()
-            try:
-                channel.queue_delete(queue=name)
-            except self.pika.exceptions.ChannelClosedByBroker as error:
-                require(error.reply_code == 404, "Unexpected test queue cleanup failure")
-        channel = self.mq.channel()
-        try:
-            channel.exchange_delete(exchange=self.namespace + ".topic")
-        except self.pika.exceptions.ChannelClosedByBroker as error:
-            require(error.reply_code == 404, "Unexpected test exchange cleanup failure")
-        self.mq.close()
+        if self.mq and self.mq.is_open:
+            self.mq.close()
+        if self.created_vhost:
+            require(self.rabbit_vhost == "ymcloud-worker-e2e-" + self.identifier
+                    and re.fullmatch(r"[0-9a-f]{32}", self.identifier), "Unsafe RabbitMQ vhost cleanup scope")
+            self.rabbit_management("DELETE", "vhosts/" + self.rabbit_vhost)
 
     def cleanup_redis(self):
         if not self.redis_claimed:

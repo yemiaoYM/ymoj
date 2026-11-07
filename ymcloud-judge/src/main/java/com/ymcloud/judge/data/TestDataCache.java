@@ -820,22 +820,6 @@ public class TestDataCache implements AutoCloseable {
         }
 
         /**
-         * 定位当前测试点输入，仅供受控内部使用。
-         * @return 缓存输入路径
-         */
-        public Path inputPath() {
-            return lease.version.directory.resolve(testCase.input().filename());
-        }
-
-        /**
-         * 定位标准答案，禁止挂载给用户程序。
-         * @return 缓存答案路径
-         */
-        public Path outputPath() {
-            return lease.version.directory.resolve(testCase.output().filename());
-        }
-
-        /**
          * 打开当前测试点的输入流。
          * @return 调用方负责关闭的校验流
          * @throws IOException 引用已释放或文件非法

@@ -17,7 +17,7 @@ export function useLocalDraft<T>(
   validate: (value: unknown) => value is T,
 ) {
   const userStore = useUserStore();
-  const key = `ymcloud:draft:${kind}:v1:${userStore.user.id}`;
+  const key = `ymcloud:draft:${kind}:${userStore.user.id}`;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pending: { data: T; expiresAt: number } | undefined;
 

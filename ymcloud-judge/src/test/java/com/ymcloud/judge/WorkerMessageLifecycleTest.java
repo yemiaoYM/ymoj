@@ -227,9 +227,13 @@ class WorkerMessageLifecycleTest {
         verify(channel).basicAck(7L, false);
     }
 
+    /**
+     * 无执行身份的消息不能领取租约或执行选手代码
+     * @throws Exception 消息序列化或确认失败
+     */
     @Test
-    void invalidSchemaAndChangedDigestAreRejectedWithoutExecution() throws Exception {
-        task.setSchemaVersion(1);
+    void missingExecutionIdentityIsRejectedWithoutExecution() throws Exception {
+        task.setExecutionId(null);
         listener.listenJudge(message(), channel);
         verify(channel).basicReject(7L, false);
         verifyNoInteractions(store, runner, publisher);

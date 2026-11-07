@@ -8,7 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * 本地驱动保留给历史兼容和迁移回退。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 在配置的本地根目录中保存、读取和删除对象文件
  */
 public class LocalObjectStorageService implements ObjectStorageService {
 

@@ -831,7 +831,6 @@ class JudgeDispatchDatabaseIT {
         jdbc.update("INSERT INTO test_data_version (id,problem_id,manifest,manifest_sha256,created_time) "
                 + "VALUES (88,10,'{}',?,CURRENT_TIMESTAMP)", "cd".repeat(32));
         jdbc.update("UPDATE problem SET time_limit=2345,memory_limit=1048576 WHERE id=10");
-        jdbc.update("UPDATE language SET version='rejudge-current' WHERE name='Python'");
         when(context.getBean(TestDataService.class).getCurrentVersion(10L)).thenReturn(88L);
         try (MockedStatic<SecurityUtils> security = superAdmin()) {
             service.rejudge(800L, old.getExecutionId());
@@ -847,7 +846,6 @@ class JudgeDispatchDatabaseIT {
         assertEquals(1048576L, task.getMemoryLimit());
         assertEquals("print(1)", task.getCode());
         assertEquals("Python", task.getLanguageConfig().getName());
-        assertEquals("rejudge-current", task.getLanguageConfig().getVersion());
         assertEquals(createdTime, judge.getCreatedTime());
         assertEquals(2L, judge.getUserId());
         assertEquals(JudgeStatus.STATUS_PENDING, judge.getStatus());

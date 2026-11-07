@@ -384,8 +384,11 @@ class JudgeWebWorkflowTest {
         }
     }
 
+    /**
+     * 自测缺省输入按空文本处理，未支持的语言不得创建任务
+     */
     @Test
-    void absentSelfTestInputIsEmptyAndOnlyInvalidLanguageMetadataIsRejected() {
+    void absentSelfTestInputIsEmptyAndUnsupportedLanguageIsRejected() {
         Language language = language();
         language.setEnv(null);
         language.setRunCmd(null);
@@ -402,33 +405,27 @@ class JudgeWebWorkflowTest {
             assertEquals("", task.getExpectedOutput());
             language.setName("Go");
             assertThrows(JudgeException.class, () -> service.testJudge(request));
-            language.setName("Python");
-            language.setFileName("main.txt");
-            assertThrows(JudgeException.class, () -> service.testJudge(request));
-            language.setFileName("main.py");
-            language.setType(2);
-            assertThrows(JudgeException.class, () -> service.testJudge(request));
             verify(dispatches, times(1)).save(any());
         }
     }
 
+    /**
+     * 任务只保存固定语言入口，不携带语言表中的命令及环境配置
+     * @param name Worker 支持的语言
+     * @throws Exception 消息 JSON 解析失败
+     */
     @ParameterizedTest
     @ValueSource(strings = {"Java", "C", "C++", "Python"})
-    void legacyEnvironmentAndEmptyCommandsRemainSnapshotMetadata(String name) {
+    void languageSnapshotExcludesUnusedExecutionMetadata(String name) throws Exception {
         Language language = language();
         language.setName(name);
-        language.setType("Python".equals(name) ? 1 : 0);
-        language.setFileName(switch (name) {
-            case "Java" -> "Main.java";
-            case "C" -> "main.c";
-            case "C++" -> "main.cpp";
-            default -> "main.py";
-        });
-        language.setImage("legacy-vendor/toolchain:old");
-        language.setEnv("retired-custom-environment");
-        language.setCompileCmd(null);
-        language.setRunCmd("");
-        language.setVersion("legacy-version");
+        language.setType(2);
+        language.setFileName("unused-entry.txt");
+        language.setImage("unused-toolchain");
+        language.setEnv("unused-environment");
+        language.setCompileCmd("unused-compile-command");
+        language.setRunCmd("unused-run-command");
+        language.setVersion("unused-version");
         doReturn(query(problem())).when(problems).lambdaQuery();
         doReturn(query(language)).when(languages).lambdaQuery();
         doReturn(query(version())).when(versions).lambdaQuery();
@@ -444,21 +441,14 @@ class JudgeWebWorkflowTest {
         }
         ArgumentCaptor<JudgeDispatch> created = ArgumentCaptor.forClass(JudgeDispatch.class);
         verify(dispatches).save(created.capture());
-        String historicalPayload = created.getValue().getTaskPayload();
-        language.setImage("updated-image");
-        language.setEnv("updated-environment");
-        language.setCompileCmd("updated-compile-command");
-        language.setRunCmd("updated-run-command");
-        language.setVersion("updated-version");
-
-        JudgeTask historical = codec.task(historicalPayload);
-        assertEquals(name, historical.getLanguageConfig().getName());
-        assertEquals("legacy-vendor/toolchain:old", historical.getLanguageConfig().getImage());
-        assertEquals("retired-custom-environment", historical.getLanguageConfig().getEnv());
-        assertNull(historical.getLanguageConfig().getCompileCmd());
-        assertEquals("", historical.getLanguageConfig().getRunCmd());
-        assertEquals("legacy-version", historical.getLanguageConfig().getVersion());
-        assertEquals(77L, historical.getTestDataVersionId());
+        String payload = created.getValue().getTaskPayload();
+        language.setName("changed-language");
+        JudgeTask snapshot = codec.task(payload);
+        assertEquals(name, snapshot.getLanguageConfig().getName());
+        assertEquals(77L, snapshot.getTestDataVersionId());
+        var languageJson = new ObjectMapper().readTree(payload).get("languageConfig");
+        assertEquals(1, languageJson.size());
+        assertEquals(name, languageJson.get("name").asText());
         verify(languages, never()).lambdaUpdate();
     }
 
@@ -590,6 +580,22 @@ class JudgeWebWorkflowTest {
         verifyNoInteractions(dispatches, judges, cases, accepted);
     }
 
+    /**
+     * 终态必须具有对应序号与判定，非法结果在数据库操作前拒绝
+     * @param sequence 不属于终态的消息序号
+     */
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 2, 4})
+    void invalidTerminalSequenceNeverTouchesPersistentState(int sequence) {
+        JudgeResult result = finalResult(selfDispatch());
+        result.setSequence(sequence);
+        assertThrows(IllegalArgumentException.class, () -> results.receive(result));
+        result.setSequence(3);
+        result.setStatus(null);
+        assertThrows(IllegalArgumentException.class, () -> results.receive(result));
+        verifyNoInteractions(dispatches, judges, cases, accepted);
+    }
+
     @Test
     void corruptOrMismatchedDurableResultNeverLeaksAnotherExecutionOutput() {
         JudgeDispatch dispatch = selfDispatch();
@@ -610,17 +616,21 @@ class JudgeWebWorkflowTest {
         assertNull(results.toView(dispatch).getInput());
     }
 
+    /**
+     * 人工改判移除评测任务后仍可读取持久状态，且继续校验查看权限
+     */
     @Test
-    void legacyStatusRequiresOwnerAndRemainsAvailableWithoutAWorkerDispatch() {
+    void manuallyJudgedStatusRemainsAvailableWithoutAWorkerDispatch() {
         doReturn(query(null)).when(dispatches).lambdaQuery();
-        Judge historical = new Judge();
-        historical.setUserId(2L);
-        historical.setContestId(0L);
-        historical.setProblemId(10L);
+        Judge submission = new Judge();
+        submission.setUserId(2L);
+        submission.setContestId(0L);
+        submission.setProblemId(10L);
+        submission.setIsManual(1);
         when(problems.getById(10L)).thenReturn(problem());
-        historical.setStatus(JudgeStatus.STATUS_ACCEPTED);
-        historical.setTime(10L);
-        doReturn(query(historical)).when(judges).lambdaQuery();
+        submission.setStatus(JudgeStatus.STATUS_ACCEPTED);
+        submission.setTime(10L);
+        doReturn(query(submission)).when(judges).lambdaQuery();
         try (MockedStatic<SecurityUtils> security = authenticatedUser()) {
             security.when(SecurityUtils::getUserId).thenReturn(2L);
             assertEquals(JudgeStatus.STATUS_ACCEPTED, service.getStatus(1L).getStatus());

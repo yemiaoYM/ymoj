@@ -7,6 +7,7 @@ import com.ymcloud.core.storage.ObjectStorageService;
 import com.ymcloud.core.storage.StorageConfigCatalog;
 import com.ymcloud.core.storage.StorageConnectionTester;
 import com.ymcloud.core.storage.StorageCredentialCipher;
+import com.ymcloud.core.storage.StorageMasterKeyStore;
 import com.ymcloud.core.storage.StorageProperties;
 import com.ymcloud.core.storage.StorageRegistry;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
@@ -83,6 +84,7 @@ class StorageConfigRestoreTest {
         context.registerBean(StorageProperties.class, () -> properties);
         context.registerBean(StorageConfigCatalog.class, () -> catalog);
         context.registerBean(StorageCredentialCipher.class, () -> cipher);
+        context.registerBean(StorageMasterKeyStore.class, () -> mock(StorageMasterKeyStore.class));
         context.registerBean(StorageConnectionTester.class, () -> tester);
         context.register(AdminStorageConfigServiceImpl.class);
         context.refresh();

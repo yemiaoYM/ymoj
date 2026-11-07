@@ -6,7 +6,6 @@ import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
@@ -435,7 +434,7 @@ public class JudgeResultService {
     }
 
     /**
-     * 按正式提交与自测边界组装查询视图，不暴露正式测试输入答案。
+     * 按正式提交与自测边界组装查询视图，不暴露正式测试输入答案
      * @param dispatch 当前任务记录
      * @param result 合法结果，可为 null
      * @return 状态与允许展示的自测字段
@@ -456,8 +455,7 @@ public class JudgeResultService {
         if (Objects.equals(dispatch.getStrategy(), JudgeDispatchState.SELF_TEST)) {
             try {
                 JudgeTask task = codec.task(dispatch.getTaskPayload());
-                if (task.getSchemaVersion() != JudgeProtocol.SCHEMA_VERSION
-                        || !Objects.equals(task.getSubmissionId(), dispatch.getSubmissionId())
+                if (!Objects.equals(task.getSubmissionId(), dispatch.getSubmissionId())
                         || !Objects.equals(task.getExecutionId(), dispatch.getExecutionId())
                         || !Objects.equals(task.getStrategy(), dispatch.getStrategy())) {
                     throw new IllegalArgumentException("持久自测输入与当前执行标识不一致");
@@ -472,14 +470,13 @@ public class JudgeResultService {
     }
 
     /**
-     * 构造当前执行的安全系统错误终态，固定终态序号。
+     * 构造当前执行的安全系统错误终态，固定终态序号
      * @param dispatch 当前任务记录
      * @param reason 可向用户展示的原因
      * @return 不含隐藏数据的系统错误结果
      */
     private JudgeResult systemError(JudgeDispatch dispatch, String reason) {
         JudgeResult result = new JudgeResult();
-        result.setSchemaVersion(JudgeProtocol.SCHEMA_VERSION);
         result.setSubmissionId(dispatch.getSubmissionId());
         result.setExecutionId(dispatch.getExecutionId());
         result.setProblemId(dispatch.getProblemId());
@@ -508,24 +505,22 @@ public class JudgeResultService {
     }
 
     /**
-     * 校验结果协议、执行标识及受支持的策略，不能用数值区间代替策略定义。
+     * 校验结果执行标识及受支持的策略，状态与序号由状态校验负责
      * @param result 待处理结果，不允许 null
-     * @throws IllegalArgumentException 协议或标识不合法
+     * @throws IllegalArgumentException 执行标识或策略不合法
      */
     private void validateIdentity(JudgeResult result) {
-        if (result == null || result.getSchemaVersion() != JudgeProtocol.SCHEMA_VERSION
-                || result.getSubmissionId() == null || result.getSubmissionId() <= 0
+        if (result == null || result.getSubmissionId() == null || result.getSubmissionId() <= 0
                 || result.getExecutionId() == null
                 || !result.getExecutionId().matches("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
                 || (!Objects.equals(result.getStrategy(), JudgeDispatchState.FORMAL)
-                && !Objects.equals(result.getStrategy(), JudgeDispatchState.SELF_TEST))
-                || result.getStatus() == null || result.getSequence() < 1 || result.getSequence() > 3) {
-            throw new IllegalArgumentException("评测结果标识或协议版本无效");
+                && !Objects.equals(result.getStrategy(), JudgeDispatchState.SELF_TEST))) {
+            throw new IllegalArgumentException("评测结果标识或策略无效");
         }
     }
 
     /**
-     * 验证编译、运行进度和终态各自允许的序号及状态。
+     * 验证编译、运行进度和终态各自允许的序号及状态
      * @param result 已验证身份的结果
      */
     private void validateState(JudgeResult result) {
@@ -533,7 +528,7 @@ public class JudgeResultService {
                 && ((result.getSequence() == 1 && result.getStatus() == JudgeVerdict.STATUS_COMPILING)
                 || (result.getSequence() == 2 && result.getStatus() == JudgeVerdict.STATUS_JUDGING));
         if (!progress && !(result.isTerminal() && result.getSequence() == 3
-                && TERMINAL.contains(result.getStatus()))) {
+                && result.getStatus() != null && TERMINAL.contains(result.getStatus()))) {
             throw new IllegalArgumentException("评测结果状态与消息序号不匹配");
         }
     }

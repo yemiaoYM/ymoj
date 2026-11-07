@@ -2,7 +2,6 @@ package com.ymcloud.web;
 
 import com.alibaba.druid.pool.DruidDataSource;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.config.GlobalConfig;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.ymcloud.common.exception.file.FileException;
@@ -41,13 +40,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -56,15 +55,14 @@ import org.yaml.snakeyaml.Yaml;
 import javax.sql.DataSource;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -93,8 +91,9 @@ class StorageConfigDatabaseIT {
     @TempDir
     static Path directory;
 
-    private static final Set<String> TABLES = Set.of("file", "storage_config", "storage_config_state");
-    private static String prefix;
+    private static String schema;
+    private static boolean schemaCreated;
+    private static DriverManagerDataSource administration;
     private static DruidDataSource datasource;
     private static JdbcTemplate jdbc;
     private static AnnotationConfigApplicationContext context;
@@ -102,19 +101,37 @@ class StorageConfigDatabaseIT {
     private static StorageConfigCatalog catalog;
     private static TrackingRegistry registry;
 
+    /**
+     * 在本机创建独立临时库并装配真实存储配置服务
+     *
+     * @throws Exception 配置读取、建库或服务装配失败
+     */
     @BeforeAll
-    static void createOnlyIsolatedTables() throws Exception {
-        prefix = "ymcloud_config_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16) + "_";
+    static void createIsolatedDatabase() throws Exception {
+        schema = "ymcloud_config_it_" + UUID.randomUUID().toString().replace("-", "");
+        Path root = Path.of("").toAbsolutePath();
+        while (root != null && !Files.isRegularFile(root.resolve("sql/ymcloud.sql"))) {
+            root = root.getParent();
+        }
+        if (root == null) {
+            throw new IllegalStateException("无法定位项目开发配置");
+        }
         datasource = new DruidDataSource();
-        try (InputStream input = new ClassPathResource("application-dev.yml").getInputStream()) {
+        administration = new DriverManagerDataSource();
+        try (InputStream input = Files.newInputStream(root.resolve("ymcloud-web/src/main/resources/application-dev.yml"))) {
             Map<?, ?> configuration = new Yaml().load(input);
             Map<?, ?> spring = (Map<?, ?>) configuration.get("spring");
             Map<?, ?> database = (Map<?, ?>) spring.get("datasource");
             String url = String.valueOf(database.get("url"));
-            if (!url.startsWith("jdbc:mysql://")) {
-                throw new IllegalArgumentException("仅允许复用项目明确配置的 MySQL 服务");
+            if (!url.matches("jdbc:mysql://(127\\.0\\.0\\.1|localhost)(:\\d+)?/[^?]+(\\?.*)?")) {
+                throw new IllegalArgumentException("集成测试只允许使用本机 MySQL");
             }
-            datasource.setUrl(url);
+            administration.setUrl(url);
+            administration.setUsername(String.valueOf(database.get("username")));
+            administration.setPassword(String.valueOf(database.get("password")));
+            URI endpoint = URI.create(url.substring(5));
+            datasource.setUrl("jdbc:mysql://" + endpoint.getRawAuthority() + "/" + schema
+                    + (endpoint.getRawQuery() == null ? "" : "?" + endpoint.getRawQuery()));
             datasource.setUsername(String.valueOf(database.get("username")));
             datasource.setPassword(String.valueOf(database.get("password")));
         }
@@ -125,27 +142,30 @@ class StorageConfigDatabaseIT {
         datasource.setMaxWait(10000);
         Properties connectionProperties = new Properties();
         connectionProperties.setProperty("openTelemetry", "DISABLED");
+        administration.setConnectionProperties(connectionProperties);
         datasource.setConnectProperties(connectionProperties);
+        new JdbcTemplate(administration).execute("CREATE DATABASE `" + schema + "` CHARACTER SET utf8mb4");
+        schemaCreated = true;
         jdbc = new JdbcTemplate(datasource);
-        assertEquals(1, jdbc.queryForObject("SELECT 1", Integer.class));
-        jdbc.execute("CREATE TABLE `" + table("file") + "` (id BIGINT NOT NULL PRIMARY KEY,"
+        assertEquals(schema, jdbc.queryForObject("SELECT DATABASE()", String.class));
+        jdbc.execute("CREATE TABLE `file` (id BIGINT NOT NULL PRIMARY KEY,"
                 + "file_name VARCHAR(255) NULL,file_type VARCHAR(255) NULL,file_size BIGINT NULL,file_ext VARCHAR(20) NULL,"
                 + "storage_path VARCHAR(1000) NULL,storage_type INT NULL,storage_profile VARCHAR(64) NULL,"
                 + "bucket VARCHAR(128) NULL,object_key VARCHAR(500) NULL,sha256 CHAR(64) NULL,legacy_path VARCHAR(1000) NULL,"
                 + "url VARCHAR(1000) NULL,uploader_id BIGINT NULL,uploader_username VARCHAR(100) NULL,"
                 + "biz_type INT NULL,biz_id BIGINT NULL,is_public TINYINT NULL,created_time DATETIME NULL,updated_time DATETIME NULL,"
                 + "INDEX idx_profile(storage_profile)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        jdbc.execute("CREATE TABLE `" + table("storage_config") + "` ("
+        jdbc.execute("CREATE TABLE `storage_config` ("
                 + "id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,"
                 + "name VARCHAR(100) NOT NULL,provider VARCHAR(16) NOT NULL,endpoint VARCHAR(512) NOT NULL,"
                 + "region VARCHAR(64) NOT NULL,public_bucket VARCHAR(128) NOT NULL,private_bucket VARCHAR(128) NOT NULL,"
                 + "path_style TINYINT NOT NULL DEFAULT 1,encrypted_access_key TEXT NOT NULL,encrypted_secret_key TEXT NOT NULL,"
                 + "remark VARCHAR(500) NULL,revision BIGINT NOT NULL DEFAULT 1,tested_revision BIGINT NULL,tested_at DATETIME NULL,"
                 + "created_time DATETIME NOT NULL,updated_time DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        jdbc.execute("CREATE TABLE `" + table("storage_config_state") + "` ("
+        jdbc.execute("CREATE TABLE `storage_config_state` ("
                 + "id TINYINT NOT NULL PRIMARY KEY,active_key VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,"
                 + "revision BIGINT NOT NULL DEFAULT 0,updated_time DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        jdbc.update("INSERT INTO `" + table("storage_config_state") + "` VALUES(1,NULL,0,NOW())");
+        jdbc.update("INSERT INTO `storage_config_state` VALUES(1,NULL,0,NOW())");
         clearTableInfo();
         context = new AnnotationConfigApplicationContext(DatabaseConfiguration.class);
         assertIsolatedMappings();
@@ -157,9 +177,9 @@ class StorageConfigDatabaseIT {
     @BeforeEach
     void resetOnlyOwnRows() {
         assertIsolatedMappings();
-        jdbc.update("DELETE FROM `" + table("file") + "`");
-        jdbc.update("DELETE FROM `" + table("storage_config") + "`");
-        jdbc.update("UPDATE `" + table("storage_config_state") + "` SET active_key=NULL,revision=0 WHERE id=1");
+        jdbc.update("DELETE FROM `file`");
+        jdbc.update("DELETE FROM `storage_config`");
+        jdbc.update("UPDATE `storage_config_state` SET active_key=NULL,revision=0 WHERE id=1");
         authenticate();
     }
 
@@ -168,23 +188,24 @@ class StorageConfigDatabaseIT {
         SecurityContextHolder.clearContext();
     }
 
+    /**
+     * 关闭连接并仅删除本次成功创建的临时数据库
+     */
     @AfterAll
-    static void removeOnlyVerifiedOwnedTables() {
+    static void removeIsolatedDatabase() {
         try {
             if (context != null) {
                 context.close();
             }
-            if (jdbc != null && prefix != null) {
-                for (String name : TABLES) {
-                    jdbc.execute("DROP TABLE IF EXISTS `" + table(name) + "`");
-                }
-                assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables "
-                        + "WHERE table_schema=DATABASE() AND table_name IN (?,?,?)", Integer.class,
-                        table("file"), table("storage_config"), table("storage_config_state")));
-            }
         } finally {
             if (datasource != null) {
                 datasource.close();
+            }
+            if (schemaCreated) {
+                if (!schema.matches("ymcloud_config_it_[0-9a-f]{32}")) {
+                    throw new IllegalStateException("禁止删除非本次测试数据库");
+                }
+                new JdbcTemplate(administration).execute("DROP DATABASE `" + schema + "`");
             }
             clearTableInfo();
         }
@@ -203,7 +224,7 @@ class StorageConfigDatabaseIT {
             assertEquals("http://127.0.0.1:8333", new String(input.readAllBytes(), StandardCharsets.UTF_8));
         }
         StorageCredentialCipher anotherProcess = new StorageCredentialCipher(new StorageProperties());
-        anotherProcess.setKeyStore(new StorageMasterKeyStore(directory.toString(),
+        ReflectionTestUtils.setField(anotherProcess, "keyStore", new StorageMasterKeyStore(directory.toString(),
                 context.getBean(StorageConfigEntityService.class)));
         assertEquals("test-secret", anotherProcess.decrypt("external-seaweed", "secretKey",
                 catalog.find("external-seaweed").getEncryptedSecretKey()));
@@ -247,7 +268,7 @@ class StorageConfigDatabaseIT {
     void lostMasterKeyDoesNotBypassFileReferenceProtectionAndRestoredKeyRemainsUsable() throws Exception {
         service.create(dto("referenced-seaweed", "http://127.0.0.1:8333"));
         service.test("referenced-seaweed");
-        jdbc.update("INSERT INTO `" + table("file") + "` (id,storage_profile) VALUES(1,?)", "referenced-seaweed");
+        jdbc.update("INSERT INTO `file` (id,storage_profile) VALUES(1,?)", "referenced-seaweed");
         Path masterKey = directory.resolve(".secrets/storage-config.key");
         byte[] original = Files.readAllBytes(masterKey);
         Files.delete(masterKey);
@@ -260,7 +281,7 @@ class StorageConfigDatabaseIT {
             assertThrows(FileException.class, () -> service.create(dto("new-seaweed", "http://127.0.0.1:8334")));
             assertFalse(Files.exists(masterKey));
             assertEquals(1, catalog.list().size());
-            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM `" + table("file") + "`", Integer.class));
+            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM `file`", Integer.class));
         } finally {
             Files.write(masterKey, original);
         }
@@ -291,8 +312,7 @@ class StorageConfigDatabaseIT {
             } finally {
                 executor.shutdownNow();
             }
-            assertEquals(3L, jdbc.queryForObject("SELECT revision FROM `" + table("storage_config_state")
-                    + "` WHERE id=1", Long.class));
+            assertEquals(3L, jdbc.queryForObject("SELECT revision FROM `storage_config_state` WHERE id=1", Long.class));
             assertEquals(registry.active(), second.active());
         } finally {
             second.close();
@@ -303,7 +323,7 @@ class StorageConfigDatabaseIT {
     void referencedConfigurationRejectsLocatorChangesButBlankCredentialEditPreservesEncryptedValues() {
         String key = "referenced-profile";
         service.create(dto(key, "http://127.0.0.1:8333"));
-        jdbc.update("INSERT INTO `" + table("file") + "` (id,storage_profile) VALUES(1,?)", key);
+        jdbc.update("INSERT INTO `file` (id,storage_profile) VALUES(1,?)", key);
         StorageConfigDTO changed = dto(key, "http://127.0.0.1:8334");
         assertThrows(FileException.class, () -> service.update(key, changed));
         assertEquals("http://127.0.0.1:8333", catalog.find(key).getEndpoint());
@@ -429,21 +449,13 @@ class StorageConfigDatabaseIT {
         }
     }
 
-    private static String table(String name) {
-        if (prefix == null || !prefix.matches("ymcloud_config_it_[0-9a-f]{16}_") || !TABLES.contains(name)) {
-            throw new IllegalArgumentException("临时表标识不合法，禁止操作");
-        }
-        String identifier = prefix + name;
-        if (identifier.length() > 64 || !identifier.matches("[a-z0-9_]+")) {
-            throw new IllegalArgumentException("临时表超出标识边界");
-        }
-        return identifier;
-    }
-
+    /**
+     * 确认实体映射使用独立数据库中的正式表名
+     */
     private static void assertIsolatedMappings() {
-        assertEquals(table("file"), TableInfoHelper.getTableInfo(File.class).getTableName());
-        assertEquals(table("storage_config"), TableInfoHelper.getTableInfo(StorageConfig.class).getTableName());
-        assertEquals(table("storage_config_state"), TableInfoHelper.getTableInfo(StorageConfigState.class).getTableName());
+        assertEquals("file", TableInfoHelper.getTableInfo(File.class).getTableName());
+        assertEquals("storage_config", TableInfoHelper.getTableInfo(StorageConfig.class).getTableName());
+        assertEquals("storage_config_state", TableInfoHelper.getTableInfo(StorageConfigState.class).getTableName());
     }
 
     private static void clearTableInfo() {
@@ -489,8 +501,8 @@ class StorageConfigDatabaseIT {
         }
 
         /**
-         * 装配真实查询与锁语句，所有表名映射到本次随机测试表
-         * @param dataSource 隔离表所在的数据源
+         * 装配正式 Mapper，使用独立数据库验证真实查询与行锁
+         * @param dataSource 独立临时数据库
          * @return 同时支持 MP 和 XML 查询的会话工厂
          * @throws Exception Mapper 资源加载失败
          */
@@ -498,28 +510,11 @@ class StorageConfigDatabaseIT {
         SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
             MybatisConfiguration configuration = new MybatisConfiguration();
             configuration.setMapUnderscoreToCamelCase(true);
-            GlobalConfig globalConfig = new GlobalConfig();
-            GlobalConfig.DbConfig database = new GlobalConfig.DbConfig();
-            database.setTableUnderline(true);
-            database.setTablePrefix(prefix);
-            globalConfig.setDbConfig(database);
             MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
             factory.setDataSource(dataSource);
             factory.setConfiguration(configuration);
-            factory.setGlobalConfig(globalConfig);
-            List<Resource> mapperResources = new ArrayList<>();
-            for (String mapper : List.of("StorageConfigMapper", "StorageConfigStateMapper")) {
-                String path = "mapper/" + mapper + ".xml";
-                String xml;
-                try (InputStream input = new ClassPathResource(path).getInputStream()) {
-                    xml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-                }
-                for (String name : TABLES) {
-                    xml = xml.replaceAll("\\b" + name + "\\b", table(name));
-                }
-                mapperResources.add(new ByteArrayResource(xml.getBytes(StandardCharsets.UTF_8), path));
-            }
-            factory.setMapperLocations(mapperResources.toArray(Resource[]::new));
+            factory.setMapperLocations(new ClassPathResource("mapper/StorageConfigMapper.xml"),
+                    new ClassPathResource("mapper/StorageConfigStateMapper.xml"));
             return factory.getObject();
         }
 

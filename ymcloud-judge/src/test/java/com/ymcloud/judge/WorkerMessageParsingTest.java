@@ -24,7 +24,7 @@ class WorkerMessageParsingTest {
     private final ObjectMapper mapper = new WorkerAmqpConfig().workerObjectMapper();
 
     /**
-     * SPJ 快照限定 testlib C++，篡改源码、过期协议及自测携带隐藏校验器均拒绝。
+     * SPJ 快照限定 testlib C++，篡改源码及自测携带隐藏校验器均拒绝
      */
     @Test
     void spjSnapshotRequiresExactSupportedContract() {
@@ -47,13 +47,10 @@ class WorkerMessageParsingTest {
         spj.setDigest(spj.sourceDigest());
         task.setStrategy(1);
         assertThrows(IllegalArgumentException.class, () -> validator.validate(task));
-        task.setStrategy(0);
-        task.setSchemaVersion(2);
-        assertThrows(IllegalArgumentException.class, () -> validator.validate(task));
     }
 
     /**
-     * 正常任务保持往返一致，尾随 JSON 和重复身份字段不能穿过解析边界。
+     * 正常任务保持往返一致，尾随 JSON、重复身份和未知命令字段不能穿过解析边界
      * @throws Exception 序列化或解析失败
      */
     @Test
@@ -61,18 +58,21 @@ class WorkerMessageParsingTest {
         JudgeTask task = WorkerFixtures.task(1, 0);
         String json = mapper.writeValueAsString(task);
         assertEquals(task, mapper.readValue(json, JudgeTask.class));
+        assertEquals(mapper.readTree("{\"name\":\"Java\"}"), mapper.readTree(json).get("languageConfig"));
         assertThrows(IOException.class, () -> mapper.readValue(json + " {}", JudgeTask.class));
         assertThrows(IOException.class,
                 () -> mapper.readValue("{\"submissionId\":1,\"submissionId\":2}", JudgeTask.class));
+        assertThrows(IOException.class,
+                () -> mapper.readValue("{\"languageConfig\":{\"name\":\"Java\",\"runCmd\":\"sh\"}}", JudgeTask.class));
     }
 
     /**
-     * 消息中的整数、布尔值及状态码不能从字符串、小数或 null 猜测恢复。
+     * 消息中的整数、布尔值及状态码不能从字符串、小数或 null 猜测恢复
      */
     @Test
     void coercionCannotChangeTaskIdentityOrRecoveredVerdict() {
         for (String json : List.of("{\"submissionId\":1.9}", "{\"submissionId\":\"1\"}",
-                "{\"strategy\":\"0\"}", "{\"schemaVersion\":null}")) {
+                "{\"strategy\":\"0\"}")) {
             assertThrows(IOException.class, () -> mapper.readValue(json, JudgeTask.class), json);
         }
         for (String json : List.of("{\"status\":0.9}", "{\"status\":\"0\"}",

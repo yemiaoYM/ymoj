@@ -47,7 +47,9 @@ import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.pojo.query.admin.AdminFilePageQuery;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.query.oj.SubmissionPageQuery;
+import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeStatusCache;
+import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.web.service.admin.AdminContestService;
 import com.ymcloud.web.service.admin.AdminProblemService;
 import com.ymcloud.web.service.admin.ResourceDeletionService;
@@ -69,6 +71,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
@@ -882,6 +885,33 @@ class ResourcePermissionDatabaseIT {
         @Bean
         TestDataService testData() {
             return mock(TestDataService.class);
+        }
+
+        /**
+         * 隔离权限测试未使用的 SPJ 编译入口
+         * @return 编译服务桩
+         */
+        @Bean
+        SpjCompilation spjCompilation() {
+            return mock(SpjCompilation.class);
+        }
+
+        /**
+         * 满足编译组件的消息依赖，不连接 RabbitMQ
+         * @return 隔离消息模板
+         */
+        @Bean
+        RabbitTemplate judgeRabbitTemplate() {
+            return mock(RabbitTemplate.class);
+        }
+
+        /**
+         * 隔离权限测试未使用的判题消息编解码
+         * @return 编解码器桩
+         */
+        @Bean
+        JudgeMessageCodec judgeMessageCodec() {
+            return mock(JudgeMessageCodec.class);
         }
 
     }

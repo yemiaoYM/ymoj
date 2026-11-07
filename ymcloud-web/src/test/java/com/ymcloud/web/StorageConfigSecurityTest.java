@@ -9,6 +9,7 @@ import com.ymcloud.core.storage.StorageConfigCatalog;
 import com.ymcloud.core.storage.StorageConfigValidation;
 import com.ymcloud.core.storage.StorageConnectionTester;
 import com.ymcloud.core.storage.StorageCredentialCipher;
+import com.ymcloud.core.storage.StorageMasterKeyStore;
 import com.ymcloud.core.storage.StorageProperties;
 import com.ymcloud.core.storage.StorageRegistry;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
@@ -45,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -79,12 +81,15 @@ class StorageConfigSecurityTest {
         properties = new StorageProperties();
         properties.setConfigEncryptionKey(Base64.getEncoder().encodeToString(new byte[32]));
         cipher = new StorageCredentialCipher(properties);
+        StorageMasterKeyStore keyStore = mock(StorageMasterKeyStore.class);
+        when(keyStore.load(anyBoolean())).thenThrow(new FileException("主密钥不可用"));
         catalog = mock(StorageConfigCatalog.class);
         tester = mock(StorageConnectionTester.class);
         context = new AnnotationConfigApplicationContext();
         context.registerBean(StorageProperties.class, () -> properties);
         context.registerBean(StorageConfigCatalog.class, () -> catalog);
         context.registerBean(StorageCredentialCipher.class, () -> cipher);
+        context.registerBean(StorageMasterKeyStore.class, () -> keyStore);
         context.registerBean(StorageConnectionTester.class, () -> tester);
         context.register(AdminStorageConfigServiceImpl.class);
         context.refresh();
@@ -295,8 +300,11 @@ class StorageConfigSecurityTest {
         verify(catalog, never()).save(any(), eq(false));
     }
 
+    /**
+     * 本地主密钥不可用时，不得保存未加密的连接凭据
+     */
     @Test
-    void isolatedContextCannotPersistYamlWithoutAKeyStoreOrExplicitKey() {
+    void unavailableMasterKeyCannotPersistYamlCredentials() {
         properties.setConfigEncryptionKey(null);
         properties.getProfiles().put("minio", remoteProfile());
         assertThrows(FileException.class, () -> service.test("minio"));

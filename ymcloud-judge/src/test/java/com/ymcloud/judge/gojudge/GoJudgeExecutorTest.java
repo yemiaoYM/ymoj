@@ -64,8 +64,6 @@ class GoJudgeExecutorTest {
         executor = createGoJudgeExecutor(client, new GoJudgeProperties(), worker);
         JudgeLanguage language = new JudgeLanguage();
         language.setName("Java");
-        language.setCompileCmd("untrusted legacy command");
-        language.setRunCmd("untrusted legacy command");
         task = JudgeTask.builder().executionId("test").languageConfig(language).code("class Main {}")
                 .timeLimit(1000L).memoryLimit(262144L).deadlineEpochMs(System.currentTimeMillis() + 60000).build();
     }
@@ -214,6 +212,10 @@ class GoJudgeExecutorTest {
         verify(client).delete(eq("source-id"), anyLong());
     }
 
+    /**
+     * 四种语言映射到固定编译命令，产物与诊断文件均纳入会话清理
+     * @throws Exception 模拟编译或产物清理失败
+     */
     @Test
     void fourEntrypointsUseFixedCommandsAndCacheCompleteArtifacts() throws Exception {
         when(client.upload(any(InputStream.class), anyString(), anyLong())).thenReturn("source-id");
@@ -226,7 +228,6 @@ class GoJudgeExecutorTest {
                 Map<?, ?> request = invocation.getArgument(0);
                 Map<?, ?> command = (Map<?, ?>) ((List<?>) request.get("cmd")).get(0);
                 String arguments = command.get("args").toString();
-                assertFalse(arguments.contains("untrusted legacy"));
                 assertTrue(arguments.startsWith("[/usr/local/bin/ymcloud-output-limit, "
                         + worker.getMaxOutputBytes() + ", " + new GoJudgeProperties().getMaxFileBytes() + ","));
                 assertEquals(512L * 1024 * 1024, command.get("memoryLimit"));

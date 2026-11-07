@@ -7,10 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 核对数据库集成测试只创建自己的表，不导入真实初始化账户或执行业务写入。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 验证测试建表脚本不导入真实账户、不执行无关 SQL 且保留正式表约束
+ */
 class InitializationSqlTestSupportTest {
 
-    private static final String PREFIX = "ymcloud_storage_it_0123456789abcdef_";
     private static final String DEFINITIONS = """
             CREATE TABLE `file` (`id` bigint, `name` text COMMENT '引号''与分号;保持原样');
             CREATE TABLE `problem` (`id` bigint);
@@ -20,8 +23,11 @@ class InitializationSqlTestSupportTest {
                 REFERENCES `test_data_version` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT);
             """;
 
+    /**
+     * 排除种子数据和任意业务写入，保留完整正式表定义。
+     */
     @Test
-    void excludesSeedDataAndRewritesForeignKeysAndConstraintNames() {
+    void excludesSeedDataAndPreservesForeignKeysAndConstraintNames() {
         String schema = InitializationSqlTestSupport.storageSchema("""
                 -- CREATE TABLE `file` (`fake` bigint);
                 SET NAMES utf8mb4;
@@ -31,41 +37,50 @@ class InitializationSqlTestSupportTest {
                 DELETE FROM `file`;
                 ALTER TABLE `problem` ADD `fake` bigint;
                 DROP TABLE `judge`;
-                """, PREFIX);
+                """);
         assertEquals(4, schema.lines().filter(line -> line.startsWith("CREATE TABLE")).count());
         assertFalse(schema.contains("INSERT"));
         assertFalse(schema.contains("DELETE FROM"));
         assertFalse(schema.contains("ALTER TABLE"));
         assertFalse(schema.contains("DROP TABLE"));
         assertFalse(schema.contains("`user`"));
-        assertTrue(schema.contains("REFERENCES `" + PREFIX + "test_data_version`"));
-        assertTrue(schema.contains("CONSTRAINT `" + PREFIX + "fk_judge_test_data_version`"));
+        assertTrue(schema.contains("REFERENCES `test_data_version`"));
+        assertTrue(schema.contains("CONSTRAINT `fk_judge_test_data_version`"));
         assertTrue(schema.contains("COMMENT '引号''与分号;保持原样'"));
     }
 
+    /**
+     * 表缺失、重复或外键跨出测试表集合时，在执行前失败。
+     */
     @Test
     void rejectsMissingDuplicateAndExternalReferencedTables() {
         assertThrows(IllegalStateException.class, () -> InitializationSqlTestSupport.storageSchema(
-                "CREATE TABLE `file` (`id` bigint);", ""));
+                "CREATE TABLE `file` (`id` bigint);"));
         assertThrows(IllegalStateException.class, () -> InitializationSqlTestSupport.storageSchema(
-                DEFINITIONS + "CREATE TABLE `file` (`id` bigint);", ""));
+                DEFINITIONS + "CREATE TABLE `file` (`id` bigint);"));
         assertThrows(IllegalStateException.class, () -> InitializationSqlTestSupport.storageSchema(
-                DEFINITIONS.replace("REFERENCES `test_data_version`", "REFERENCES `user`"), PREFIX));
+                DEFINITIONS.replace("REFERENCES `test_data_version`", "REFERENCES `user`")));
     }
 
+    /**
+     * 未闭合的字符串与注释不得被截断为可执行语句。
+     */
     @Test
-    void rejectsUnsafePrefixAndIncompleteStatementsBeforeExecution() {
-        assertThrows(IllegalArgumentException.class, () -> InitializationSqlTestSupport.storageSchema(
-                DEFINITIONS, "production_"));
+    void rejectsIncompleteStatementsBeforeExecution() {
         assertThrows(IllegalStateException.class, () -> InitializationSqlTestSupport.storageSchema(
-                DEFINITIONS + "INSERT INTO `user` VALUES ('unterminated", ""));
+                DEFINITIONS + "INSERT INTO `user` VALUES ('unterminated"));
         assertThrows(IllegalStateException.class, () -> InitializationSqlTestSupport.storageSchema(
-                DEFINITIONS + "/* unclosed", ""));
+                DEFINITIONS + "/* unclosed"));
     }
 
+    /**
+     * 验证真实初始化脚本可提取当前存储结构且不包含种子数据。
+     *
+     * @throws Exception 初始化脚本读取失败
+     */
     @Test
     void extractsCurrentBaselineWithoutInitializationData() throws Exception {
-        String schema = InitializationSqlTestSupport.storageSchema("");
+        String schema = InitializationSqlTestSupport.storageSchema();
         assertEquals(4, schema.lines().filter(line -> line.startsWith("CREATE TABLE")).count());
         assertTrue(schema.contains("`storage_profile`"));
         assertTrue(schema.contains("`manifest_sha256`"));

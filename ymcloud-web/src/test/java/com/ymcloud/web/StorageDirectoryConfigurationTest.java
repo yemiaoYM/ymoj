@@ -4,6 +4,7 @@ import com.ymcloud.core.storage.StorageDirectoryResolver;
 import com.ymcloud.core.storage.StorageProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
@@ -19,10 +20,13 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 使用 CLI 同一配置加载入口，只解析属性；不启动业务上下文或连接数据库、Redis、RabbitMQ。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 验证公开存储配置与路径解析，不连接数据库、Redis 或 RabbitMQ
+ */
 class StorageDirectoryConfigurationTest {
 
     @TempDir
@@ -52,7 +56,7 @@ class StorageDirectoryConfigurationTest {
     }
 
     @Test
-    void defaultRelativeFilePathResolvesToRepositoryForCliAndWeb() throws Exception {
+    void defaultRelativeFilePathResolvesToRepository() throws Exception {
         Path repository = repository();
         Path moduleDirectory = Files.createDirectories(repository.resolve("ymcloud-web/target/classes"));
         ConfigurableEnvironment environment = configuration(Map.of("spring.profiles.active", "prod"));
@@ -87,7 +91,7 @@ class StorageDirectoryConfigurationTest {
     }
 
     @Test
-    void optionalImportedConfigurationAndItsPlaceholdersUseSameCliLoadingRules() throws Exception {
+    void optionalImportedConfigurationAndItsPlaceholdersResolveOverrides() throws Exception {
         Path imported = directory.resolve("application-storage-test.yml");
         Files.writeString(imported, """
                 ymcloud:
@@ -110,6 +114,12 @@ class StorageDirectoryConfigurationTest {
         assertFalse(Files.exists(judgeDirectory));
     }
 
+    /**
+     * 使用 Boot 正式配置加载入口解析隔离环境中的公开配置
+     *
+     * @param overrides 本用例显式覆盖的属性
+     * @return 已加载配置的隔离环境
+     */
     private ConfigurableEnvironment configuration(Map<String, Object> overrides) {
         StandardEnvironment environment = new StandardEnvironment();
         // 隔离宿主机参数和真实秘密配置文件，不修改 System properties 或进程环境变量。
@@ -119,9 +129,8 @@ class StorageDirectoryConfigurationTest {
         properties.put("spring.config.location", "classpath:/application.yml");
         properties.putAll(overrides);
         environment.getPropertySources().addFirst(new MapPropertySource("isolated-directory-configuration", properties));
-        ConfigurableEnvironment loaded = StorageMigrationTool.loadConfigurationEnvironment(environment);
-        assertSame(environment, loaded);
-        return loaded;
+        ConfigDataEnvironmentPostProcessor.applyTo(environment);
+        return environment;
     }
 
     private Path repository() throws IOException {

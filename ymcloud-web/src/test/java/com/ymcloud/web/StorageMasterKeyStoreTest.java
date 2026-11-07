@@ -9,6 +9,7 @@ import com.ymcloud.core.web.dao.StorageConfigEntityService;
 import com.ymcloud.pojo.entity.StorageConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -34,7 +35,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** 不安装对象存储即可初始化 OJ 主密钥；覆盖历史密钥保护与并发安全。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 验证主密钥初始化、已有密钥保护和多实例并发安全
+ */
 class StorageMasterKeyStoreTest {
 
     @TempDir
@@ -163,9 +168,16 @@ class StorageMasterKeyStoreTest {
         assertEquals("blocked", Files.readString(root.resolve(".secrets")));
     }
 
+    /**
+     * 向加密组件注入隔离的本地密钥库
+     *
+     * @param properties 本用例的存储配置
+     * @param configs 存储配置数据访问替身
+     * @return 使用临时目录的加密组件
+     */
     private StorageCredentialCipher cipher(StorageProperties properties, StorageConfigEntityService configs) {
         StorageCredentialCipher cipher = new StorageCredentialCipher(properties);
-        cipher.setKeyStore(new StorageMasterKeyStore(root.toString(), configs));
+        ReflectionTestUtils.setField(cipher, "keyStore", new StorageMasterKeyStore(root.toString(), configs));
         return cipher;
     }
 

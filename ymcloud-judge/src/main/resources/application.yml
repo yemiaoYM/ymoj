@@ -21,16 +21,6 @@ spring:
         # 最终结果等 broker 确认后才确认任务；未路由的消息会返回发布方。
         publisher-confirm-type: correlated
         publisher-returns: true
-        template:
-            mandatory: true
-        listener:
-            simple:
-                # 判题完成、结果持久化并确认发布后，由 Worker 手动 ACK。
-                acknowledge-mode: manual
-                # 每个消费者最多保留一条未确认任务；实际并发由下面 concurrency 控制。
-                prefetch: 1
-                # 失败任务走有限重试/死信，不在原队列无限重投。
-                default-requeue-rejected: false
     data:
         redis:
             # 保存执行租约和去重状态；与 Web 使用同一环境的 Redis database。
@@ -43,10 +33,10 @@ spring:
             timeout: 2s
 ymcloud:
     judge:
-        # 两个服务必须使用完全相同的队列名称；新版协议与旧内置判题队列隔离。
-        exchange: ${YMCLOUD_JUDGE_EXCHANGE:judge.worker-v2.topic}
-        task-queue: ${YMCLOUD_JUDGE_TASK_QUEUE:judge.worker-v2.queue}
-        result-queue: ${YMCLOUD_JUDGE_RESULT_QUEUE:judge.worker-v2.result.queue}
+        # Web 与 Worker 共用正式判题任务和结果队列
+        exchange: ${YMCLOUD_JUDGE_EXCHANGE:judge.worker.topic}
+        task-queue: ${YMCLOUD_JUDGE_TASK_QUEUE:judge.worker.queue}
+        result-queue: ${YMCLOUD_JUDGE_RESULT_QUEUE:judge.worker.result.queue}
         task-routing-key: judge
         result-routing-key: judge.result
     worker:
@@ -54,7 +44,7 @@ ymcloud:
         # Worker ID 默认随机；部署时可通过 YMCLOUD_WORKER_ID 指定固定实例名称。
         work-dir: ${YMCLOUD_JUDGE_WORK_DIR:./files/worker/work}
         journal-dir: ${YMCLOUD_JUDGE_RESULT_DIR:./files/worker/results}
-        redis-prefix: ${YMCLOUD_WORKER_REDIS_PREFIX:ymcloud:judge-worker-v2:}
+        redis-prefix: ${YMCLOUD_WORKER_REDIS_PREFIX:ymcloud:judge-worker:}
         # 同时处理的任务数，0 按当前 Worker 可用 CPU 加 1；管理员可独立指定正整数
         concurrency: ${YMCLOUD_WORKER_CONCURRENCY:0}
         # 单任务最多执行次数，超过次数由最终系统错误收敛。

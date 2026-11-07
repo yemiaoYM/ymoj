@@ -16,11 +16,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 契约归属调整不能改变传输内容；日志字符串须排除私有评测正文。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 判题消息使用确定字段与数字状态，诊断字符串排除私有评测正文
+ */
 class JudgeContractSerializationTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * 私有源码与结果仅进入业务消息，不进入诊断字符串
+     * @throws Exception JSON 序列化或解析失败
+     */
     @Test
     void privateContentRemainsInJsonButIsExcludedFromDiagnosticStrings() throws Exception {
         JudgeTask task = JudgeTask.builder()
@@ -30,6 +38,7 @@ class JudgeContractSerializationTest {
                 .expectedOutput("private-expected-sentinel\n")
                 .build();
         JsonNode taskJson = mapper.readTree(mapper.writeValueAsBytes(task));
+        assertFalse(taskJson.has("schemaVersion"));
         assertEquals(task.getCode(), taskJson.get("code").asText());
         assertEquals(task.getInput(), taskJson.get("input").asText());
         assertEquals(task.getExpectedOutput(), taskJson.get("expectedOutput").asText());
@@ -51,6 +60,7 @@ class JudgeContractSerializationTest {
                 .testCaseResults(List.of(testCase))
                 .build();
         JsonNode resultJson = mapper.readTree(mapper.writeValueAsBytes(result));
+        assertFalse(resultJson.has("schemaVersion"));
         assertEquals(3, resultJson.get("status").asInt());
         assertEquals(result.getErrorMessage(), resultJson.get("errorMessage").asText());
         assertEquals(testCase.getOutput(),
@@ -61,6 +71,10 @@ class JudgeContractSerializationTest {
         assertFalse(testCase.toString().contains("private-output-sentinel"));
     }
 
+    /**
+     * 使用业务状态码传输判定并拒绝未知状态
+     * @throws Exception JSON 序列化或解析失败
+     */
     @Test
     void verdictsUseExistingNumericProtocolAndRejectUnknownStatuses() throws Exception {
         assertEquals("0", mapper.writeValueAsString(JudgeVerdict.STATUS_ACCEPTED));

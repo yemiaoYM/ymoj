@@ -26,7 +26,6 @@ import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
 import com.ymcloud.pojo.contract.judge.JudgeLanguage;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.SpjProgram;
 import com.ymcloud.pojo.dto.JudgeDTO;
@@ -443,10 +442,10 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 查询本站启用的语言配置，正式提交和自测共用同一执行平台。
+     * 查询本站启用且 Worker 支持的语言，正式提交和自测共用固定执行入口
      * @param name 请求使用的语言名称
-     * @return 已启用的本站语言配置，执行参数由创建任务时继续校验
-     * @throws JudgeException 本站未启用该语言
+     * @return 已启用的本站语言配置
+     * @throws JudgeException 本站未启用或 Worker 不支持该语言
      */
     private Language requireLanguage(String name) {
         Language language = languages.lambdaQuery()
@@ -457,11 +456,14 @@ public class JudgeServiceImpl implements JudgeService {
         if (language == null) {
             throw new JudgeException("该题目不支持此编程语言");
         }
+        if (!SUPPORTED_LANGUAGES.contains(language.getName())) {
+            throw new JudgeException("编程语言不受支持，请联系管理员");
+        }
         return language;
     }
 
     /**
-     * 校验源码和语言后固定任务身份与总截止时间。
+     * 校验源码后固定任务身份、语言入口与总截止时间
      * @param executionId 本次新执行标识
      * @param language 已启用的本站语言
      * @param code 用户源码，非空且有容量上限
@@ -471,53 +473,16 @@ public class JudgeServiceImpl implements JudgeService {
         if (code == null || code.isBlank() || code.length() > MAX_CODE_LENGTH) {
             throw new JudgeException("代码为空或超过允许的大小");
         }
-        validateLanguage(language);
         Instant now = Instant.now();
         JudgeTask task = new JudgeTask();
-        task.setSchemaVersion(JudgeProtocol.SCHEMA_VERSION);
         task.setExecutionId(executionId);
         task.setSubmittedAtEpochMs(now.toEpochMilli());
         task.setDeadlineEpochMs(now.plus(properties.getTotalTimeout()).toEpochMilli());
         task.setCode(code);
-        task.setLanguageConfig(languageSnapshot(language));
-        return task;
-    }
-
-    /**
-     * 限制支持语言、固定文件名和编译类型，历史命令不参与实际执行。
-     * @param language 已启用的本站语言配置
-     */
-    private void validateLanguage(Language language) {
-        boolean supported = language.getName() != null
-                && SUPPORTED_LANGUAGES.contains(language.getName());
-        boolean compiled = Objects.equals(language.getType(), 0);
-        boolean interpreted = Objects.equals(language.getType(), 1);
-        if (!supported
-                || language.getFileName() == null || !language.getFileName().matches("[A-Za-z0-9_-]+\\.(java|c|cpp|py)")
-                || (!compiled && !interpreted)) {
-            throw new JudgeException("编程语言入口、文件名或类型无效，请联系管理员");
-        }
-        // image、env 和命令只保留在提交快照中，实际执行由 Worker 的固定语言入口决定。
-    }
-
-    /**
-     * 复制必要语言元数据到任务契约，不传持久实体。
-     * @param language 已验证的本站语言配置
-     * @return 不可随后续配置修改而改变的语言快照
-     */
-    private JudgeLanguage languageSnapshot(Language language) {
         JudgeLanguage snapshot = new JudgeLanguage();
         snapshot.setName(language.getName());
-        snapshot.setImage(language.getImage());
-        snapshot.setEnv(language.getEnv());
-        snapshot.setFileName(language.getFileName());
-        snapshot.setCompileCmd(language.getCompileCmd());
-        snapshot.setRunCmd(language.getRunCmd());
-        snapshot.setType(language.getType());
-        snapshot.setVersion(language.getVersion());
-        snapshot.setContentType(language.getContentType());
-        snapshot.setFileExtension(language.getFileExtension());
-        return snapshot;
+        task.setLanguageConfig(snapshot);
+        return task;
     }
 
     /**
@@ -526,10 +491,6 @@ public class JudgeServiceImpl implements JudgeService {
      * @param userId 提交所属用户编号，重评时仍为原作者
      */
     private void enqueue(JudgeTask task, Long userId) {
-        if (!Objects.equals(task.getMode(), JudgeConstants.ACM)
-                && !Objects.equals(task.getMode(), JudgeConstants.OI)) {
-            throw new JudgeException("提交计分模式配置无效");
-        }
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC).withNano(0);
         JudgeDispatch dispatch = new JudgeDispatch();
         dispatch.setExecutionId(task.getExecutionId());
@@ -598,7 +559,7 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 先检查归属再查状态缓存，缓存缺失从持久数据恢复。
+     * 先检查归属再查状态缓存，缓存缺失从持久数据恢复
      * @param submissionId 提交或自测 ID
      * @return 当前用户有权访问的判题状态
      */
@@ -611,7 +572,7 @@ public class JudgeServiceImpl implements JudgeService {
                 .eq(JudgeDispatch::getSubmissionId, submissionId)
                 .one();
         if (dispatch == null) {
-            return historicalStatus(submissionId);
+            return submissionStatus(submissionId);
         }
         if (Objects.equals(dispatch.getStrategy(), JudgeDispatchState.FORMAL)) {
             Judge submission = judges.getById(submissionId);
@@ -660,27 +621,27 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 读取任务箱拆分前的提交状态，同样验证查看权限。
-     * @param submissionId 历史正式提交 ID
-     * @return 允许当前用户查看的历史状态
+     * 从正式提交读取已持久化状态，支持人工改判后不再持有评测任务的记录
+     * @param submissionId 正式提交 ID
+     * @return 允许当前用户查看的提交状态
      */
-    private JudgeResultVO historicalStatus(Long submissionId) {
-        Judge historical = judges.lambdaQuery()
+    private JudgeResultVO submissionStatus(Long submissionId) {
+        Judge submission = judges.lambdaQuery()
                 .select(Judge::getUserId, Judge::getStatus, Judge::getTime, Judge::getMemory,
                         Judge::getErrorMessage, Judge::getProblemId, Judge::getContestId, Judge::getShare)
                 .eq(Judge::getId, submissionId)
                 .one();
-        if (historical == null) {
+        if (submission == null) {
             throw new JudgeException("评测记录不存在");
         }
-        if (!resourceAccess.canReadSubmissionCode(historical)) {
+        if (!resourceAccess.canReadSubmissionCode(submission)) {
             throw new JudgeException("无权查看该评测状态", HttpStatus.FORBIDDEN);
         }
         return JudgeResultVO.builder()
-                .status(historical.getStatus())
-                .time(historical.getTime())
-                .memory(historical.getMemory())
-                .errorMessage(historical.getErrorMessage())
+                .status(submission.getStatus())
+                .time(submission.getTime())
+                .memory(submission.getMemory())
+                .errorMessage(submission.getErrorMessage())
                 .build();
     }
 

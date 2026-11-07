@@ -13,22 +13,22 @@ import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
 
-/** AES-GCM 认证加密；配置名与字段名绑定密文，防止复制密文到另一配置。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: AES-GCM 存储凭据加密，将配置名和字段名绑定到密文
+ */
 @Component
 public class StorageCredentialCipher {
 
     private final StorageProperties properties;
     private final SecureRandom random = new SecureRandom();
+
+    @Autowired
     private StorageMasterKeyStore keyStore;
 
     public StorageCredentialCipher(StorageProperties properties) {
         this.properties = properties;
-    }
-
-    /** 窄测试上下文仍可显式提供主密钥，完整应用自动使用受限本地密钥库。 */
-    @Autowired(required = false)
-    public void setKeyStore(StorageMasterKeyStore keyStore) {
-        this.keyStore = keyStore;
     }
 
     public void requireKey() {
@@ -78,14 +78,17 @@ public class StorageCredentialCipher {
         return cipher;
     }
 
+    /**
+     * 优先读取显式主密钥，否则交由本地密钥库加载
+     *
+     * @param allowCreate 是否允许首次初始化本地主密钥
+     * @return 调用方负责清零的主密钥字节
+     */
     private byte[] key(boolean allowCreate) {
         try {
             String value = properties.getConfigEncryptionKey();
             if (value == null || value.isBlank()) {
-                if (keyStore != null) {
-                    return keyStore.load(allowCreate);
-                }
-                throw new IllegalArgumentException();
+                return keyStore.load(allowCreate);
             }
             byte[] bytes = Base64.getDecoder().decode(value);
             if (bytes.length != 32) {

@@ -6,6 +6,7 @@ import com.ymcloud.judge.exception.CompileException;
 import com.ymcloud.judge.gojudge.GoJudgeExecutor;
 import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
 import com.ymcloud.judge.listeners.SpjCompileListener;
+import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.SpjCompileRequest;
 import com.ymcloud.pojo.contract.judge.SpjCompileResult;
@@ -28,6 +29,42 @@ import static org.mockito.Mockito.*;
  * @Description: SPJ 预编译消息入口、诊断隔离与沙箱会话释放验证
  */
 class SpjCompileListenerTest {
+
+    /**
+     * 允许生产端时钟在既有容差内领先，超出容差的请求不能取得沙箱会话
+     * @throws Exception 消息序列化或模拟编译失败
+     */
+    @Test
+    void acceptsClockSkewWithoutExtendingExecutionDeadline() throws Exception {
+        ObjectMapper mapper = new WorkerAmqpConfig().workerObjectMapper();
+        GoJudgeExecutor executor = mock(GoJudgeExecutor.class);
+        GoJudgeTaskSession session = mock(GoJudgeTaskSession.class);
+        SpjCompileListener listener = new SpjCompileListener();
+        ReflectionTestUtils.setField(listener, "mapper", mapper);
+        ReflectionTestUtils.setField(listener, "executor", executor);
+        when(executor.openTask(any(JudgeTask.class))).thenReturn(session);
+        SpjProgram program = new SpjProgram();
+        program.setLanguage("C++");
+        program.setCode("#include \"testlib.h\"");
+        program.setDigest(program.sourceDigest());
+        String requestId = UUID.randomUUID().toString();
+        long deadline = System.currentTimeMillis() + SpjProgram.COMPILE_TIMEOUT_MILLIS
+                + JudgeProtocol.MAX_CLOCK_SKEW_MILLIS / 2;
+        Message request = new Message(mapper.writeValueAsBytes(new SpjCompileRequest(requestId, deadline, program)));
+
+        SpjCompileResult result = mapper.readValue(listener.compile(request).getBody(), SpjCompileResult.class);
+
+        assertTrue(result.success());
+        verify(executor).openTask(argThat(task -> task.getDeadlineEpochMs() == deadline));
+        verify(session).close();
+        long invalidDeadline = System.currentTimeMillis() + SpjProgram.COMPILE_TIMEOUT_MILLIS
+                + JudgeProtocol.MAX_CLOCK_SKEW_MILLIS + 5000;
+        Message invalid = new Message(mapper.writeValueAsBytes(new SpjCompileRequest(requestId, invalidDeadline, program)));
+
+        assertThrows(AmqpRejectAndDontRequeueException.class, () -> listener.compile(invalid));
+        verify(executor, times(1)).openTask(any(JudgeTask.class));
+        verify(executor, times(1)).compileSpj(session, program);
+    }
 
     /**
      * 合法请求返回同一身份，编译或基础设施失败均关闭会话且不暴露基础设施诊断

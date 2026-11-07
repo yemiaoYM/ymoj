@@ -19,7 +19,7 @@ public class WorkerProperties {
     private String id = "worker-" + UUID.randomUUID();
     private Path workDir = Path.of("./files/worker/work");
     private Path journalDir = Path.of("./files/worker/results");
-    private String redisPrefix = "ymcloud:judge-worker-v2:";
+    private String redisPrefix = "ymcloud:judge-worker:";
 
     /**
      * 0 表示自动使用当前 Worker JVM 可用 CPU 数加 1

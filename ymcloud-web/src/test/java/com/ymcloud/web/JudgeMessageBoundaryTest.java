@@ -1,5 +1,6 @@
 package com.ymcloud.web;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
@@ -32,7 +33,7 @@ import static org.mockito.Mockito.*;
 class JudgeMessageBoundaryTest {
 
     /**
-     * 严格拒绝任务身份、结果状态和布尔值的隐式转换，且不改变全局映射器。
+     * 严格拒绝任务身份、结果状态和布尔值的隐式转换，且不改变全局映射器
      * @throws Exception 全局映射器校验失败
      */
     @Test
@@ -41,11 +42,27 @@ class JudgeMessageBoundaryTest {
         JudgeMessageCodec codec = new JudgeMessageCodec(applicationMapper);
         assertThrows(IllegalArgumentException.class, () -> codec.task("{\"submissionId\":1.9}"));
         assertThrows(IllegalArgumentException.class, () -> codec.task("{\"submissionId\":\"1\"}"));
-        assertThrows(IllegalArgumentException.class, () -> codec.task("{\"schemaVersion\":null}"));
+        assertThrows(IllegalArgumentException.class, () -> codec.result("{\"terminal\":null}"));
         assertThrows(IllegalArgumentException.class, () -> codec.result("{\"status\":0.9}"));
         assertThrows(IllegalArgumentException.class, () -> codec.result("{\"status\":\"0\"}"));
         assertThrows(IllegalArgumentException.class, () -> codec.result("{\"terminal\":\"true\"}"));
         assertEquals(1L, applicationMapper.readValue("{\"submissionId\":\"1\"}", JudgeTask.class).getSubmissionId());
+    }
+
+    /**
+     * 全局 HTTP 忽略未知字段时，判题消息仍拒绝非契约字段且不修改全局配置
+     * @throws Exception 全局映射器解析失败
+     */
+    @Test
+    void unknownFieldsAreRejectedRegardlessOfHttpMapperConfiguration() throws Exception {
+        ObjectMapper applicationMapper = new ObjectMapper()
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        JudgeMessageCodec codec = new JudgeMessageCodec(applicationMapper);
+        String task = "{\"submissionId\":1,\"unexpected\":true}";
+        assertThrows(IllegalArgumentException.class, () -> codec.task(task));
+        assertThrows(IllegalArgumentException.class, () -> codec.result("{\"unexpected\":true}"));
+        assertThrows(IllegalArgumentException.class, () -> codec.spjResult("{\"unexpected\":true}"));
+        assertEquals(1L, applicationMapper.readValue(task, JudgeTask.class).getSubmissionId());
     }
 
     /**

@@ -19,6 +19,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- 定位 Markdown 图片，保留公式、代码和其他原文 -->
         <dependency>
             <groupId>org.commonmark</groupId>

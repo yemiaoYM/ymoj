@@ -9,16 +9,15 @@ import lombok.ToString;
 import java.util.List;
 
 /**
- * 带执行标识的进度或最终结果。sequence 为 1 编译、2 运行、3 最终，资源单位与任务一致。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-12
+ * @Description: 带执行标识的编译、运行进度或最终结果，资源单位与任务一致
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class JudgeResult {
-
-    @Builder.Default
-    private int schemaVersion = JudgeProtocol.SCHEMA_VERSION;
 
     private String executionId;
     private Long submissionId;

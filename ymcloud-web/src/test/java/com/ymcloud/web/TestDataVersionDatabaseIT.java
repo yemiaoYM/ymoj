@@ -2,7 +2,6 @@ package com.ymcloud.web;
 
 import com.alibaba.druid.pool.DruidDataSource;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.config.GlobalConfig;
 import com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
@@ -40,7 +39,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.EncodedResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -65,14 +63,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -84,8 +80,9 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 显式启用的真实事务测试，复用项目现有数据库服务，在唯一临时库或前缀测试表内执行。
- * 配置凭据只在内存读取；绝不修改项目原数据库的业务表。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 在本机独立临时数据库中验证测试数据发布、事务回滚和文件迁移
  */
 @EnabledIfEnvironmentVariable(named = "YMCLOUD_STORAGE_DB_IT", matches = "true")
 class TestDataVersionDatabaseIT {
@@ -106,45 +103,27 @@ class TestDataVersionDatabaseIT {
     static DatabaseCredentials credentials;
     static String temporarySchema;
     static boolean temporarySchemaCreated;
-    static String tablePrefix;
-    static String sourceCatalog;
-    static boolean disposableTablesAttempted;
     Long problemId;
 
+    /**
+     * 创建独立测试库并装配真实事务服务；没有建库权限时直接失败
+     *
+     * @throws Exception 配置读取或数据库初始化失败
+     */
     @BeforeAll
     static void openDatabase() throws Exception {
         credentials = readCredentials();
         adminDataSource = dataSource(credentials.url(), credentials);
         JdbcTemplate administration = new JdbcTemplate(adminDataSource);
         assertEquals(1, administration.queryForObject("SELECT 1", Integer.class));
-        sourceCatalog = administration.queryForObject("SELECT DATABASE()", String.class);
         temporarySchema = "ymcloud_storage_test_" + UUID.randomUUID().toString().replace("-", "");
         verifyTemporarySchema();
-        try {
-            administration.execute("CREATE DATABASE `" + temporarySchema + "` CHARACTER SET utf8mb4");
-            temporarySchemaCreated = true;
-        } catch (RuntimeException e) {
-            Throwable cause = e;
-            while (cause.getCause() != null && !(cause instanceof SQLException)) {
-                cause = cause.getCause();
-            }
-            if (cause instanceof SQLException sqlException
-                    && (sqlException.getErrorCode() == 1044 || sqlException.getErrorCode() == 1045
-                    || sqlException.getErrorCode() == 1142 || sqlException.getErrorCode() == 1227)) {
-                String reason = "原数据库只读连接成功，创建临时库权限不足，改用唯一前缀测试表：SQLState="
-                        + sqlException.getSQLState() + "，错误码=" + sqlException.getErrorCode();
-                System.out.println(reason);
-                tablePrefix = "ymcloud_storage_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16) + "_";
-                verifyTablePrefix();
-            } else {
-                throw e;
-            }
-        }
-        preparedDataSource = pooledDataSource(testUrl(), credentials);
-        disposableTablesAttempted = true;
+        administration.execute("CREATE DATABASE `" + temporarySchema + "` CHARACTER SET utf8mb4");
+        temporarySchemaCreated = true;
+        preparedDataSource = pooledDataSource(temporaryUrl(), credentials);
         try (Connection connection = preparedDataSource.getConnection()) {
-            assertEquals(temporarySchemaCreated ? temporarySchema : sourceCatalog, connection.getCatalog());
-            String schema = InitializationSqlTestSupport.storageSchema(temporarySchemaCreated ? "" : tablePrefix);
+            assertEquals(temporarySchema, connection.getCatalog());
+            String schema = InitializationSqlTestSupport.storageSchema();
             ScriptUtils.executeSqlScript(connection, new EncodedResource(new ByteArrayResource(
                     schema.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
         }
@@ -161,11 +140,10 @@ class TestDataVersionDatabaseIT {
         storage = context.getBean(StorageRegistry.class);
         fileStorage = context.getBean(StoredFileService.class);
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
-        assertEquals(temporarySchemaCreated ? temporarySchema : sourceCatalog,
-                jdbc.queryForObject("SELECT DATABASE()", String.class));
+        assertEquals(temporarySchema, jdbc.queryForObject("SELECT DATABASE()", String.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema=DATABASE() AND table_name=? AND column_name='test_data_version_id'",
-                Integer.class, tableName("problem")));
+                Integer.class, "problem"));
     }
 
     @BeforeEach
@@ -204,38 +182,53 @@ class TestDataVersionDatabaseIT {
         }
     }
 
+    /**
+     * 关闭连接并删除本次创建的独立数据库
+     */
     @AfterAll
     static void closeDatabase() {
-        if (context != null) {
-            context.close();
-        }
-        if (temporarySchemaCreated) {
-            verifyTemporarySchema();
-            new JdbcTemplate(adminDataSource).execute("DROP DATABASE `" + temporarySchema + "`");
-        } else if (disposableTablesAttempted) {
-            verifyTablePrefix();
-            JdbcTemplate cleanup = new JdbcTemplate(adminDataSource);
-            cleanup.execute("DROP TRIGGER IF EXISTS `" + helperName("reject_version") + "`");
-            for (String name : List.of("judge", "test_data_version", "file", "problem")) {
-                cleanup.execute("DROP TABLE IF EXISTS `" + tableName(name) + "`");
+        try {
+            if (context != null) {
+                context.close();
             }
+        } finally {
+            if (preparedDataSource != null) {
+                preparedDataSource.close();
+            }
+            if (temporarySchemaCreated) {
+                verifyTemporarySchema();
+                new JdbcTemplate(adminDataSource).execute("DROP DATABASE `" + temporarySchema + "`");
+            }
+            TableInfoHelper.remove(File.class);
+            TableInfoHelper.remove(Problem.class);
+            TableInfoHelper.remove(TestDataVersion.class);
         }
-        if (preparedDataSource != null) {
-            preparedDataSource.close();
-        }
-        TableInfoHelper.remove(File.class);
-        TableInfoHelper.remove(Problem.class);
-        TableInfoHelper.remove(TestDataVersion.class);
     }
 
+    /**
+     * 确认实体映射使用独立数据库中的正式表名
+     */
     private static void assertIsolatedTables() {
-        assertEquals(tableName("file"), TableInfoHelper.getTableInfo(File.class).getTableName());
-        assertEquals(tableName("problem"), TableInfoHelper.getTableInfo(Problem.class).getTableName());
-        assertEquals(tableName("test_data_version"), TableInfoHelper.getTableInfo(TestDataVersion.class).getTableName());
+        assertEquals("file", TableInfoHelper.getTableInfo(File.class).getTableName());
+        assertEquals("problem", TableInfoHelper.getTableInfo(Problem.class).getTableName());
+        assertEquals("test_data_version", TableInfoHelper.getTableInfo(TestDataVersion.class).getTableName());
     }
 
+    /**
+     * 从开发配置读取本机数据库凭据，禁止访问远程数据库
+     *
+     * @return 本机数据库连接信息
+     * @throws Exception 配置不存在或无法读取
+     */
     private static DatabaseCredentials readCredentials() throws Exception {
-        try (InputStream input = new ClassPathResource("application-dev.yml").getInputStream()) {
+        Path root = Path.of("").toAbsolutePath();
+        while (root != null && !Files.isRegularFile(root.resolve("sql/ymcloud.sql"))) {
+            root = root.getParent();
+        }
+        if (root == null) {
+            throw new IllegalStateException("无法定位项目开发配置");
+        }
+        try (InputStream input = Files.newInputStream(root.resolve("ymcloud-web/src/main/resources/application-dev.yml"))) {
             Map<?, ?> configuration = new Yaml().load(input);
             Map<?, ?> spring = (Map<?, ?>) configuration.get("spring");
             Map<?, ?> datasource = (Map<?, ?>) spring.get("datasource");
@@ -246,8 +239,9 @@ class TestDataVersionDatabaseIT {
                 throw new IllegalArgumentException("现有数据库配置不完整，禁止推断其他数据库凭据");
             }
             URI endpoint = URI.create(url.substring(5));
-            if (endpoint.getHost() == null || endpoint.getUserInfo() != null || endpoint.getFragment() != null) {
-                throw new IllegalArgumentException("现有数据库URL无法安全解析");
+            if (!("127.0.0.1".equals(endpoint.getHost()) || "localhost".equals(endpoint.getHost()))
+                    || endpoint.getUserInfo() != null || endpoint.getFragment() != null) {
+                throw new IllegalArgumentException("集成测试只允许使用本机 MySQL");
             }
             return new DatabaseCredentials(url, username, password);
         }
@@ -291,42 +285,6 @@ class TestDataVersionDatabaseIT {
                 + (query == null ? "" : "?" + query);
     }
 
-    private static String testUrl() {
-        if (temporarySchemaCreated) {
-            return temporaryUrl();
-        }
-        verifyTablePrefix();
-        return credentials.url();
-    }
-
-    private static void verifyTablePrefix() {
-        if (tablePrefix == null || !tablePrefix.matches("ymcloud_storage_it_[0-9a-f]{16}_")) {
-            throw new IllegalStateException("测试表前缀未通过安全校验");
-        }
-    }
-
-    private static String tableName(String name) {
-        if (!Set.of("file", "problem", "judge", "test_data_version").contains(name)) {
-            throw new IllegalArgumentException("未授权的测试表名");
-        }
-        if (temporarySchemaCreated) {
-            return name;
-        }
-        verifyTablePrefix();
-        return tablePrefix + name;
-    }
-
-    private static String helperName(String name) {
-        if (!"reject_version".equals(name)) {
-            throw new IllegalArgumentException("未授权的测试辅助对象名");
-        }
-        if (temporarySchemaCreated) {
-            return "ymcloud_storage_it_" + name;
-        }
-        verifyTablePrefix();
-        return tablePrefix + name;
-    }
-
     private static void verifyTemporarySchema() {
         if (temporarySchema == null || !temporarySchema.matches("ymcloud_storage_test_[0-9a-f]{32}")) {
             throw new IllegalStateException("临时测试库名未通过安全校验");
@@ -368,8 +326,7 @@ class TestDataVersionDatabaseIT {
         testData.upload(problemId, pair("a", "input", "output"));
         Long originalVersion = testData.getCurrentVersion(problemId);
         long originalObjects = storedObjectCount();
-        jdbc.execute("CREATE TRIGGER `" + helperName("reject_version") + "` BEFORE INSERT ON `"
-                + tableName("test_data_version") + "` "
+        jdbc.execute("CREATE TRIGGER reject_version BEFORE INSERT ON test_data_version "
                 + "FOR EACH ROW BEGIN IF NEW.problem_id = " + problemId
                 + " THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='storage-it publication failure'; END IF; END");
         try {
@@ -380,7 +337,7 @@ class TestDataVersionDatabaseIT {
             assertEquals(originalObjects, storedObjectCount());
             assertEquals("input", read(originalVersion, "/in/a.in"));
         } finally {
-            jdbc.execute("DROP TRIGGER `" + helperName("reject_version") + "`");
+            jdbc.execute("DROP TRIGGER reject_version");
         }
     }
 
@@ -496,8 +453,7 @@ class TestDataVersionDatabaseIT {
             testData.upload(problemId, pair("a", "  actual s3 input\n", "s3-output"));
             Long originalVersion = testData.getCurrentVersion(problemId);
             long originalObjects = objectCount(observer, profile.getPrivateBucket());
-            jdbc.execute("CREATE TRIGGER `" + helperName("reject_version") + "` BEFORE INSERT ON `"
-                    + tableName("test_data_version") + "` "
+            jdbc.execute("CREATE TRIGGER reject_version BEFORE INSERT ON test_data_version "
                     + "FOR EACH ROW BEGIN IF NEW.problem_id = " + problemId
                     + " THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='storage-it publication failure'; END IF; END");
             triggerCreated = true;
@@ -509,7 +465,7 @@ class TestDataVersionDatabaseIT {
             assertEquals("  actual s3 input\n", read(originalVersion, "/in/a.in"));
         } finally {
             if (triggerCreated) {
-                jdbc.execute("DROP TRIGGER `" + helperName("reject_version") + "`");
+                jdbc.execute("DROP TRIGGER reject_version");
             }
             properties.setActive("local");
         }
@@ -611,23 +567,21 @@ class TestDataVersionDatabaseIT {
             return preparedDataSource;
         }
 
+        /**
+         * 使用真实实体映射访问独立测试库
+         *
+         * @param dataSource 测试库数据源
+         * @return MyBatis 会话工厂
+         * @throws Exception 会话工厂初始化失败
+         */
         @Bean
         SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
             MybatisConfiguration configuration = new MybatisConfiguration();
             configuration.setMapUnderscoreToCamelCase(true);
             configuration.setDefaultEnumTypeHandler(MybatisEnumTypeHandler.class);
-            GlobalConfig globalConfig = new GlobalConfig();
-            GlobalConfig.DbConfig databaseConfiguration = new GlobalConfig.DbConfig();
-            databaseConfiguration.setTableUnderline(true);
-            if (!temporarySchemaCreated) {
-                verifyTablePrefix();
-                databaseConfiguration.setTablePrefix(tablePrefix);
-            }
-            globalConfig.setDbConfig(databaseConfiguration);
             MybatisSqlSessionFactoryBean factory = new MybatisSqlSessionFactoryBean();
             factory.setDataSource(dataSource);
             factory.setConfiguration(configuration);
-            factory.setGlobalConfig(globalConfig);
             return factory.getObject();
         }
 

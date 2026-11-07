@@ -22,7 +22,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-12
- * @Description: Web 与 Worker 使用相同的版本化拓扑，发布不再依赖 RabbitMQ 延迟交换机插件。
+ * @Description: 声明 Web 与 Worker 共用的判题拓扑、消息模板及结果消费重试
  */
 @Slf4j
 @Configuration
@@ -146,7 +146,7 @@ public class JudgeMessagingConfig {
     }
 
     /**
-     * 创建正式判题、SPJ 编译与通用发送共用的消息模板
+     * 创建正式判题与 SPJ 编译共用的消息模板
      * 回复超时仅用于请求响应，正式任务的发布确认由发布器单独控制
      * @param connectionFactory 消息连接工厂
      * @return 不使用 Java 类型头反序列化的模板
@@ -177,7 +177,7 @@ public class JudgeMessagingConfig {
                 .backOffOptions(1000, 2, 3000)
                 .recoverer((message, cause) -> {
                     log.warn("判题结果处理重试耗尽，等待任务箱恢复，不记录结果正文");
-                    // 原始异常可能包含 SQL 参数或私有输出，框架日志只保留安全的错误说明。
+                    // 原始异常可能包含 SQL 参数或私有输出，框架日志只保留安全的错误说明
                     throw new AmqpRejectAndDontRequeueException("判题结果处理失败");
                 })
                 .build());
