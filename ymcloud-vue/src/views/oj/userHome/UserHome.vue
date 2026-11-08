@@ -119,7 +119,7 @@
 //import
 import { ref, watch, defineAsyncComponent } from 'vue';
 const Avatar = defineAsyncComponent(() => import('@/components/common/Avatar.vue'));
-const MarkdownPreview = defineAsyncComponent(() => import('@/components/common/MarkdownPreview.vue'));
+const MarkdownPreview = defineAsyncComponent(() => import('@/components/common/markdown/MarkdownPreview.vue'));
 const CalendarHeatMap = defineAsyncComponent(() => import('@/components/common/CalendarHeatMap.vue'));
 import type { UserInfoVO } from '@/type/types';
 import { useRouter, useRoute } from 'vue-router';

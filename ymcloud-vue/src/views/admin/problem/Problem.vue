@@ -261,7 +261,7 @@ import { isDraftRecord, useLocalDraft } from "@/hooks/useLocalDraft";
 import { useAsyncChange } from "@/hooks/useAsyncChange";
 import { useRemoteProblemStore } from "@/stores/remoteProblem";
 const MarkdownEidt = defineAsyncComponent(
-  () => import("@/components/common/MarkdownEidt.vue")
+  () => import("@/components/common/markdown/MarkdownEidt.vue")
 );
 const SpjEditor = defineAsyncComponent(() => import('@/components/admin/SpjEditor.vue'));
 

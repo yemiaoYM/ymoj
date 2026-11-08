@@ -234,7 +234,7 @@ import type { ContestVO } from "@/type/types";
 import { formatContestMode, formatContestStyle } from "@/utils/utils";
 import { getContestInfo, registerContest } from "@/api/api";
 const MarkdownPreview = defineAsyncComponent(
-  () => import("@/components/common/MarkdownPreview.vue")
+  () => import("@/components/common/markdown/MarkdownPreview.vue")
 );
 
 //data

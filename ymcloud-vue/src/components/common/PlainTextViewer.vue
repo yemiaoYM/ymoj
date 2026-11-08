@@ -39,8 +39,8 @@
 </template>
 
 <script setup lang="ts">
-import type {CSSProperties} from 'vue';
-import {computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch} from 'vue';
+import type { CSSProperties } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 
 interface PlainTextViewerProps {
   content?: string;
@@ -94,7 +94,9 @@ const textModel = computed(() => {
     if (code === 10 || code === 13) {
       maxColumns = Math.max(maxColumns, columns);
       columns = 0;
-      if (code === 13 && props.content.charCodeAt(index + 1) === 10) index++;
+      if (code === 13 && props.content.charCodeAt(index + 1) === 10) {
+        index++;
+      }
       lineStarts.push(index + 1);
       continue;
     }
@@ -105,7 +107,9 @@ const textModel = computed(() => {
       canVirtualizeColumns = false;
     } else {
       columns += code > 127 ? 2 : 1;
-      if (code > 127) canVirtualizeColumns = false;
+      if (code > 127) {
+        canVirtualizeColumns = false;
+      }
     }
   }
 
@@ -117,12 +121,17 @@ const textModel = computed(() => {
   };
 });
 
-const normalizedTabSize = computed(() => Number.isFinite(props.tabSize)
-  ? Math.min(16, Math.max(1, Math.round(props.tabSize)))
-  : 4);
+const normalizedTabSize = computed(() =>
+  Number.isFinite(props.tabSize)
+    ? Math.min(16, Math.max(1, Math.round(props.tabSize)))
+    : 4
+);
 
 const visibleLines = computed(() => {
-  const first = Math.floor(Math.max(0, scrollTop.value - PADDING_Y) / lineHeight.value);
+  const first = Math.min(
+    textModel.value.lineCount - 1,
+    Math.floor(Math.max(0, scrollTop.value - PADDING_Y) / lineHeight.value)
+  );
   const start = Math.max(0, first - OVERSCAN_LINES);
   const count = Math.ceil(viewportHeight.value / lineHeight.value) + OVERSCAN_LINES * 2;
   return { start, end: Math.min(textModel.value.lineCount, start + Math.max(1, count)) };
@@ -184,25 +193,35 @@ const spacerStyle = computed<CSSProperties>(() => ({
   height: `${PADDING_Y * 2 + textModel.value.lineCount * lineHeight.value}px`
 }));
 
-const accessibleDescription = computed(() => props.content
-  ? `共 ${textModel.value.lineCount} 行`
-  : `共 1 行，${props.emptyText || '内容为空'}`);
+const accessibleDescription = computed(() =>
+  props.content
+    ? `共 ${textModel.value.lineCount} 行`
+    : `共 1 行，${props.emptyText || '内容为空'}`
+);
 
 const updateMetrics = () => {
   const scroller = scrollerRef.value;
   const measure = measureRef.value;
-  if (!scroller || !measure) return;
+  if (!scroller || !measure) {
+    return;
+  }
   const style = window.getComputedStyle(measure);
   const measuredLineHeight = Number.parseFloat(style.lineHeight);
   const measuredCharacterWidth = measure.getBoundingClientRect().width / 10;
-  if (Number.isFinite(measuredLineHeight)) lineHeight.value = measuredLineHeight;
-  if (Number.isFinite(measuredCharacterWidth) && measuredCharacterWidth > 0) characterWidth.value = measuredCharacterWidth;
+  if (Number.isFinite(measuredLineHeight) && measuredLineHeight > 0) {
+    lineHeight.value = measuredLineHeight;
+  }
+  if (Number.isFinite(measuredCharacterWidth) && measuredCharacterWidth > 0) {
+    characterWidth.value = measuredCharacterWidth;
+  }
   viewportWidth.value = scroller.clientWidth;
   viewportHeight.value = scroller.clientHeight;
 };
 
 const handleScroll = () => {
-  if (scrollFrame !== undefined) return;
+  if (scrollFrame !== undefined) {
+    return;
+  }
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = undefined;
     scrollTop.value = scrollerRef.value?.scrollTop || 0;
@@ -214,7 +233,9 @@ const focus = (options?: FocusOptions) => scrollerRef.value?.focus(options);
 const scrollToTop = (behavior: ScrollBehavior = 'auto') => scrollerRef.value?.scrollTo({ top: 0, left: 0, behavior });
 const scrollToLine = (line: number, options: ScrollToLineOptions = {}) => {
   const scroller = scrollerRef.value;
-  if (!scroller || !Number.isFinite(line)) return;
+  if (!scroller || !Number.isFinite(line)) {
+    return;
+  }
   const target = Math.min(textModel.value.lineCount, Math.max(1, Math.trunc(line)));
   const block = options.block || 'start';
   const offset = block === 'center'
@@ -226,7 +247,12 @@ const scrollToLine = (line: number, options: ScrollToLineOptions = {}) => {
   });
 };
 
-watch(() => props.content, () => nextTick(updateMetrics));
+watch(() => props.content, () => {
+  scrollTop.value = 0;
+  scrollLeft.value = 0;
+  scrollToTop();
+  updateMetrics();
+}, { flush: 'post' });
 onMounted(() => {
   updateMetrics();
   if (typeof ResizeObserver !== 'undefined' && rootRef.value) {
@@ -236,7 +262,9 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
-  if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+  if (scrollFrame !== undefined) {
+    cancelAnimationFrame(scrollFrame);
+  }
 });
 
 defineExpose({ focus, scrollToTop, scrollToLine });

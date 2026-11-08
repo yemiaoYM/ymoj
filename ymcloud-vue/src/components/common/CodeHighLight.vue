@@ -1,40 +1,83 @@
 <template>
   <div class="code-highlight">
+    <el-button class="copy-button" type="primary" :icon="DocumentCopy" @click="onCopy">
+      复制
+    </el-button>
+
     <PlainTextViewer
       v-if="largeCode"
       class="large-code"
-      aria-label="源代码（大文本模式）"
       empty-text=""
       :content="source"
     />
-    <el-scrollbar v-else max-height="600px" tabindex="0" role="region" aria-label="源代码">
-      <pre class="line-numbers" aria-hidden="true">{{ lineNumbers }}</pre>
-      <pre><code v-if="highlighted !== null" v-html="highlighted"></code><code v-else>{{ source }}</code></pre>
+
+    <el-scrollbar v-else max-height="800px">
+      <pre class="line-numbers">{{ lineNumbers }}</pre>
+      <pre v-if="highlighted !== null"><code v-html="highlighted"></code></pre>
+      <pre v-else><code>{{ source }}</code></pre>
     </el-scrollbar>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue';
+import { ElMessage } from 'element-plus';
+import { DocumentCopy } from '@element-plus/icons-vue';
+import useClipboard from 'vue-clipboard3';
 import { highlightCode } from '@/utils/codeHighlight';
 
-const PlainTextViewer = defineAsyncComponent(() => import('./PlainTextViewer.vue'));
-const props = withDefaults(defineProps<{ code: string; language?: string }>(), {
-  language: 'C'
+const PlainTextViewer = defineAsyncComponent(
+  () => import('./PlainTextViewer.vue')
+);
+
+const { toClipboard } = useClipboard();
+
+const props = withDefaults(
+  defineProps<{
+    code: string;
+    language?: string;
+  }>(),
+  {
+    language: 'C'
+  }
+);
+
+// 保留源代码缩进和首尾空行，仅统一换行符
+const source = computed(() => props.code.replace(/\r\n?/g, '\n'));
+
+const lineCount = computed(
+  () => (source.value.match(/\n/g)?.length ?? 0) + 1
+);
+
+// 超大源码使用虚拟查看器，避免大量 DOM 节点和同步高亮
+const largeCode = computed(
+  () => source.value.length > 100_000 || lineCount.value > 2_000
+);
+
+const lineNumbers = computed(() =>
+  Array.from({ length: lineCount.value }, (_, index) => index + 1).join('\n')
+);
+
+const highlighted = computed(() => {
+  if (largeCode.value) {
+    return null;
+  }
+  return highlightCode(source.value, props.language);
 });
 
-// 仅统一换行，不 trim，保留缩进、首尾空行和源码内容。
-const source = computed(() => props.code.replace(/\r\n?/g, '\n'));
-const lineCount = computed(() => (source.value.match(/\n/g)?.length ?? 0) + 1);
-// 超大源码使用现有虚拟查看器，避免同步高亮和成千上万的 token 节点。
-const largeCode = computed(() => source.value.length > 100_000 || lineCount.value > 2_000);
-const lineNumbers = computed(() => Array.from({ length: lineCount.value }, (_, index) => index + 1).join('\n'));
-// v-html 仅接收高亮器转义后的 HTML；未知语言通过插值显示原文。
-const highlighted = computed(() => largeCode.value ? null : highlightCode(source.value, props.language));
+const onCopy = async () => {
+  try {
+    await toClipboard(props.code);
+    ElMessage.success('复制成功');
+  } catch {
+    ElMessage.warning('复制失败，请手动复制');
+  }
+};
 </script>
 
 <style scoped>
 .code-highlight {
+  position: relative;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -45,18 +88,56 @@ const highlighted = computed(() => largeCode.value ? null : highlightCode(source
   background: var(--ym-code-surface);
 }
 
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 2;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  box-shadow: var(--el-box-shadow-light);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.code-highlight:hover .copy-button,
+.code-highlight:focus-within .copy-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+@media (hover: none) {
+  .copy-button {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+}
+
 .code-highlight :deep(.el-scrollbar__view) {
   display: flex;
   width: max-content;
   min-width: 100%;
+  min-height: 52px;
 }
 
 pre {
   margin: 0;
-  padding: 8px 12px;
-  font: 14px / 1.7 Consolas, 'SFMono-Regular', 'Liberation Mono', monospace;
+  padding: 4px 16px;
+  font-size: 16px;
+  line-height: 26px !important;
   tab-size: 4;
   white-space: pre;
+  font-family:
+    Consolas,
+    "SFMono-Regular",
+    Menlo,
+    "Liberation Mono",
+    monospace;
 }
 
 code {

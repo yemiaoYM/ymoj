@@ -81,7 +81,7 @@ import { updateUserProfile } from '@/api/api';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { ElMessage, ElNotification } from 'element-plus';
 const Avatar=defineAsyncComponent(() => import('@/components/common/Avatar.vue'));
-const MarkdownEidt=defineAsyncComponent(() => import('@/components/common/MarkdownEidt.vue'));
+const MarkdownEidt=defineAsyncComponent(() => import('@/components/common/markdown/MarkdownEidt.vue'));
 
 //data
 const userStore=useUserStore();

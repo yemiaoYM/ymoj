@@ -98,7 +98,7 @@ import {
   ListOrdered, Pencil, Strikethrough, Subscript, Superscript, Underline
 } from '@lucide/vue';
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
-import MarkdownToolbarMenu from '@/components/common/MarkdownToolbarMenu.vue';
+import MarkdownToolbarMenu from '@/components/common/markdown/MarkdownToolbarMenu.vue';
 import { createMarkdownSanitizer } from '@/utils/markdown';
 import { uploadMarkdownImage } from '@/api/markdown';
 import { ElMessage } from 'element-plus';

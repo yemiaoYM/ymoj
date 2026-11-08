@@ -202,7 +202,7 @@ import Storage from '@/utils/storage';
 import { getProblemDetail,getProblemSubmissionList,getContestProblemInfo,getContestProblemSubmissionList } from '@/api/api';
 import { getStatusType,formatSubmissionMemory,formatSubmissionTime,formatRelativeTime } from '@/utils/utils';
 import useClipboard from 'vue-clipboard3';
-const MarkdownPreview = defineAsyncComponent(() => import('@/components/common/MarkdownPreview.vue'));
+const MarkdownPreview = defineAsyncComponent(() => import('@/components/common/markdown/MarkdownPreview.vue'));
 const CodeMirror = defineAsyncComponent(() => import('@/components/common/Codemirror.vue'));
 
 

@@ -176,7 +176,7 @@ import { addAdminContest, updateAdminContest, getAdminContestById } from "@/api/
 
 //异步导入markdown
 const MarkdownEidt = defineAsyncComponent(
-  () => import("@/components/common/MarkdownEidt.vue")
+  () => import("@/components/common/markdown/MarkdownEidt.vue")
 );
 
 //data

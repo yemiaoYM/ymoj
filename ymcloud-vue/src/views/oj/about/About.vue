@@ -153,7 +153,12 @@ const initLanguages = () => {
   background: var(--ym-table-header);
   border: 1px dashed var(--ym-code-border);
   color: var(--ym-content-text);
-  font-family: Consolas;
+  font-family:
+    Consolas,
+    "SFMono-Regular",
+    Menlo,
+    "Liberation Mono",
+    monospace;
 }
 
 ul {
