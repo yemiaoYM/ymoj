@@ -579,12 +579,13 @@ print(json.dumps(records))
         self.check("Seed administrator can log in through the frontend reverse proxy")
 
     def create_fixture(self):
-        payload = {"title": "Deployment smoke " + self.identifier[:12], "content": "Calculate a + b.",
+        payload = {"problemId": "SMK" + self.identifier[:12],
+                   "title": "Deployment smoke " + self.identifier[:12], "content": "Calculate a + b.",
                    "input": "Two integers.", "output": "Their sum.", "source": "myy", "difficulty": 1,
-                   "mode": 0, "visibility": 1, "openCaseResult": True, "timeLimit": 2000,
+                   "judgeMode": "default", "visibility": 1, "openCaseResult": True, "timeLimit": 2000,
                    "memoryLimit": 256, "problemCaseList": [], "tagList": []}
         self.fixture_id = self.api("POST", "/admin/problem", payload)
-        require(isinstance(self.fixture_id, str) and re.fullmatch(r"YMOJ-[0-9]+", self.fixture_id),
+        require(self.fixture_id == payload["problemId"],
                 "Created problem has an unexpected display identifier")
         page = self.api("GET", "/admin/problem/list?keyword=" + urllib.parse.quote(self.fixture_id))
         records = [item for item in page["records"] if item["problemId"] == self.fixture_id]
