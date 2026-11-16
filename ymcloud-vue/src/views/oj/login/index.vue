@@ -88,8 +88,9 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { getPublicSystemSetting } from '@/api/api';
 import BrandLogo from '@/components/common/BrandLogo.vue';
-import authIllustration from '@/assets/image/auth-programming.png';
-const LoginForm = defineAsyncComponent(() => import('./child/LoginForm.vue'));
+import authIllustration from '@/assets/image/auth-programming.webp';
+//login组件不使用异步加载，防止加载慢导致留空
+import LoginForm from '@/views/oj/login/child/LoginForm.vue';
 const RegisterForm = defineAsyncComponent(() => import('./child/RegisterForm.vue'));
 const ForgetPasswordForm = defineAsyncComponent(() => import('./child/ForgetPasswordForm.vue'));
 
@@ -141,7 +142,7 @@ onMounted(() => {
 .login-page {
   min-height: 100dvh;
   padding: 20px 24px;
-  background: var(--ym-auth-page) url('@/assets/image/auth-background.png') center / cover no-repeat;
+  background: var(--ym-auth-page) url('@/assets/image/auth-background.webp') center / cover no-repeat;
 }
 
 .login-card {

@@ -222,7 +222,7 @@ import {
   getContestStatusType,
 } from "@/utils/utils";
 import { getPublicCarousel } from "@/api/carousel";
-import banner from "@/assets/image/banner.png";
+import banner from "@/assets/image/banner.webp";
 
 
 const Avatar = defineAsyncComponent(
