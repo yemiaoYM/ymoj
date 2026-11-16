@@ -221,15 +221,38 @@ CREATE TABLE `contest_user` (
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='比赛报名表';
 
+CREATE TABLE `storage_config` (
+  `id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '配置标识',
+  `name` varchar(100) NOT NULL COMMENT '配置名称',
+  `provider` varchar(100) DEFAULT NULL COMMENT '服务商描述，不参与驱动选择',
+  `driver_type` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '访问驱动：LOCAL/S3/ALIYUN_OSS',
+  `endpoint` varchar(512) DEFAULT NULL COMMENT '后端可达的存储服务地址',
+  `region` varchar(64) DEFAULT NULL COMMENT 'S3地域标识',
+  `public_bucket` varchar(128) NOT NULL COMMENT '公开业务文件桶；桶自身保持私有',
+  `private_bucket` varchar(128) NOT NULL COMMENT '私有业务文件桶',
+  `path_style` tinyint NOT NULL DEFAULT '1' COMMENT '1=路径式访问，0=虚拟主机式访问',
+  `encrypted_access_key` text DEFAULT NULL COMMENT 'AES-GCM加密的访问标识',
+  `encrypted_secret_key` text DEFAULT NULL COMMENT 'AES-GCM加密的访问密钥',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  `revision` bigint NOT NULL DEFAULT '1' COMMENT '配置修订号，用于并发控制',
+  `tested_revision` bigint DEFAULT NULL COMMENT '最近测试通过的修订号',
+  `tested_at` datetime DEFAULT NULL COMMENT '最近测试通过时间',
+  `created_time` datetime NOT NULL COMMENT '创建时间',
+  `updated_time` datetime NOT NULL COMMENT '更新时间',
+  `is_default` tinyint NOT NULL DEFAULT '0' COMMENT '是否为新上传的默认配置',
+  `default_slot` tinyint GENERATED ALWAYS AS (CASE WHEN `is_default` = 1 THEN 1 ELSE NULL END) STORED,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_storage_default` (`default_slot`),
+  CONSTRAINT `chk_storage_driver_type` CHECK (`driver_type` IN ('LOCAL', 'S3', 'ALIYUN_OSS'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='命名存储配置，凭据独立加密';
+
 CREATE TABLE `file` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '文件ID',
+  `public_id` char(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '对外UUIDv4标识',
   `file_name` varchar(255) NOT NULL COMMENT '原始文件名，例如 data.zip',
   `file_type` varchar(50) DEFAULT NULL COMMENT '文件类型/MIME类型，例如 application/zip、image/png',
   `file_size` bigint unsigned DEFAULT '0' COMMENT '文件大小（字节）',
   `file_ext` varchar(50) DEFAULT NULL COMMENT '文件扩展名，例如 zip、png、pdf',
-  `storage_path` varchar(500) NOT NULL COMMENT '文件存储相对路径，例如 upload/problem/1001/data.zip',
-  `storage_type` tinyint NOT NULL DEFAULT '0' COMMENT '存储方式：0=本地，1=OSS，2=历史MinIO，3=S3兼容',
-  `url` varchar(1000) DEFAULT NULL COMMENT '网站访问路径；私有文件通过鉴权接口读取',
   `uploader_id` bigint unsigned DEFAULT NULL COMMENT '上传者用户ID',
   `uploader_username` varchar(100) DEFAULT NULL COMMENT '上传者用户名',
   `biz_type` tinyint NOT NULL DEFAULT '0' COMMENT '业务类型：0=通用，1=题目附件，2=比赛附件，3=公告附件，4=图片，5=测试数据',
@@ -237,17 +260,15 @@ CREATE TABLE `file` (
   `is_public` tinyint NOT NULL DEFAULT '1' COMMENT '是否公开访问：0=私有，1=公开',
   `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
   `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `storage_profile` varchar(64) DEFAULT NULL COMMENT '存储配置标识；local为本地，NULL兼容历史文件',
-  `bucket` varchar(128) DEFAULT NULL COMMENT '对象存储桶；本地使用public/private目录',
-  `object_key` varchar(500) DEFAULT NULL COMMENT '不可变对象键或本地相对路径',
+  `storage_key` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '存储配置标识',
+  `bucket` varchar(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '对象存储桶；本地使用public/private目录',
+  `object_key` varchar(1024) NOT NULL COMMENT '不可变对象键或本地相对路径',
   `sha256` char(64) DEFAULT NULL COMMENT '文件内容SHA-256；历史文件可为空',
-  `legacy_path` varchar(1000) DEFAULT NULL COMMENT '迁移前路径，仅用于兼容与核验',
   PRIMARY KEY (`id`) USING BTREE,
-  KEY `idx_file_public_url` (`is_public`,`url`(191)),
-  KEY `idx_file_legacy_inventory` (`storage_type`,`storage_profile`,`id`),
-  KEY `idx_file_storage_profile` (`storage_profile`),
-  KEY `idx_file_url_guard` (`url`(191)),
-  KEY `idx_file_business` (`biz_type`,`biz_id`)
+  UNIQUE KEY `uk_file_public_id` (`public_id`),
+  KEY `idx_file_storage` (`storage_key`,`bucket`),
+  KEY `idx_file_business` (`biz_type`,`biz_id`),
+  CONSTRAINT `fk_file_storage` FOREIGN KEY (`storage_key`) REFERENCES `storage_config` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='文件信息表';
 
 CREATE TABLE `judge` (
@@ -367,35 +388,6 @@ CREATE TABLE `announcement` (
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='公告表';
 
-CREATE TABLE `storage_config` (
-  `id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '配置标识',
-  `name` varchar(100) NOT NULL COMMENT '配置名称',
-  `provider` varchar(100) DEFAULT NULL COMMENT '服务商描述，不参与驱动选择',
-  `driver_type` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '访问驱动：LOCAL/S3/ALIYUN_OSS',
-  `endpoint` varchar(512) NOT NULL COMMENT '后端可达的存储服务地址',
-  `region` varchar(64) NOT NULL COMMENT 'S3地域标识',
-  `public_bucket` varchar(128) NOT NULL COMMENT '公开业务文件桶；桶自身保持私有',
-  `private_bucket` varchar(128) NOT NULL COMMENT '私有业务文件桶',
-  `path_style` tinyint NOT NULL DEFAULT '1' COMMENT '1=路径式访问，0=虚拟主机式访问',
-  `encrypted_access_key` text NOT NULL COMMENT 'AES-GCM加密的访问标识',
-  `encrypted_secret_key` text NOT NULL COMMENT 'AES-GCM加密的访问密钥',
-  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
-  `revision` bigint NOT NULL DEFAULT '1' COMMENT '配置修订号，用于并发控制',
-  `tested_revision` bigint DEFAULT NULL COMMENT '最近测试通过的修订号',
-  `tested_at` datetime DEFAULT NULL COMMENT '最近测试通过时间',
-  `created_time` datetime NOT NULL COMMENT '创建时间',
-  `updated_time` datetime NOT NULL COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  CONSTRAINT `chk_storage_driver_type` CHECK (`driver_type` IN ('LOCAL', 'S3', 'ALIYUN_OSS'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='命名存储配置，凭据独立加密';
-
-CREATE TABLE `storage_config_state` (
-  `id` tinyint NOT NULL COMMENT '单例ID，固定为1',
-  `active_key` varchar(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '默认存储标识，local为内置本地存储',
-  `revision` bigint NOT NULL DEFAULT '0' COMMENT '配置修订号，用于并发控制',
-  `updated_time` datetime NOT NULL COMMENT '更新时间',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='默认存储配置与并发控制';
 
 START TRANSACTION;
 
@@ -610,7 +602,7 @@ print(a + b)', NULL, 1, 1, 'myy');
 INSERT INTO `system_setting` (`setting_key`, `setting_value`) VALUES
     ('register_enabled', 'true');
 
-INSERT INTO `storage_config_state` (`id`, `active_key`, `revision`, `updated_time`)
-VALUES (1, 'local', 0, CURRENT_TIMESTAMP);
+INSERT INTO `storage_config` (`id`, `name`, `driver_type`, `public_bucket`, `private_bucket`, `is_default`, `created_time`, `updated_time`)
+VALUES ('local', '本地文件', 'LOCAL', 'public', 'private', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 COMMIT;

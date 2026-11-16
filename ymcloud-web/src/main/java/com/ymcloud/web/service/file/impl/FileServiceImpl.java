@@ -1,25 +1,35 @@
 package com.ymcloud.web.service.file.impl;
 
+import com.ymcloud.common.constant.CacheConstants;
+import com.ymcloud.common.constant.ContestConstants;
 import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
+import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.utils.ExceptionLogUtils;
+import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.storage.client.ObjectStorageService;
 import com.ymcloud.core.storage.config.StorageProperties;
 import com.ymcloud.core.storage.factory.StorageRegistry;
 import com.ymcloud.core.storage.util.FileDigests;
 import com.ymcloud.core.storage.util.StoragePaths;
+import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.core.web.dao.ProblemEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
+import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.File;
+import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.StorageDriverType;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,7 +37,6 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -38,7 +47,7 @@ import java.util.UUID;
  */
 @Service
 @Slf4j
-public class StoredFileServiceImpl implements StoredFileService {
+public class FileServiceImpl implements FileService {
 
     @Autowired
     private FileEntityService files;
@@ -46,40 +55,33 @@ public class StoredFileServiceImpl implements StoredFileService {
     @Autowired
     private StorageRegistry storage;
 
-    /**
-     * 创建文件登记参数并交给统一上传入口校验和保存
-     * @param input 调用方负责关闭的上传流
-     * @param size 声明的字节数，暂存时核对实际长度
-     * @param originalName 原始文件名，不得包含路径
-     * @param contentType 上传媒体类型
-     * @param bizType 调用方已授权的业务类型
-     * @param bizId 业务标识，无关联时可为空
-     * @param publicAccess 是否允许公开存储，测试数据必须为私有
-     * @return 已保存的文件元数据
-     */
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public File save(InputStream input, long size, String originalName, String contentType,
-                     FileBizType bizType, Long bizId, boolean publicAccess) {
-        File file = new File();
-        file.setFileName(originalName);
-        file.setFileType(contentType);
-        file.setBizType(bizType);
-        file.setBizId(bizId);
-        file.setIsPublic(publicAccess ? FileConstants.ACCESS_PUBLIC : FileConstants.ACCESS_PRIVATE);
-        return save(input, size, file);
-    }
+    @Autowired
+    private RedisCache redisCache;
+
+    @Autowired
+    private ProblemEntityService problems;
+
+    @Autowired
+    private ContestEntityService contests;
 
     /**
-     * 保存对象和文件记录，将对象回滚清理绑定到当前事务
+     * 根据创建命令保存对象和元数据，将对象清理绑定到当前事务
+     * @param command 业务已授权的创建参数，物理对象键与 publicId 均由本服务生成
      * @param input 调用方负责关闭的上传流
-     * @param size 声明的字节数，由暂存入口统一校验
-     * @param file 包含已授权业务归属的元数据，成功后填充对象位置
-     * @return 已保存的文件元数据
+     * @param size 声明字节数，由暂存入口核对实际长度
+     * @return 已保存且具有稳定身份和对象位置的文件记录
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public File save(InputStream input, long size, File file) {
+    public File create(CreateStoredFileCommand command, InputStream input, long size) {
+        File file = new File();
+        file.setFileName(command.fileName());
+        file.setFileType(command.contentType());
+        file.setBizType(command.bizType());
+        file.setBizId(command.bizId());
+        file.setIsPublic(command.publicAccess() ? FileConstants.ACCESS_PUBLIC : FileConstants.ACCESS_PRIVATE);
+        file.setUploaderId(command.uploaderId());
+        file.setUploaderUsername(command.uploaderUsername());
         file.setFileName(safeName(file.getFileName()));
         file.setFileType(safeContentType(file.getFileType()));
         if (file.getBizType() == FileBizType.TEST_DATA && Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())) {
@@ -89,12 +91,8 @@ public class StoredFileServiceImpl implements StoredFileService {
         ObjectStorageService client = null;
         boolean registered = false;
         try {
-            client = prepareObject(file, staged, storage.active());
-            if (Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())) {
-                file.setUrl("/files/public/" + file.getStorageProfile() + "/" + file.getObjectKey());
-            } else {
-                file.setUrl(null);
-            }
+            file.setPublicId(UUID.randomUUID().toString().replace("-", ""));
+            client = prepareObject(file, staged, storage.active(), command.namespace());
             file.setCreatedTime(LocalDateTime.now());
             file.setUpdatedTime(file.getCreatedTime());
             try {
@@ -133,14 +131,37 @@ public class StoredFileServiceImpl implements StoredFileService {
     }
 
     /**
+     * 按对外标识查询文件，授权由业务调用方执行
+     * @param publicId 32 位小写 UUIDv4 标识
+     * @return 已登记文件
+     * @throws FileException 标识非法或文件不存在
+     */
+    @Override
+    public File getByPublicId(String publicId) {
+        if (publicId == null || !publicId.matches("[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}")) {
+            throw new FileException("文件标识不合法", HttpStatus.BAD_REQUEST);
+        }
+        File file = files.lambdaQuery()
+                .eq(File::getPublicId, publicId)
+                .one();
+        if (file == null) {
+            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
+        }
+        return file;
+    }
+
+    /**
      * 按已登记公开 URL 查询文件
      * @param url 已登记的公开 URL
      * @return 公开文件元数据，不存在时为空
      */
     @Override
     public File resolvePublicUrl(String url) {
+        if (url == null || !url.matches("/files/public/[0-9a-f]{32}")) {
+            return null;
+        }
         return files.lambdaQuery()
-                .eq(File::getUrl, url)
+                .eq(File::getPublicId, url.substring(FileConstants.PUBLIC_URL_PREFIX.length()))
                 .eq(File::getIsPublic, FileConstants.ACCESS_PUBLIC)
                 .one();
     }
@@ -152,37 +173,7 @@ public class StoredFileServiceImpl implements StoredFileService {
      */
     @Override
     public InputStream open(File file) {
-        if (file.getStorageProfile() == null) {
-            if (!Integer.valueOf(FileConstants.STORAGE_LOCAL).equals(file.getStorageType())) {
-                throw new FileException("历史远程文件缺少存储配置");
-            }
-            return openLegacy(file.getStoragePath());
-        }
-        return storage.client(file.getStorageProfile()).open(file.getBucket(), file.getObjectKey());
-    }
-
-    /**
-     * 打开迁移期间保留的历史公开文件
-     * @param relativePath 历史公开目录内的相对路径
-     * @return 调用方负责关闭的历史文件流
-     */
-    @Override
-    public InputStream openLegacyPublic(String relativePath) {
-        return openLegacy("public/" + relativePath);
-    }
-
-    /**
-     * 在本地根目录边界内打开历史文件
-     * @param path 历史记录中的绝对或相对存储路径
-     * @return 由调用方关闭的文件流
-     * @throws FileException 文件不存在、路径非法或无法读取
-     */
-    private InputStream openLegacy(String path) {
-        try {
-            return Files.newInputStream(legacyLocalPath(path));
-        } catch (IOException | IllegalArgumentException e) {
-            throw new FileException("历史本地文件不存在或路径不合法", e);
-        }
+        return storage.client(file.getStorageKey()).open(file.getBucket(), file.getObjectKey());
     }
 
     /**
@@ -203,7 +194,7 @@ public class StoredFileServiceImpl implements StoredFileService {
             throw new FileException("测试数据由版本管理，不允许直接删除");
         }
         File object = objectSnapshot(file);
-        ObjectStorageService client = file.getStorageProfile() == null ? null : storage.lease(file.getStorageProfile());
+        ObjectStorageService client = storage.lease(file.getStorageKey());
         boolean registered = false;
         try {
             if (!files.lambdaUpdate()
@@ -214,114 +205,9 @@ public class StoredFileServiceImpl implements StoredFileService {
             registerDelete(object, client);
             registered = true;
         } finally {
-            if (!registered && client != null) {
+            if (!registered) {
                 client.close();
             }
-        }
-    }
-
-    /**
-     * 列出尚未迁移的本地文件记录
-     * @return 待迁移的本地文件列表
-     */
-    @Override
-    public List<File> legacyInventory() {
-        return files.lambdaQuery()
-                .eq(File::getStorageType, FileConstants.STORAGE_LOCAL)
-                .isNull(File::getStorageProfile)
-                .orderByAsc(File::getId)
-                .list();
-    }
-
-    /**
-     * 保留原 ID、URL 和原始字节，迁移可重跑
-     * 历史路径写入 legacyPath
-     * @param id 待迁移文件 ID
-     * @param apply 是否执行迁移，false 时仅检查并返回文件
-     * @return 保留业务标识的文件元数据
-     */
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public File migrateLocal(Long id, boolean apply) {
-        File file = files.lambdaQuery()
-                .eq(File::getId, id)
-                .last("FOR UPDATE")
-                .one();
-        if (file == null) {
-            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
-        }
-        if (file.getStorageProfile() != null) {
-            return file;
-        }
-        if (!Integer.valueOf(FileConstants.STORAGE_LOCAL).equals(file.getStorageType())) {
-            throw new FileException("仅支持迁移历史本地文件");
-        }
-        Path staged;
-        try (InputStream input = open(file)) {
-            long actualSize = inputSize(file);
-            staged = stage(input, actualSize);
-        } catch (IOException e) {
-            throw new FileException("读取历史文件失败", e);
-        }
-        ObjectStorageService client = null;
-        boolean registered = false;
-        try {
-            String hash = hash(staged);
-            if (file.getSha256() != null && !file.getSha256().equals(hash)) {
-                throw new FileException("历史文件哈希校验失败");
-            }
-            if (!apply) {
-                file.setSha256(hash);
-                return file;
-            }
-            file.setLegacyPath(file.getStoragePath());
-            client = prepareObject(file, staged, storage.active());
-            try {
-                if (!files.lambdaUpdate()
-                        .eq(File::getId, id)
-                        .set(File::getStorageProfile, file.getStorageProfile())
-                        .set(File::getStorageType, file.getStorageType())
-                        .set(File::getBucket, file.getBucket())
-                        .set(File::getObjectKey, file.getObjectKey())
-                        .set(File::getStoragePath, file.getStoragePath())
-                        .set(File::getSha256, file.getSha256())
-                        .set(File::getLegacyPath, file.getLegacyPath())
-                        .set(File::getFileSize, file.getFileSize())
-                        .set(File::getFileExt, file.getFileExt())
-                        .set(File::getUpdatedTime, LocalDateTime.now())
-                        .update()) {
-                    throw new FileException("更新迁移文件记录失败");
-                }
-            } catch (RuntimeException e) {
-                cleanup(file, client);
-                throw e;
-            }
-            registerRollback(file, client);
-            registered = true;
-            return file;
-        } finally {
-            if (!registered && client != null) {
-                client.close();
-            }
-            removeStaged(staged);
-        }
-    }
-
-    /**
-     * 读取历史文件实际大小并核对已有数据库记录
-     * @param file 待迁移的历史文件记录
-     * @return 实际文件字节数
-     * @throws FileException 文件不可读或实际大小与已有记录不符
-     */
-    private long inputSize(File file) {
-        try {
-            long actual = Files.size(legacyLocalPath(file.getStoragePath()));
-            if (file.getFileSize() != null && file.getFileSize() != actual) {
-                throw new FileException("历史文件大小与记录不一致");
-            }
-            return actual;
-        } catch (IOException | IllegalArgumentException e) {
-            throw new FileException("无法核对历史文件大小", e);
         }
     }
 
@@ -330,32 +216,28 @@ public class StoredFileServiceImpl implements StoredFileService {
      * @param file 待填充对象位置与完整性信息的文件记录
      * @param staged 已暂存的完整上传文件
      * @param profileName 目标存储配置标识
+     * @param namespace 通过对象键校验的业务相对目录
      * @return 固定目标配置的客户端租约，由调用方移交事务回调或关闭
      */
-    private ObjectStorageService prepareObject(File file, Path staged, String profileName) {
+    private ObjectStorageService prepareObject(File file, Path staged, String profileName, String namespace) {
         StorageProperties.Profile profile = storage.profile(profileName);
         boolean publicAccess = Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic());
         String bucket = profile.getDriverType() == StorageDriverType.LOCAL ? (publicAccess ? FileConstants.DIR_PUBLIC : FileConstants.DIR_PRIVATE)
                 : (publicAccess ? profile.getPublicBucket() : profile.getPrivateBucket());
         String extension = extension(file.getFileName());
-        String key = UUID.randomUUID().toString().replace("-", "") + extension;
+        String key = namespace + "/" + UUID.randomUUID().toString().replace("-", "") + extension;
+        StoragePaths.validateObjectKey(key);
         String sha256 = hash(staged);
-        file.setStorageProfile(profileName);
+        file.setStorageKey(profileName);
         file.setBucket(bucket);
         file.setObjectKey(key);
-        file.setStoragePath(bucket + "/" + key);
-        file.setStorageType(switch (profile.getDriverType()) {
-            case LOCAL -> FileConstants.STORAGE_LOCAL;
-            case S3 -> FileConstants.STORAGE_S3;
-            case ALIYUN_OSS -> FileConstants.STORAGE_OSS;
-        });
         file.setSha256(sha256);
         file.setFileExt(extension.isEmpty() ? "" : extension.substring(1));
         ObjectStorageService client = null;
         try {
             file.setFileSize(Files.size(staged));
             client = storage.lease(profileName);
-            client.put(bucket, key, staged, safeContentType(file.getFileType()), sha256);
+            client.put(bucket, key, staged, file.getFileType(), sha256);
             try (InputStream uploaded = client.open(bucket, key)) {
                 if (!sha256.equals(FileDigests.sha256(uploaded))) {
                     throw new FileException("上传文件哈希校验失败");
@@ -461,54 +343,21 @@ public class StoredFileServiceImpl implements StoredFileService {
     /**
      * 复制事务回调所需的位置字段，避免业务记录后续修改影响清理目标
      * @param file 当前文件元数据
-     * @return 仅包含身份及对象、历史位置的独立快照
+     * @return 仅包含身份及对象位置的独立快照
      */
     private File objectSnapshot(File file) {
         File snapshot = new File();
         snapshot.setId(file.getId());
-        snapshot.setStorageProfile(file.getStorageProfile());
+        snapshot.setStorageKey(file.getStorageKey());
         snapshot.setBucket(file.getBucket());
         snapshot.setObjectKey(file.getObjectKey());
-        snapshot.setStoragePath(file.getStoragePath());
-        snapshot.setLegacyPath(file.getLegacyPath());
         return snapshot;
-    }
-
-    /**
-     * 将历史绝对或相对路径转换为本地根目录内的安全路径
-     * @param path 历史记录中的文件路径
-     * @return 经过越界与符号链接检查的绝对路径
-     */
-    private Path legacyLocalPath(String path) {
-        Path root = storage.localRoot();
-        Path supplied = Path.of(path);
-        String relative = supplied.isAbsolute()
-                ? root.relativize(supplied.toAbsolutePath().normalize()).toString().replace('\\', '/')
-                : path.replace('\\', '/');
-        return StoragePaths.resolve(root, relative);
-    }
-
-    /**
-     * 清理主动删除的普通文件及历史本地副本，迁移回滚不调用此方法
-     * @param file 删除时固定的文件位置
-     * @param client 删除时租用的存储客户端，历史本地文件可为空
-     */
-    private void cleanupDeleted(File file, ObjectStorageService client) {
-        cleanup(file, client);
-        String legacy = file.getStorageProfile() == null ? file.getStoragePath() : file.getLegacyPath();
-        if (legacy != null) {
-            try {
-                Files.deleteIfExists(legacyLocalPath(legacy));
-            } catch (Exception e) {
-                log.error("历史文件删除失败 fileId={}", file.getId(), ExceptionLogUtils.forLogging(e));
-            }
-        }
     }
 
     /**
      * 按既有文件删除流程在提交后清理对象，并在事务完成时释放固定客户端
      * @param file 删除时固定的文件位置
-     * @param client 已租用的存储客户端，历史本地文件可为空
+     * @param client 已租用的存储客户端，事务完成后关闭
      */
     private void registerDelete(File file, ObjectStorageService client) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -518,13 +367,7 @@ public class StoredFileServiceImpl implements StoredFileService {
                  */
                 @Override
                 public void afterCommit() {
-                    try {
-                        cleanupDeleted(file, client);
-                    } finally {
-                        if (client != null) {
-                            client.close();
-                        }
-                    }
+                    cleanup(file, client);
                 }
 
                 /**
@@ -533,18 +376,14 @@ public class StoredFileServiceImpl implements StoredFileService {
                  */
                 @Override
                 public void afterCompletion(int status) {
-                    if (client != null) {
-                        client.close();
-                    }
+                    client.close();
                 }
             });
         } else {
             try {
-                cleanupDeleted(file, client);
+                cleanup(file, client);
             } finally {
-                if (client != null) {
-                    client.close();
-                }
+                client.close();
             }
         }
     }
@@ -552,14 +391,10 @@ public class StoredFileServiceImpl implements StoredFileService {
     /**
      * 补偿删除新对象，失败时记录待核对文件编号，不覆盖原始业务异常
      * @param file 固定的对象位置快照
-     * @param client 固定配置客户端，历史文件或未取得客户端时可为空
+     * @param client 已租用的固定配置客户端
      */
     private void cleanup(File file, ObjectStorageService client) {
         try {
-            if (file.getStorageProfile() == null || client == null) {
-                // 历史原始文件保留，迁移后仍可回退
-                return;
-            }
             client.delete(file.getBucket(), file.getObjectKey());
         } catch (Exception e) {
             log.error("对象清理失败 fileId={}", file.getId(), ExceptionLogUtils.forLogging(e));
@@ -597,11 +432,11 @@ public class StoredFileServiceImpl implements StoredFileService {
 
     /**
      * 从文件名提取允许的短扩展名，用于随机对象键
-     * @param name 文件名，历史记录可为空
+     * @param name 已通过入口校验的文件名
      * @return 含点的小写扩展名，不符合 1～10 位字母数字规则时为空字符串
      */
     private String extension(String name) {
-        int dot = name == null ? -1 : name.lastIndexOf('.');
+        int dot = name.lastIndexOf('.');
         String ext = dot < 0 ? "" : name.substring(dot).toLowerCase(java.util.Locale.ROOT);
         return ext.matches("\\.[a-z0-9]{1,10}") ? ext : "";
     }
@@ -614,5 +449,92 @@ public class StoredFileServiceImpl implements StoredFileService {
     private String safeContentType(String type) {
         return type != null && type.matches("[a-zA-Z0-9!#$&^_.+-]+/[a-zA-Z0-9!#$&^_.+-]+")
                 ? type : "application/octet-stream";
+    }
+
+    /**
+     * 校验公开路径和文件记录，拒绝私有文件及测试数据
+     * @param path 公开 URL 前缀后的路径，包含开头的斜杠
+     * @return 已登记且允许公开读取的文件元数据，仅供服务端使用
+     * @throws FileException 路径非法、记录不可公开或缺少存储配置标识
+     */
+    @Override
+    public File resolvePublicFile(String path) {
+        if (path == null || !path.matches("/[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}")) {
+            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
+        }
+        File file = resolvePublicUrl("/files/public" + path);
+        if (file == null || file.getBizType() == FileBizType.TEST_DATA) {
+            throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
+        }
+        if (file.getBizType() == FileBizType.PROBLEM_ATTACHMENT) {
+            Problem problem = problems.getById(file.getBizId());
+            if (problem == null || problem.getVisibility() != ProblemConstants.PUBLIC
+                    || problems.hasActiveContestReference(problem.getId(), LocalDateTime.now())) {
+                throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
+            }
+        } else if (file.getBizType() == FileBizType.CONTEST_ATTACHMENT) {
+            Contest contest = contests.getById(file.getBizId());
+            if (contest == null || contest.getVisibility() != ContestConstants.VISIBILITY_PUBLIC
+                    || LocalDateTime.now().isBefore(contest.getStartTime())) {
+                throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
+            }
+        }
+        return file;
+    }
+
+    /**
+     * 保存上传内容及文件记录，读取结束后关闭上传流
+     * @param file 待保存的上传文件
+     * @param fileRecord 已设置业务类型和访问范围的文件记录
+     * @return 已保存的头像文件记录
+     * @throws FileException 上传内容读取失败
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public File saveFile(MultipartFile file, File fileRecord) {
+        try (InputStream input = file.getInputStream()) {
+            return create(new CreateStoredFileCommand(fileRecord.getFileName(), fileRecord.getFileType(), FileConstants.SUB_DIR_AVATAR,
+                    fileRecord.getBizType(), fileRecord.getBizId(), true, fileRecord.getUploaderId(), fileRecord.getUploaderUsername()),
+                    input, file.getSize());
+        } catch (IOException e) {
+            throw new FileException("读取上传文件失败", e);
+        }
+    }
+
+    /**
+     * 删除公开文件；图片删除提交后失效轮播列表，避免保留失效引用
+     * @param url 已登记的公开文件 URL；未找到时不做操作
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteFileByUrl(String url) {
+        File file = resolvePublicUrl(url);
+        if (file != null) {
+            delete(file.getId());
+            if (file.getBizType() == FileBizType.IMAGE) {
+                evictCarouselAfterCommit();
+            }
+        }
+    }
+
+    /**
+     * 图片删除提交后删除公开缓存；外层事务回滚时保留旧缓存
+     * Redis 故障继续上抛，不能把清理失败伪装为全部成功
+     */
+    private void evictCarouselAfterCommit() {
+        String key = CacheConstants.CACHE_NAME + ":" + CacheConstants.HOME_CAROUSEL_KEY;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                /**
+                 * 数据库成功提交后，删除与 Spring Cache 相同命名的键
+                 */
+                @Override
+                public void afterCommit() {
+                    redisCache.deleteObject(key);
+                }
+            });
+        } else {
+            redisCache.deleteObject(key);
+        }
     }
 }

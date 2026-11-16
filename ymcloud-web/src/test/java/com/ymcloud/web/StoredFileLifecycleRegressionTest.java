@@ -2,17 +2,17 @@ package com.ymcloud.web;
 
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
-import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.core.storage.client.LocalObjectStorageService;
 import com.ymcloud.core.storage.client.ObjectStorageService;
 import com.ymcloud.core.storage.config.StorageProperties;
 import com.ymcloud.core.storage.factory.StorageRegistry;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.StorageDriverType;
-import com.ymcloud.web.service.file.StoredFileService;
-import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
+import com.ymcloud.web.service.file.FileService;
+import com.ymcloud.web.service.file.impl.FileServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,13 +33,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-11
- * @Description: 使用真实本地对象验证事务回调固定物理地址及历史迁移保留原件
+ * @Description: 使用真实本地对象验证事务回调固定物理地址与客户端生命周期
  */
 class StoredFileLifecycleRegressionTest {
 
@@ -47,7 +46,7 @@ class StoredFileLifecycleRegressionTest {
     private Path root;
 
     private FileEntityService entities;
-    private StoredFileService storedFiles;
+    private FileService storedFiles;
     private StorageRegistry registry;
 
     /**
@@ -57,7 +56,7 @@ class StoredFileLifecycleRegressionTest {
     void setup() {
         entities = mock(FileEntityService.class);
         registry = new StorageRegistry(new StorageProperties(), root.toString());
-        storedFiles = new StoredFileServiceImpl();
+        storedFiles = new FileServiceImpl();
         ReflectionTestUtils.setField(storedFiles, "files", entities);
         ReflectionTestUtils.setField(storedFiles, "storage", registry);
         when(entities.save(any(File.class))).thenAnswer(invocation -> {
@@ -74,50 +73,62 @@ class StoredFileLifecycleRegressionTest {
         registry.close();
     }
 
+    /**
+     * 上传回滚删除原始对象位置，不受返回实体修改影响
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void rollbackDeletesSavedObjectEvenWhenReturnedEntityLocationChanges() throws Exception {
         File unrelated = saveImage();
-        Path unrelatedPath = root.resolve(unrelated.getStoragePath());
+        Path unrelatedPath = root.resolve(unrelated.getBucket() + "/" + unrelated.getObjectKey());
         TransactionSynchronizationManager.initSynchronization();
         File uploaded = saveImage();
-        Path uploadedPath = root.resolve(uploaded.getStoragePath());
+        Path uploadedPath = root.resolve(uploaded.getBucket() + "/" + uploaded.getObjectKey());
 
-        uploaded.setStorageProfile(unrelated.getStorageProfile());
+        uploaded.setStorageKey(unrelated.getStorageKey());
         uploaded.setBucket(unrelated.getBucket());
         uploaded.setObjectKey(unrelated.getObjectKey());
-        uploaded.setStoragePath(unrelated.getStoragePath());
+
         complete(TransactionSynchronization.STATUS_ROLLED_BACK);
 
         assertFalse(Files.exists(uploadedPath));
         assertTrue(Files.exists(unrelatedPath));
     }
 
+    /**
+     * 上传事务提交保留新对象
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void committedSaveRetainsNewObject() throws Exception {
         TransactionSynchronizationManager.initSynchronization();
         File uploaded = saveImage();
-        Path uploadedPath = root.resolve(uploaded.getStoragePath());
+        Path uploadedPath = root.resolve(uploaded.getBucket() + "/" + uploaded.getObjectKey());
 
         complete(TransactionSynchronization.STATUS_COMMITTED);
 
         assertTrue(Files.exists(uploadedPath));
     }
 
+    /**
+     * 删除等待事务提交并固定原始对象位置
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void deleteWaitsForCommitAndUsesOriginalPhysicalAddressDespiteEntityMutation() throws Exception {
         File original = saveImage();
-        Path originalPath = root.resolve(original.getStoragePath());
+        Path originalPath = root.resolve(original.getBucket() + "/" + original.getObjectKey());
         File unrelated = saveImage();
-        Path unrelatedPath = root.resolve(unrelated.getStoragePath());
+        Path unrelatedPath = root.resolve(unrelated.getBucket() + "/" + unrelated.getObjectKey());
         configureDelete(original);
         TransactionSynchronizationManager.initSynchronization();
 
         storedFiles.delete(10L);
         assertTrue(Files.exists(originalPath));
-        original.setStorageProfile(unrelated.getStorageProfile());
+        original.setStorageKey(unrelated.getStorageKey());
         original.setBucket(unrelated.getBucket());
         original.setObjectKey(unrelated.getObjectKey());
-        original.setStoragePath(unrelated.getStoragePath());
+
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
         complete(TransactionSynchronization.STATUS_COMMITTED);
 
@@ -125,10 +136,14 @@ class StoredFileLifecycleRegressionTest {
         assertTrue(Files.exists(unrelatedPath));
     }
 
+    /**
+     * 删除事务回滚保留原对象
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void rollbackDoesNotPhysicallyDeleteExistingObject() throws Exception {
         File original = saveImage();
-        Path originalPath = root.resolve(original.getStoragePath());
+        Path originalPath = root.resolve(original.getBucket() + "/" + original.getObjectKey());
         configureDelete(original);
         TransactionSynchronizationManager.initSynchronization();
 
@@ -138,100 +153,16 @@ class StoredFileLifecycleRegressionTest {
         assertTrue(Files.exists(originalPath));
     }
 
-    @Test
-    void committedLegacyDeleteRemovesOriginalSoPublicFallbackCannotServeIt() throws Exception {
-        File legacy = legacyFile();
-        Path source = Path.of(legacy.getStoragePath());
-        configureDelete(legacy);
-        TransactionSynchronizationManager.initSynchronization();
-
-        storedFiles.delete(42L);
-        assertTrue(Files.exists(source));
-        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
-        complete(TransactionSynchronization.STATUS_COMMITTED);
-
-        assertFalse(Files.exists(source));
-    }
-
-    @Test
-    void rolledBackLegacyDeleteRetainsOriginal() throws Exception {
-        File legacy = legacyFile();
-        Path source = Path.of(legacy.getStoragePath());
-        configureDelete(legacy);
-        TransactionSynchronizationManager.initSynchronization();
-
-        storedFiles.delete(42L);
-        complete(TransactionSynchronization.STATUS_ROLLED_BACK);
-
-        assertTrue(Files.exists(source));
-    }
-
-    @Test
-    void committedMigratedDeleteRemovesBothNewObjectAndLegacyOriginal() throws Exception {
-        File legacy = legacyFile();
-        Path source = Path.of(legacy.getStoragePath());
-        configureMigration(legacy);
-        File migrated = storedFiles.migrateLocal(42L, true);
-        Path object = root.resolve(migrated.getStoragePath());
-        configureDelete(migrated);
-        TransactionSynchronizationManager.initSynchronization();
-
-        storedFiles.delete(42L);
-        assertTrue(Files.exists(object));
-        assertTrue(Files.exists(source));
-        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
-        complete(TransactionSynchronization.STATUS_COMMITTED);
-
-        assertFalse(Files.exists(object));
-        assertFalse(Files.exists(source));
-    }
-
-    @Test
-    void failedMigrationTransactionRemovesNewCopyAndPreservesLegacyBytesIdAndUrl() throws Exception {
-        File legacy = legacyFile();
-        Path legacyPath = Path.of(legacy.getStoragePath());
-        configureMigration(legacy);
-        TransactionSynchronizationManager.initSynchronization();
-
-        File migrated = storedFiles.migrateLocal(42L, true);
-        Path newPath = root.resolve(migrated.getStoragePath());
-        assertTrue(Files.exists(newPath));
-        assertEquals(42L, migrated.getId());
-        assertEquals("/files/public/legacy.png", migrated.getUrl());
-        assertEquals(legacyPath.toString(), migrated.getLegacyPath());
-        complete(TransactionSynchronization.STATUS_ROLLED_BACK);
-
-        assertFalse(Files.exists(newPath));
-        assertTrue(Files.exists(legacyPath));
-        assertEquals(7, Files.readAllBytes(legacyPath)[0]);
-    }
-
-    @Test
-    void migrationDryRunAndRepeatedApplyDoNotCreateAdditionalObjects() throws Exception {
-        File legacy = legacyFile();
-        Path source = Path.of(legacy.getStoragePath());
-        LambdaUpdateChainWrapper<File> migration = configureMigration(legacy);
-
-        storedFiles.migrateLocal(42L, false);
-        assertEquals(source.toString(), legacy.getStoragePath());
-        File migrated = storedFiles.migrateLocal(42L, true);
-        String objectKey = migrated.getObjectKey();
-        storedFiles.migrateLocal(42L, true);
-
-        assertEquals(objectKey, legacy.getObjectKey());
-        verify(migration).update();
-        try (var paths = Files.walk(root)) {
-            assertEquals(2L, paths.filter(Files::isRegularFile).count());
-        }
-        assertTrue(Files.exists(source));
-    }
-
+    /**
+     * 配置更换或移除后，上传回滚仍使用原客户端清理对象
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void uploadRollbackUsesFixedClientEvenWhenConfigurationChangesAndDisappears() throws Exception {
         DynamicStorage dynamic = dynamicStorage();
         TransactionSynchronizationManager.initSynchronization();
         File file = saveImage();
-        Path original = root.resolve("first").resolve(file.getStoragePath());
+        Path original = root.resolve("first").resolve(file.getBucket() + "/" + file.getObjectKey());
         Path collision = rotateAndRemoveConfig(dynamic, file);
         assertEquals(0, dynamic.closed().get());
 
@@ -242,12 +173,16 @@ class StoredFileLifecycleRegressionTest {
         assertEquals(1, dynamic.closed().get());
     }
 
+    /**
+     * 上传提交释放固定客户端并保留已提交对象
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void uploadCommitReleasesFixedClientWithoutRemovingCommittedObject() throws Exception {
         DynamicStorage dynamic = dynamicStorage();
         TransactionSynchronizationManager.initSynchronization();
         File file = saveImage();
-        Path original = root.resolve("first").resolve(file.getStoragePath());
+        Path original = root.resolve("first").resolve(file.getBucket() + "/" + file.getObjectKey());
         rotateAndRemoveConfig(dynamic, file);
         assertEquals(0, dynamic.closed().get());
 
@@ -265,7 +200,7 @@ class StoredFileLifecycleRegressionTest {
     void deleteCommitUsesFixedClientAfterLastReferenceConfigurationWasRemoved() throws Exception {
         DynamicStorage dynamic = dynamicStorage();
         File file = saveImage();
-        Path original = root.resolve("first").resolve(file.getStoragePath());
+        Path original = root.resolve("first").resolve(file.getBucket() + "/" + file.getObjectKey());
         configureDelete(file);
         TransactionSynchronizationManager.initSynchronization();
         storedFiles.delete(file.getId());
@@ -280,11 +215,15 @@ class StoredFileLifecycleRegressionTest {
         assertEquals(1, dynamic.closed().get());
     }
 
+    /**
+     * 删除回滚释放固定客户端且保留原对象
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void deleteRollbackReleasesFixedClientAndRetainsExistingObject() throws Exception {
         DynamicStorage dynamic = dynamicStorage();
         File file = saveImage();
-        Path original = root.resolve("first").resolve(file.getStoragePath());
+        Path original = root.resolve("first").resolve(file.getBucket() + "/" + file.getObjectKey());
         configureDelete(file);
         TransactionSynchronizationManager.initSynchronization();
         storedFiles.delete(file.getId());
@@ -337,15 +276,22 @@ class StoredFileLifecycleRegressionTest {
                 };
             }
         };
-        storedFiles = new StoredFileServiceImpl();
+        storedFiles = new FileServiceImpl();
         ReflectionTestUtils.setField(storedFiles, "files", entities);
         ReflectionTestUtils.setField(storedFiles, "storage", registry);
         return new DynamicStorage(properties, profile, closed);
     }
 
+    /**
+     * 轮换存储客户端并删除配置，构造同键对象验证租约隔离
+     * @param dynamic 待轮换的动态存储配置
+     * @param file 原客户端写入的文件
+     * @return 新客户端目录中的同键文件
+     * @throws Exception 测试对象写入失败
+     */
     private Path rotateAndRemoveConfig(DynamicStorage dynamic, File file) throws Exception {
         dynamic.profile().setEndpoint("second");
-        Path collision = root.resolve("second").resolve(file.getStoragePath());
+        Path collision = root.resolve("second").resolve(file.getBucket() + "/" + file.getObjectKey());
         Files.createDirectories(collision.getParent());
         Files.write(collision, new byte[]{2});
         registry.client("dynamic").delete(file.getBucket(), "rotation-trigger");
@@ -355,26 +301,13 @@ class StoredFileLifecycleRegressionTest {
 
     private record DynamicStorage(StorageProperties properties, StorageProperties.Profile profile, AtomicInteger closed) {}
 
+    /**
+     * 写入公开图片并返回已登记的元数据
+     * @return 本轮创建的图片记录
+     */
     private File saveImage() {
-        return storedFiles.save(new ByteArrayInputStream(new byte[]{1}), 1L, "avatar.png", "image/png",
-                FileBizType.IMAGE, 2L, true);
-    }
-
-    private File legacyFile() throws Exception {
-        Path path = root.resolve("public/legacy.png");
-        Files.createDirectories(path.getParent());
-        Files.write(path, new byte[]{7});
-        File file = new File();
-        file.setId(42L);
-        file.setStorageType(FileConstants.STORAGE_LOCAL);
-        file.setStoragePath(path.toString());
-        file.setFileSize(1L);
-        file.setFileName("legacy.png");
-        file.setFileType("image/png");
-        file.setIsPublic(FileConstants.ACCESS_PUBLIC);
-        file.setBizType(FileBizType.IMAGE);
-        file.setUrl("/files/public/legacy.png");
-        return file;
+        return storedFiles.create(new CreateStoredFileCommand("avatar.png", "image/png", "image", FileBizType.IMAGE, 2L, true, null, null),
+                new ByteArrayInputStream(new byte[]{1}), 1L);
     }
 
     /**
@@ -393,27 +326,6 @@ class StoredFileLifecycleRegressionTest {
         when(query.and(any())).thenReturn(query);
         when(query.one()).thenReturn(file);
         when(entities.lambdaQuery()).thenReturn(query);
-    }
-
-    /**
-     * 配置迁移目标的锁定查询和更新边界
-     * @param file 待迁移文件
-     * @return 可模拟更新失败的条件更新桩
-     */
-    @SuppressWarnings("unchecked")
-    private LambdaUpdateChainWrapper<File> configureMigration(File file) {
-        LambdaQueryChainWrapper<File> query = mock(LambdaQueryChainWrapper.class);
-        when(query.eq(any(), any())).thenReturn(query);
-        when(query.last("FOR UPDATE")).thenReturn(query);
-        when(query.and(any())).thenReturn(query);
-        when(query.one()).thenReturn(file);
-        when(entities.lambdaQuery()).thenReturn(query);
-        LambdaUpdateChainWrapper<File> update = mock(LambdaUpdateChainWrapper.class);
-        when(update.eq(any(), any())).thenReturn(update);
-        when(update.set(any(), any())).thenReturn(update);
-        when(update.update()).thenReturn(true);
-        when(entities.lambdaUpdate()).thenReturn(update);
-        return update;
     }
 
     /**

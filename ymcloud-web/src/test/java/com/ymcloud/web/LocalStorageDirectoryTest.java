@@ -8,13 +8,14 @@ import com.ymcloud.core.storage.util.StorageDirectoryResolver;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.FileBizType;
-import com.ymcloud.web.service.file.StoredFileService;
-import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
-import com.ymcloud.web.service.problem.impl.TestDataServiceImpl;
+import com.ymcloud.web.service.file.FileService;
+import com.ymcloud.web.service.file.impl.FileServiceImpl;
+import com.ymcloud.web.service.oj.impl.TestDataServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -228,30 +229,30 @@ class LocalStorageDirectoryTest {
             invocation.<File>getArgument(0).setId(ids.incrementAndGet());
             return true;
         });
-        StoredFileService storage = new StoredFileServiceImpl();
+        FileService storage = new FileServiceImpl();
         ReflectionTestUtils.setField(storage, "files", metadata);
         ReflectionTestUtils.setField(storage, "storage", registry);
         byte[] publicBytes = "图片文件\n".getBytes(StandardCharsets.UTF_8);
         byte[] privateBytes = " \r\n私有输入\t ".getBytes(StandardCharsets.UTF_8);
         try {
-            File publicFile = storage.save(new ByteArrayInputStream(publicBytes), publicBytes.length,
-                    "public.png", "image/png", FileBizType.IMAGE, null, true);
-            File privateFile = storage.save(new ByteArrayInputStream(privateBytes), privateBytes.length,
-                    "private.in", "text/plain", FileBizType.TEST_DATA, 42L, false);
-            assertEquals("local", publicFile.getStorageProfile());
+            File publicFile = storage.create(new CreateStoredFileCommand("public.png", "image/png", "image", FileBizType.IMAGE, null, true, null, null),
+                    new ByteArrayInputStream(publicBytes), publicBytes.length);
+            File privateFile = storage.create(new CreateStoredFileCommand("private.in", "text/plain", "problem/42/testdata", FileBizType.TEST_DATA, 42L, false, null, null),
+                    new ByteArrayInputStream(privateBytes), privateBytes.length);
+            assertEquals("local", publicFile.getStorageKey());
             assertEquals("public", publicFile.getBucket());
-            assertTrue(publicFile.getUrl().startsWith("/files/public/local/"));
-            assertEquals("local", privateFile.getStorageProfile());
+            assertTrue(publicFile.getPublicId().matches("[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}"));
+            assertEquals("local", privateFile.getStorageKey());
             assertEquals("private", privateFile.getBucket());
-            assertNull(privateFile.getUrl());
+            assertEquals(0, privateFile.getIsPublic());
             try (InputStream input = storage.open(publicFile)) {
                 assertArrayEquals(publicBytes, input.readAllBytes());
             }
             try (InputStream input = storage.open(privateFile)) {
                 assertArrayEquals(privateBytes, input.readAllBytes());
             }
-            assertArrayEquals(publicBytes, Files.readAllBytes(root.resolve(publicFile.getStoragePath())));
-            assertArrayEquals(privateBytes, Files.readAllBytes(root.resolve(privateFile.getStoragePath())));
+            assertArrayEquals(publicBytes, Files.readAllBytes(root.resolve(publicFile.getBucket() + "/" + publicFile.getObjectKey())));
+            assertArrayEquals(privateBytes, Files.readAllBytes(root.resolve(privateFile.getBucket() + "/" + privateFile.getObjectKey())));
 
             Path legacyRoot = root.resolve("private/problem/42");
             Files.createDirectories(legacyRoot.resolve("in"));
@@ -261,16 +262,15 @@ class LocalStorageDirectoryTest {
             Path wrongModuleRoot = Files.createDirectories(moduleTarget.resolve("files/private/problem/42/in"));
             Files.writeString(wrongModuleRoot.resolve("a.in"), "wrong module input", StandardCharsets.UTF_8);
             TestDataVersionEntityService versions = mock(TestDataVersionEntityService.class);
-            TestDataServiceImpl testData = new TestDataServiceImpl(problemService(42L), versions, storage, root.toString());
+            TestDataServiceImpl testData = new TestDataServiceImpl();
+            ReflectionTestUtils.setField(testData, "problemEntityService", problemService(42L));
+            ReflectionTestUtils.setField(testData, "versionEntityService", versions);
+            ReflectionTestUtils.setField(testData, "storedFileService", storage);
             TestDataManifest manifest = testData.getManifest(42L, null);
             assertNull(manifest.getVersionId());
-            assertEquals(1, manifest.getEntries().size());
-            try (InputStream input = testData.openFile(42L, null, "/in/a.in")) {
-                assertArrayEquals(privateBytes, input.readAllBytes());
-            }
-            try (InputStream output = testData.openFile(42L, null, "/out/a.out")) {
-                assertEquals("answer\n", new String(output.readAllBytes(), StandardCharsets.UTF_8));
-            }
+            assertTrue(manifest.getEntries().isEmpty());
+            assertThrows(com.ymcloud.common.exception.problem.ProblemException.class,
+                    () -> testData.openFile(42L, null, "/in/a.in"));
             verifyNoInteractions(versions);
         } finally {
             registry.close();

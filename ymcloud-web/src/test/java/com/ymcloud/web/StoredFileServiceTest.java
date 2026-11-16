@@ -7,11 +7,12 @@ import com.ymcloud.core.storage.factory.StorageRegistry;
 import com.ymcloud.core.storage.util.FileDigests;
 import com.ymcloud.core.storage.util.StoragePaths;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.StorageDriverType;
-import com.ymcloud.web.service.file.StoredFileService;
-import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
+import com.ymcloud.web.service.file.FileService;
+import com.ymcloud.web.service.file.impl.FileServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,7 +42,7 @@ class StoredFileServiceTest {
     private FileEntityService entities;
     private StorageProperties properties;
     private StorageRegistry registry;
-    private StoredFileService files;
+    private FileService files;
 
     /**
      * 装配本地存储及文件元数据桩，使用真实驱动验证文件生命周期
@@ -51,7 +52,7 @@ class StoredFileServiceTest {
         entities = mock(FileEntityService.class);
         properties = new StorageProperties();
         registry = new StorageRegistry(properties, root.toString());
-        files = new StoredFileServiceImpl();
+        files = new FileServiceImpl();
         ReflectionTestUtils.setField(files, "files", entities);
         ReflectionTestUtils.setField(files, "storage", registry);
         when(entities.save(any(File.class))).thenAnswer(invocation -> {
@@ -60,12 +61,16 @@ class StoredFileServiceTest {
         });
     }
 
+    /**
+     * 保存 UTF-8 原始字节及摘要，私有测试数据不标记公开
+     * @throws Exception 文件读写或测试资源处理失败
+     */
     @Test
     void savesExactUtf8BytesAndHashWithoutExposingPrivateUrl() throws Exception {
         byte[] content = "  中文\r\n\t尾部  ".getBytes(StandardCharsets.UTF_8);
-        File file = files.save(new ByteArrayInputStream(content), content.length, "样例.in", "text/plain",
-                FileBizType.TEST_DATA, 1L, false);
-        assertNull(file.getUrl());
+        File file = files.create(new CreateStoredFileCommand("样例.in", "text/plain", "problem/1/testdata", FileBizType.TEST_DATA, 1L, false, null, null),
+                new ByteArrayInputStream(content), content.length);
+        assertEquals(0, file.getIsPublic());
         assertEquals("private", file.getBucket());
         assertEquals(content.length, file.getFileSize());
         assertEquals(FileDigests.sha256(new ByteArrayInputStream(content)), file.getSha256());
@@ -74,20 +79,28 @@ class StoredFileServiceTest {
         }
     }
 
+    /**
+     * 允许合法的零字节输入输出文件
+     * @throws Exception 文件读写或测试资源处理失败
+     */
     @Test
     void permitsEmptyTestFiles() throws Exception {
-        File file = files.save(new ByteArrayInputStream(new byte[0]), 0, "empty.out", "text/plain",
-                FileBizType.TEST_DATA, 1L, false);
+        File file = files.create(new CreateStoredFileCommand("empty.out", "text/plain", "problem/1/testdata", FileBizType.TEST_DATA, 1L, false, null, null),
+                new ByteArrayInputStream(new byte[0]), 0);
         try (var input = files.open(file)) {
             assertEquals(-1, input.read());
         }
     }
 
+    /**
+     * 切换默认配置后原文件仍按固定位置读取，对外标识与对象键独立
+     * @throws Exception 文件读写或测试资源处理失败
+     */
     @Test
     void oldProfileRemainsReadableAfterDefaultSwitch() throws Exception {
         byte[] content = {1, 2, 3};
-        File file = files.save(new ByteArrayInputStream(content), content.length, "avatar.png", "image/png",
-                FileBizType.IMAGE, null, true);
+        File file = files.create(new CreateStoredFileCommand("avatar.png", "image/png", "image", FileBizType.IMAGE, null, true, null, null),
+                new ByteArrayInputStream(content), content.length);
         StorageProperties.Profile local = new StorageProperties.Profile();
         local.setDriverType(StorageDriverType.LOCAL);
         properties.getProfiles().put("another", local);
@@ -96,26 +109,35 @@ class StoredFileServiceTest {
         try (var input = files.open(file)) {
             assertArrayEquals(content, input.readAllBytes());
         }
-        assertTrue(file.getUrl().startsWith("/files/public/local/"));
+        assertTrue(file.getPublicId().matches("[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}"));
+        assertNotEquals(file.getPublicId(), Path.of(file.getObjectKey()).getFileName().toString().replace(".png", ""));
     }
 
+    /**
+     * 登记失败补偿已上传对象并删除暂存文件
+     * @throws Exception 文件读写或测试资源处理失败
+     */
     @Test
     void dbInsertFailureRemovesUploadedObjectAndStaging() throws Exception {
         when(entities.save(any(File.class))).thenReturn(false);
-        assertThrows(FileException.class, () -> files.save(new ByteArrayInputStream(new byte[]{1}), 1,
-                "a.in", "text/plain", FileBizType.TEST_DATA, 1L, false));
+        assertThrows(FileException.class, () -> files.create(new CreateStoredFileCommand("a.in", "text/plain", "problem/1/testdata", FileBizType.TEST_DATA, 1L, false, null, null),
+                new ByteArrayInputStream(new byte[]{1}), 1));
         try (var paths = Files.walk(root)) {
             assertEquals(0, paths.filter(Files::isRegularFile).count());
         }
     }
 
+    /**
+     * 外层事务回滚时删除本次创建的对象
+     * @throws Exception 文件读写或测试资源处理失败
+     */
     @Test
     void enclosingTransactionRollbackRemovesNewObject() throws Exception {
         TransactionSynchronizationManager.initSynchronization();
         try {
-            File file = files.save(new ByteArrayInputStream(new byte[]{1}), 1, "a.in", "text/plain",
-                    FileBizType.TEST_DATA, 1L, false);
-            Path object = root.resolve(file.getStoragePath());
+            File file = files.create(new CreateStoredFileCommand("a.in", "text/plain", "problem/1/testdata", FileBizType.TEST_DATA, 1L, false, null, null),
+                new ByteArrayInputStream(new byte[]{1}), 1);
+            Path object = root.resolve(file.getBucket() + "/" + file.getObjectKey());
             assertTrue(Files.exists(object));
             TransactionSynchronizationManager.getSynchronizations().forEach(synchronization ->
                     synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
@@ -125,37 +147,49 @@ class StoredFileServiceTest {
         }
     }
 
+    /**
+     * 拒绝公开测试数据及不存在的存储配置
+     */
     @Test
     void rejectsPrivateTestDataMarkedPublicAndUnknownProfile() {
-        assertThrows(FileException.class, () -> files.save(new ByteArrayInputStream(new byte[0]), 0,
-                "a.in", "text/plain", FileBizType.TEST_DATA, 1L, true));
+        assertThrows(FileException.class, () -> files.create(new CreateStoredFileCommand("a.in", "text/plain", "problem/1/testdata", FileBizType.TEST_DATA, 1L, true, null, null),
+                new ByteArrayInputStream(new byte[0]), 0));
         properties.setActive("missing");
         assertThrows(FileException.class, registry::active);
         verifyNoInteractions(entities);
     }
 
+    /**
+     * 拒绝超限或与实际内容长度不一致的上传
+     */
     @Test
     void rejectsOversizeAndDishonestContentLength() {
         properties.setMaxFileSize(2);
-        assertThrows(FileException.class, () -> files.save(new ByteArrayInputStream(new byte[3]), 3,
-                "a.in", "text/plain", FileBizType.TEST_DATA, 1L, false));
-        assertThrows(FileException.class, () -> files.save(new ByteArrayInputStream(new byte[2]), 1,
-                "a.in", "text/plain", FileBizType.TEST_DATA, 1L, false));
-        assertThrows(FileException.class, () -> files.save(new ByteArrayInputStream(new byte[1]), 2,
-                "a.in", "text/plain", FileBizType.TEST_DATA, 1L, false));
+        assertThrows(FileException.class, () -> files.create(new CreateStoredFileCommand("a.in", "text/plain", "problem/1/testdata", FileBizType.TEST_DATA, 1L, false, null, null),
+                new ByteArrayInputStream(new byte[3]), 3));
+        assertThrows(FileException.class, () -> files.create(new CreateStoredFileCommand("a.in", "text/plain", "problem/1/testdata", FileBizType.TEST_DATA, 1L, false, null, null),
+                new ByteArrayInputStream(new byte[2]), 1));
+        assertThrows(FileException.class, () -> files.create(new CreateStoredFileCommand("a.in", "text/plain", "problem/1/testdata", FileBizType.TEST_DATA, 1L, false, null, null),
+                new ByteArrayInputStream(new byte[1]), 2));
         verifyNoInteractions(entities);
     }
 
+    /**
+     * 对象键和文件名拒绝目录穿越、绝对路径及控制字符
+     */
     @Test
     void rejectsTraversalAbsolutePathsAndControlCharacters() {
         for (String path : new String[]{"../private/a.in", "public/../../secret", "E:/secret", "public\\a", "a\0b"}) {
             assertThrows(FileException.class, () -> StoragePaths.resolve(root, path), path);
         }
-        assertThrows(FileException.class, () -> files.save(new ByteArrayInputStream(new byte[0]), 0,
-                "bad\r\nname.png", "image/png", FileBizType.IMAGE, null, true));
-        assertThrows(FileException.class, () -> files.openLegacyPublic("../private/a.in"));
+        assertThrows(FileException.class, () -> files.create(new CreateStoredFileCommand("bad\r\nname.png", "image/png", "image", FileBizType.IMAGE, null, true, null, null),
+                new ByteArrayInputStream(new byte[0]), 0));
+        assertThrows(FileException.class, () -> StoragePaths.validateObjectKey("../private/a.in"));
     }
 
+    /**
+     * 远程配置要求凭据完整且公开私有桶不同
+     */
     @Test
     void remoteProfilesRequireCredentialsAndDistinctBuckets() {
         StorageProperties.Profile remote = new StorageProperties.Profile();
@@ -178,16 +212,19 @@ class StoredFileServiceTest {
         ObjectStorageService corrupted = mock(ObjectStorageService.class);
         doReturn(corrupted).when(routed).lease("local");
         when(corrupted.open(anyString(), anyString())).thenReturn(new ByteArrayInputStream(new byte[]{9}));
-        StoredFileService service = new StoredFileServiceImpl();
+        FileService service = new FileServiceImpl();
         ReflectionTestUtils.setField(service, "files", entities);
         ReflectionTestUtils.setField(service, "storage", routed);
-        assertThrows(FileException.class, () -> service.save(new ByteArrayInputStream(new byte[]{1}), 1,
-                "a.in", "text/plain", FileBizType.TEST_DATA, 1L, false));
+        assertThrows(FileException.class, () -> service.create(new CreateStoredFileCommand("a.in", "text/plain", "problem/1/testdata",
+                FileBizType.TEST_DATA, 1L, false, null, null), new ByteArrayInputStream(new byte[]{1}), 1));
         verify(corrupted).delete(eq("private"), anyString());
         verify(corrupted).close();
         verifyNoInteractions(entities);
     }
 
+    /**
+     * 远程明文 HTTP 被拒绝且错误消息不暴露凭据
+     */
     @Test
     void remoteHttpOutsideLoopbackIsRejectedWithoutLeakingCredentials() {
         StorageProperties.Profile remote = new StorageProperties.Profile();

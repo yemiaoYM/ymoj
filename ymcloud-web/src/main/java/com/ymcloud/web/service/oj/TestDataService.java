@@ -1,7 +1,6 @@
-package com.ymcloud.web.service.problem;
+package com.ymcloud.web.service.oj;
 
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
-import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -16,7 +15,7 @@ import java.util.List;
 public interface TestDataService {
 
     /**
-     * 获取可用于新判题任务的固定版本，必要时在事务内迁移完整历史数据
+     * 获取可用于新判题任务的固定版本
      * @param problemId 已授权的题目编号
      * @return 包含有效测试点的版本编号
      */
@@ -25,7 +24,7 @@ public interface TestDataService {
     /**
      * 读取并校验指定版本清单
      * @param problemId 已授权的题目编号
-     * @param versionId 固定版本编号，为空时只读盘点历史数据
+     * @param versionId 固定版本编号，为空时返回未配置测试点的空清单
      * @return 通过身份与完整性校验的清单
      */
     TestDataManifest getManifest(Long problemId, Long versionId);
@@ -33,7 +32,7 @@ public interface TestDataService {
     /**
      * 打开指定版本内的测试文件并流式核对长度与摘要
      * @param problemId 已授权的题目编号
-     * @param versionId 固定版本编号，历史未迁移数据可为空
+     * @param versionId 固定版本编号
      * @param logicalPath 清单内的输入或输出逻辑路径
      * @return 由调用方关闭的内容流，完整读取到末尾时完成摘要校验
      */
@@ -60,11 +59,4 @@ public interface TestDataService {
      */
     void delete(Long problemId, List<String> logicalPaths);
 
-    /**
-     * 盘点历史目录，获准执行且数据完整时发布首个版本
-     * @param problemId 已授权管理的题目编号
-     * @param apply 是否实际导入文件并发布版本
-     * @return 盘点错误、文件数量与字节数，以及实际迁移状态
-     */
-    TestDataMigrationReport migrateLegacy(Long problemId, boolean apply);
 }

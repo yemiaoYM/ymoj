@@ -15,8 +15,10 @@ import java.util.List;
 @Data
 public class CarouselSettingDTO {
 
-    /** 已上传的公开图片 ID，十进制字符串；最多 10 张，空数组隐藏轮播，不允许重复。 */
+    /**
+     * 已上传的公开图片 ID，32 位小写 UUIDv4；最多 10 张，空数组隐藏轮播，不允许重复
+     */
     @NotNull(message = "请传入轮播图列表")
     @Size(max = 10, message = "轮播图最多10张")
-    private List<@NotNull @Pattern(regexp = "[1-9][0-9]{0,18}", message = "图片ID不合法") String> fileIds;
+    private List<@NotNull @Pattern(regexp = "[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}", message = "图片ID不合法") String> fileIds;
 }

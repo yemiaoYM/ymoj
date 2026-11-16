@@ -5,11 +5,12 @@ import com.ymcloud.core.storage.config.StorageProperties;
 import com.ymcloud.core.storage.factory.StorageRegistry;
 import com.ymcloud.core.storage.util.FileDigests;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.StorageDriverType;
-import com.ymcloud.web.service.file.StoredFileService;
-import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
+import com.ymcloud.web.service.file.FileService;
+import com.ymcloud.web.service.file.impl.FileServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
@@ -66,7 +67,7 @@ class StorageS3IntegrationTest {
             return true;
         });
         StorageRegistry registry = new StorageRegistry(properties, root.toString());
-        StoredFileService files = new StoredFileServiceImpl();
+        FileService files = new FileServiceImpl();
         ReflectionTestUtils.setField(files, "files", entities);
         ReflectionTestUtils.setField(files, "storage", registry);
         List<File> created = java.util.Collections.synchronizedList(new ArrayList<>());
@@ -116,21 +117,28 @@ class StorageS3IntegrationTest {
             assertEquals(18, created.size());
         } finally {
             for (File file : created) {
-                registry.client(file.getStorageProfile()).delete(file.getBucket(), file.getObjectKey());
+                registry.client(file.getStorageKey()).delete(file.getBucket(), file.getObjectKey());
             }
             registry.close();
         }
     }
 
-    private void roundtrip(StoredFileService files, Path source, List<File> created) throws Exception {
+    /**
+     * 上传私有对象并读取核验内容摘要，登记对象供测试清理
+     * @param files 文件服务
+     * @param source 待上传文件
+     * @param created 本轮创建的文件记录
+     * @throws Exception 上传或读取验证失败
+     */
+    private void roundtrip(FileService files, Path source, List<File> created) throws Exception {
         File file;
         try (InputStream input = Files.newInputStream(source)) {
-            file = files.save(input, Files.size(source), "payload.bin", "application/octet-stream",
-                    FileBizType.GENERAL, null, false);
+            file = files.create(new CreateStoredFileCommand("payload.bin", "application/octet-stream", "image", FileBizType.GENERAL, null, false, null, null),
+                input, Files.size(source));
         }
         created.add(file);
         assertEquals("ymcloud-private", file.getBucket());
-        assertNull(file.getUrl());
+        assertEquals(0, file.getIsPublic());
         try (InputStream input = files.open(file)) {
             assertEquals(file.getSha256(), FileDigests.sha256(input));
         }

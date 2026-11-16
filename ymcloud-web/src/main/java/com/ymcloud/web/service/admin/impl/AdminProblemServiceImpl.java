@@ -13,7 +13,6 @@ import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
-import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.contract.judge.SpjCompileResult;
 import com.ymcloud.pojo.contract.judge.SpjProgram;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
@@ -28,7 +27,7 @@ import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
 import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.web.service.admin.AdminProblemService;
 import com.ymcloud.web.service.admin.ResourceDeletionService;
-import com.ymcloud.web.service.problem.TestDataService;
+import com.ymcloud.web.service.oj.TestDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -128,7 +127,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 使用已校验的自定义展示 ID 添加题目，唯一索引防止并发重复。
+     * 使用已校验的自定义展示 ID 添加题目，唯一索引防止并发重复
      * @param problemDTO 通过新增校验的题目信息
      * @return 题目展示 ID
      * @throws ProblemException 展示 ID 已占用、判题方式未支持或保存失败
@@ -281,7 +280,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     }
 
     /**
-     * 规范化可选的题目来源说明，空白表示清空。
+     * 规范化可选的题目来源说明，空白表示清空
      * @param source 来源文本，可为 null
      * @return 去除首尾空白后的来源，无内容时为 null
      */
@@ -389,19 +388,6 @@ public class AdminProblemServiceImpl implements AdminProblemService {
     public void deleteTestCaseFiles(Long problemId, List<String> fileNames) {
         getManagedProblem(problemId);
         testDataService.delete(problemId, fileNames);
-    }
-
-    /**
-     * 按题目管理归属检查历史数据迁移入口
-     * @param problemId 题目 ID
-     * @param execute 是否执行迁移，false 仅盘点
-     * @return 迁移或盘点报告
-     */
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public TestDataMigrationReport migrateTestData(Long problemId, boolean execute) {
-        getManagedProblem(problemId);
-        return testDataService.migrateLegacy(problemId, execute);
     }
 
     /**

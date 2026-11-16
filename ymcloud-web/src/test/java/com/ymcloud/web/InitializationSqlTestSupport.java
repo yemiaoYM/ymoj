@@ -19,13 +19,12 @@ import java.util.regex.Pattern;
  */
 final class InitializationSqlTestSupport {
 
-    private static final Set<String> TABLES = Set.of("file", "problem", "judge", "test_data_version");
+    private static final Set<String> TABLES = Set.of("storage_config", "file", "problem", "judge", "test_data_version");
     private static final Pattern CREATE_TABLE = Pattern.compile(
             "(?is)^CREATE\\s+TABLE\\s+`([a-z0-9_]+)`\\s*\\(");
     private static final Pattern REFERENCE = Pattern.compile("(?i)\\bREFERENCES\\s+`([a-z0-9_]+)`");
 
-    private InitializationSqlTestSupport() {
-    }
+    private InitializationSqlTestSupport() {}
 
     /**
      * 从项目初始化 SQL 提取存储测试所需表结构
@@ -71,7 +70,7 @@ final class InitializationSqlTestSupport {
             definitions.put(name, statement);
         }
         if (!definitions.keySet().equals(TABLES)) {
-            throw new IllegalStateException("初始化脚本必须包含 file、problem、judge、test_data_version 四张测试表");
+            throw new IllegalStateException("初始化脚本必须包含 storage_config、file、problem、judge、test_data_version 五张测试表");
         }
         return String.join(";\n", definitions.values()) + ";\n";
     }

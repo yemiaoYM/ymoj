@@ -52,8 +52,8 @@ import com.ymcloud.web.judge.JudgeDispatchState;
 import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
+import com.ymcloud.web.service.oj.TestDataService;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
-import com.ymcloud.web.service.problem.TestDataService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -80,7 +80,7 @@ import static org.mockito.Mockito.*;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-12
- * @Description: 验证本站提交、版本快照、比赛模式、自测持久化及状态恢复。
+ * @Description: 验证本站提交、版本快照、比赛模式、自测持久化及状态恢复
  */
 class JudgeWebWorkflowTest {
 
@@ -138,7 +138,7 @@ class JudgeWebWorkflowTest {
     }
 
     /**
-     * 保存任务时固定完整 SPJ 版本，题目后续编辑不会改变已入队内容。
+     * 保存任务时固定完整 SPJ 版本，题目后续编辑不会改变已入队内容
      */
     @Test
     void spjSubmissionPinsCheckerSource() {
@@ -167,6 +167,9 @@ class JudgeWebWorkflowTest {
         assertEquals(77L, task.getTestDataVersionId());
     }
 
+    /**
+     * 正式提交固定记录与任务版本，后续发布不改变原任务
+     */
     @Test
     void normalSubmissionPinsRecordAndDurableTaskBeforeVersionChanges() {
         stubProblemAndLanguage();
@@ -200,7 +203,7 @@ class JudgeWebWorkflowTest {
     }
 
     /**
-     * 外站来源仅作出处，普通提交和比赛提交都必须选择本站启用的语言。
+     * 外站来源仅作出处，普通提交和比赛提交都必须选择本站启用的语言
      * @param contestSubmission 是否从比赛入口提交
      */
     @ParameterizedTest
@@ -243,7 +246,7 @@ class JudgeWebWorkflowTest {
     }
 
     /**
-     * ACM 使用全对判定，OI 与 IOI 使用相同的测试点评分，并保留比赛归属检查。
+     * ACM 使用全对判定，OI 与 IOI 使用相同的测试点评分，并保留比赛归属检查
      * @param mode 比赛模式：0=ACM，1=OI，2=IOI
      */
     @ParameterizedTest
@@ -278,7 +281,7 @@ class JudgeWebWorkflowTest {
     }
 
     /**
-     * 独立校验判题方式，拒绝尚未实现的模式，不能降级后发出普通任务。
+     * 独立校验判题方式，拒绝尚未实现的模式，不能降级后发出普通任务
      * @param judgeMode 不支持或缺失的判题方式
      */
     @ParameterizedTest
@@ -765,7 +768,7 @@ class JudgeWebWorkflowTest {
     }
 
     /**
-     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供
      * @param dispatches 任务箱实体服务
      * @param judges 提交实体服务
      * @param jdbc 测试数据库连接或隔离桩
@@ -783,7 +786,7 @@ class JudgeWebWorkflowTest {
     }
 
     /**
-     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供
      * @param dispatches 任务箱实体服务
      * @param judges 提交实体服务
      * @param cases 测试点实体服务
@@ -816,7 +819,7 @@ class JudgeWebWorkflowTest {
     }
 
     /**
-     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供
      * @param judges 提交实体服务
      * @param dispatches 任务箱实体服务
      * @param problems 题目实体服务
@@ -871,7 +874,7 @@ class JudgeWebWorkflowTest {
     }
 
     /**
-     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供
      * @param redisCache 隔离的缓存边界
      * @return 已注入依赖、尚未主动执行生命周期回调的测试组件
      */

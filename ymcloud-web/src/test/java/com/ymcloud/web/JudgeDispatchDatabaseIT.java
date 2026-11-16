@@ -33,7 +33,6 @@ import com.ymcloud.core.web.dao.impl.ProblemEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.TestDataVersionEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.UserAcproblemEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.UserEntityServiceImpl;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import com.ymcloud.pojo.contract.judge.JudgeResult;
 import com.ymcloud.pojo.contract.judge.JudgeTask;
 import com.ymcloud.pojo.contract.judge.JudgeVerdict;
@@ -59,10 +58,10 @@ import com.ymcloud.web.service.admin.AdminContestService;
 import com.ymcloud.web.service.admin.ResourceDeletionService;
 import com.ymcloud.web.service.admin.impl.AdminContestServiceImpl;
 import com.ymcloud.web.service.common.PublicImageService;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import com.ymcloud.web.service.oj.JudgeService;
+import com.ymcloud.web.service.oj.TestDataService;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
-import com.ymcloud.web.service.problem.TestDataService;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -124,7 +123,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-12
- * @Description: 仅连接本地 MySQL，在随机临时库验证真实事务、并发及任务恢复。
+ * @Description: 仅连接本地 MySQL，在随机临时库验证真实事务、并发及任务恢复
  */
 @EnabledIfEnvironmentVariable(named = "YMCLOUD_JUDGE_DB_IT", matches = "true")
 class JudgeDispatchDatabaseIT {
@@ -197,9 +196,7 @@ class JudgeDispatchDatabaseIT {
     }
 
     /**
-
-     * 创建与业务库隔离的普通判题数据，每个测试从同一状态开始。
-
+     * 创建与业务库隔离的普通判题数据，每个测试从同一状态开始
      */
     @BeforeEach
     void clear() {
@@ -416,9 +413,7 @@ class JudgeDispatchDatabaseIT {
     }
 
     /**
-
-     * 验证实体映射可清空来源，且数据库拒绝非法难度和判题方式。
-
+     * 验证实体映射可清空来源，且数据库拒绝非法难度和判题方式
      */
     @Test
     void problemMetadataMappingAndConstraintsAreEffective() {
@@ -1283,8 +1278,8 @@ class JudgeDispatchDatabaseIT {
          * @return 文件服务桩
          */
         @Bean
-        StoredFileService storedFiles() {
-            return mock(StoredFileService.class);
+        FileService storedFiles() {
+            return mock(FileService.class);
         }
 
         @Bean
@@ -1304,7 +1299,7 @@ class JudgeDispatchDatabaseIT {
     }
 
     /**
-     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供
      * @param dispatches 任务箱实体服务
      * @param judges 提交实体服务
      * @param jdbc 测试数据库连接或隔离桩
@@ -1322,7 +1317,7 @@ class JudgeDispatchDatabaseIT {
     }
 
     /**
-     * 装配字段注入组件，网络和存储依赖由本测试显式提供。
+     * 装配字段注入组件，网络和存储依赖由本测试显式提供
      * @param dispatches 任务箱实体服务
      * @param results 结果落库入口
      * @param rabbitTemplate 可控制确认和退回的消息模板

@@ -1,27 +1,24 @@
-package com.ymcloud.web.service.problem.impl;
+package com.ymcloud.web.service.oj.impl;
 
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONException;
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.core.storage.util.FileDigests;
-import com.ymcloud.core.storage.util.StorageDirectoryResolver;
-import com.ymcloud.core.storage.util.StoragePaths;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
-import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.enums.FileBizType;
-import com.ymcloud.web.service.file.StoredFileService;
-import com.ymcloud.web.service.problem.TestDataService;
-import org.springframework.beans.factory.annotation.Value;
+import com.ymcloud.web.service.file.FileService;
+import com.ymcloud.web.service.oj.TestDataService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,9 +27,6 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -45,8 +39,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
-import java.util.stream.Stream;
 
 /**
  * @Author: Yemiao
@@ -56,30 +48,17 @@ import java.util.stream.Stream;
 @Service
 public class TestDataServiceImpl implements TestDataService {
 
-    private final ProblemEntityService problemEntityService;
-    private final TestDataVersionEntityService versionEntityService;
-    private final StoredFileService storedFileService;
-    private final Path baseDirectory;
+    @Autowired
+    private ProblemEntityService problemEntityService;
+
+    @Autowired
+    private TestDataVersionEntityService versionEntityService;
+
+    @Autowired
+    private FileService storedFileService;
 
     /**
-     * 绑定测试数据版本服务并固定历史目录基准
-     * @param problemEntityService 题目实体服务
-     * @param versionEntityService 测试数据版本实体服务
-     * @param storedFileService 文件登记与对象生命周期服务
-     * @param baseDirectory 本地文件根目录配置
-     */
-    public TestDataServiceImpl(ProblemEntityService problemEntityService,
-                              TestDataVersionEntityService versionEntityService,
-                              StoredFileService storedFileService,
-                              @Value("${ymcloud.file.base-dir}") String baseDirectory) {
-        this.problemEntityService = problemEntityService;
-        this.versionEntityService = versionEntityService;
-        this.storedFileService = storedFileService;
-        this.baseDirectory = StorageDirectoryResolver.resolve(baseDirectory);
-    }
-
-    /**
-     * 新任务固定版本，尚未迁移的完整历史数据在同一事务中生成初始快照
+     * 新任务固定已有版本，未配置有效测试点时明确拒绝
      * @param problemId 已授权的题目编号
      * @return 含有效测试点的固定版本编号
      */
@@ -87,30 +66,24 @@ public class TestDataServiceImpl implements TestDataService {
     @Transactional(rollbackFor = Exception.class)
     public Long getCurrentVersion(Long problemId) {
         Problem problem = requireProblem(problemId, true);
-        if (problem.getTestDataVersionId() != null) {
-            TestDataManifest manifest = getManifest(problemId, problem.getTestDataVersionId());
-            requireCases(manifest);
-            return manifest.getVersionId();
-        }
-        TestDataMigrationReport report = inspectLegacy(problemId);
-        requireValidLegacy(report);
-        requireCases(report.getManifest());
-        return publish(problemId, importLegacy(report.getManifest()));
+        TestDataManifest manifest = getManifest(problemId, problem.getTestDataVersionId());
+        requireCases(manifest);
+        return manifest.getVersionId();
     }
 
     /**
      * 读取并校验指定版本清单
      * @param problemId 已授权的题目编号
-     * @param versionId 固定版本编号，为空时只读盘点历史数据
+     * @param versionId 固定版本编号，为空时返回尚未配置测试点的空清单
      * @return 通过身份与完整性校验的清单
      */
     @Override
     public TestDataManifest getManifest(Long problemId, Long versionId) {
         requireProblem(problemId, false);
         if (versionId == null) {
-            TestDataMigrationReport report = inspectLegacy(problemId);
-            requireValidLegacy(report);
-            return report.getManifest();
+            TestDataManifest manifest = new TestDataManifest();
+            manifest.setProblemId(problemId);
+            return manifest;
         }
         TestDataVersion version = versionEntityService.lambdaQuery()
                 .eq(TestDataVersion::getId, versionId)
@@ -135,7 +108,7 @@ public class TestDataServiceImpl implements TestDataService {
     /**
      * 读取指定清单中的文件并在读取过程中核对长度和哈希
      * @param problemId 已授权的题目编号
-     * @param versionId 固定版本编号，历史未迁移数据可为空
+     * @param versionId 固定版本编号
      * @param logicalPath 清单中的输入或输出逻辑路径
      * @return 调用方负责关闭的校验流
      */
@@ -148,24 +121,15 @@ public class TestDataServiceImpl implements TestDataService {
             if (input || logicalPath.equals(entry.getOutput())) {
                 Long size = input ? entry.getInputSize() : entry.getOutputSize();
                 String hash = input ? entry.getInputSha256() : entry.getOutputSha256();
-                InputStream stream;
-                if (versionId == null) {
-                    try {
-                        stream = Files.newInputStream(safeLegacyFile(legacyRoot(problemId), logicalPath.substring(1)));
-                    } catch (IOException e) {
-                        throw new ProblemException("读取历史测试数据失败", e);
-                    }
-                } else {
-                    File file = storedFileService.get(input ? entry.getInputFileId() : entry.getOutputFileId());
-                    if (!FileBizType.TEST_DATA.equals(file.getBizType())
-                            || !Objects.equals(problemId, file.getBizId())
-                            || !Integer.valueOf(FileConstants.ACCESS_PRIVATE).equals(file.getIsPublic())
-                            || !Objects.equals(size, file.getFileSize())
-                            || !Objects.equals(hash, file.getSha256())) {
-                        throw new ProblemException("测试数据文件元信息校验失败");
-                    }
-                    stream = storedFileService.open(file);
+                File file = storedFileService.get(input ? entry.getInputFileId() : entry.getOutputFileId());
+                if (!FileBizType.TEST_DATA.equals(file.getBizType())
+                        || !Objects.equals(problemId, file.getBizId())
+                        || !Integer.valueOf(FileConstants.ACCESS_PRIVATE).equals(file.getIsPublic())
+                        || !Objects.equals(size, file.getFileSize())
+                        || !Objects.equals(hash, file.getSha256())) {
+                    throw new ProblemException("测试数据文件元信息校验失败");
                 }
+                InputStream stream = storedFileService.open(file);
                 return new VerifiedInputStream(stream, size, hash);
             }
         }
@@ -252,31 +216,6 @@ public class TestDataServiceImpl implements TestDataService {
     }
 
     /**
-     * 盘点历史目录，获准执行且数据完整时发布首个版本
-     * @param problemId 已授权管理的题目编号
-     * @param apply 是否实际导入文件并发布版本
-     * @return 盘点错误、文件数量与字节数，以及实际迁移状态
-     */
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public TestDataMigrationReport migrateLegacy(Long problemId, boolean apply) {
-        Problem problem = requireProblem(problemId, apply);
-        if (problem.getTestDataVersionId() != null) {
-            TestDataMigrationReport report = describe(getManifest(problemId, problem.getTestDataVersionId()));
-            report.setApplied(apply);
-            return report;
-        }
-        TestDataMigrationReport report = inspectLegacy(problemId);
-        if (apply && report.getErrors().isEmpty() && !report.getManifest().getEntries().isEmpty()) {
-            Long versionId = publish(problemId, importLegacy(report.getManifest()));
-            report.setVersionId(versionId);
-            report.setApplied(true);
-            report.setManifest(getManifest(problemId, versionId));
-        }
-        return report;
-    }
-
-    /**
      * 读取已存在的题目，版本变更时通过行锁串行化发布
      * @param problemId 题目编号，必须为正数
      * @param lock 是否持有题目行写锁
@@ -305,19 +244,12 @@ public class TestDataServiceImpl implements TestDataService {
     }
 
     /**
-     * 获取可修改的当前条目索引，首次编辑时先导入完整历史数据
+     * 获取可修改的当前条目索引，首次上传从空清单开始
      * @param problem 已读取且持有写锁的题目
      * @return 按不含扩展名的文件名索引的条目
      */
     private Map<String, TestDataManifest.Entry> currentEntries(Problem problem) {
-        List<TestDataManifest.Entry> entries;
-        if (problem.getTestDataVersionId() == null) {
-            TestDataMigrationReport report = inspectLegacy(problem.getId());
-            requireValidLegacy(report);
-            entries = importLegacy(report.getManifest());
-        } else {
-            entries = getManifest(problem.getId(), problem.getTestDataVersionId()).getEntries();
-        }
+        List<TestDataManifest.Entry> entries = getManifest(problem.getId(), problem.getTestDataVersionId()).getEntries();
         Map<String, TestDataManifest.Entry> result = new LinkedHashMap<>();
         for (TestDataManifest.Entry entry : entries) {
             result.put(baseName(entry.getInput().substring(4)), entry);
@@ -403,8 +335,9 @@ public class TestDataServiceImpl implements TestDataService {
      */
     private File saveUpload(Long problemId, MultipartFile file) throws IOException {
         try (InputStream input = file.getInputStream()) {
-            return storedFileService.save(input, file.getSize(), file.getOriginalFilename(),
-                    "text/plain", FileBizType.TEST_DATA, problemId, false);
+            return storedFileService.create(new CreateStoredFileCommand(
+                    file.getOriginalFilename(), "text/plain", FileConstants.SUB_DIR_PROBLEM + "/" + problemId + "/testdata",
+                    FileBizType.TEST_DATA, problemId, false, null, null), input, file.getSize());
         }
     }
 
@@ -421,243 +354,6 @@ public class TestDataServiceImpl implements TestDataService {
         entry.setOutputSize(output.getFileSize());
         entry.setInputSha256(input.getSha256());
         entry.setOutputSha256(output.getSha256());
-    }
-
-    /**
-     * 复制历史清单条目并导入对应私有对象，不修改原始清单
-     * @param manifest 已通过盘点校验的历史清单
-     * @return 带文件登记编号的新条目列表
-     */
-    private List<TestDataManifest.Entry> importLegacy(TestDataManifest manifest) {
-        List<TestDataManifest.Entry> entries = new ArrayList<>();
-        for (TestDataManifest.Entry original : manifest.getEntries()) {
-            TestDataManifest.Entry entry = new TestDataManifest.Entry();
-            entry.setId(original.getId());
-            entry.setInput(original.getInput());
-            entry.setOutput(original.getOutput());
-            File input = saveLegacy(manifest.getProblemId(), original.getInput(), original.getInputSize(), original.getInputSha256());
-            File output = saveLegacy(manifest.getProblemId(), original.getOutput(), original.getOutputSize(), original.getOutputSha256());
-            fillStoredFiles(entry, input, output);
-            entries.add(entry);
-        }
-        return entries;
-    }
-
-    /**
-     * 按盘点大小与摘要读取历史文件，保存后再次核对迁移结果
-     * @param problemId 所属题目编号
-     * @param path 历史清单中的逻辑路径
-     * @param size 盘点确认的文件字节数
-     * @param hash 盘点确认的 SHA-256 摘要
-     * @return 已登记的私有测试文件
-     */
-    private File saveLegacy(Long problemId, String path, long size, String hash) {
-        try (InputStream input = new VerifiedInputStream(
-                Files.newInputStream(safeLegacyFile(legacyRoot(problemId), path.substring(1))), size, hash)) {
-            File file = storedFileService.save(input, size, path.substring(path.lastIndexOf('/') + 1),
-                    "text/plain", FileBizType.TEST_DATA, problemId, false);
-            if (!Objects.equals(hash, file.getSha256()) || !Objects.equals(size, file.getFileSize())) {
-                throw new ProblemException("历史测试数据在迁移期间发生变化");
-            }
-            return file;
-        } catch (IOException e) {
-            throw new ProblemException("迁移历史测试数据失败", e);
-        }
-    }
-
-    /**
-     * 只读盘点历史目录并累计配对、摘要和旧清单校验问题
-     * @param problemId 题目编号
-     * @return 历史清单与盘点结果，目录不存在时返回空清单
-     */
-    private TestDataMigrationReport inspectLegacy(Long problemId) {
-        TestDataManifest manifest = new TestDataManifest();
-        manifest.setProblemId(problemId);
-        TestDataMigrationReport report = describe(manifest);
-        try {
-            Path root = legacyRoot(problemId);
-            if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
-                return report;
-            }
-            if (Files.isSymbolicLink(root) || !root.toRealPath().startsWith(baseDirectory.toRealPath())) {
-                throw new IOException("测试数据目录越界");
-            }
-            Map<String, Path> inputs = scanLegacyDirectory(root, "in", ".in", report.getErrors());
-            Map<String, Path> outputs = scanLegacyDirectory(root, "out", ".out", report.getErrors());
-            Set<String> names = new TreeSet<>(inputs.keySet());
-            names.addAll(outputs.keySet());
-            for (String name : names) {
-                if (!inputs.containsKey(name) || !outputs.containsKey(name)) {
-                    report.getErrors().add("文件不配对：" + name);
-                    continue;
-                }
-                TestDataManifest.Entry entry = new TestDataManifest.Entry();
-                entry.setId(manifest.getEntries().size() + 1);
-                entry.setInput("/in/" + name + ".in");
-                entry.setOutput("/out/" + name + ".out");
-                entry.setInputSize(Files.size(inputs.get(name)));
-                entry.setOutputSize(Files.size(outputs.get(name)));
-                entry.setInputSha256(hashFile(inputs.get(name)));
-                entry.setOutputSha256(hashFile(outputs.get(name)));
-                manifest.getEntries().add(entry);
-            }
-            validateLegacyInfo(root, manifest, report.getErrors());
-            TestDataMigrationReport counts = describe(manifest);
-            report.setFileCount(counts.getFileCount());
-            report.setTotalBytes(counts.getTotalBytes());
-        } catch (IOException e) {
-            throw new ProblemException("历史测试数据读取失败", e);
-        }
-        return report;
-    }
-
-    /**
-     * 扫描历史输入或输出目录，将单文件问题收集到盘点报告
-     * @param root 题目历史根目录
-     * @param directory 输入或输出子目录名称
-     * @param extension 该目录允许的文件扩展名
-     * @param errors 接收盘点错误的列表
-     * @return 按不含扩展名的文件名索引的安全路径
-     * @throws IOException 目录读取失败或目录路径越界
-     */
-    private Map<String, Path> scanLegacyDirectory(Path root, String directory, String extension,
-                                                 List<String> errors) throws IOException {
-        Map<String, Path> result = new HashMap<>();
-        Path folder = root.resolve(directory);
-        if (!Files.exists(folder, LinkOption.NOFOLLOW_LINKS)) {
-            return result;
-        }
-        if (Files.isSymbolicLink(folder) || !folder.toRealPath().startsWith(root.toRealPath())) {
-            throw new IOException("历史测试数据目录不能是符号链接");
-        }
-        try (Stream<Path> stream = Files.list(folder)) {
-            for (Path path : stream.sorted().toList()) {
-                String filename = path.getFileName().toString();
-                if (!filename.endsWith(extension)) {
-                    errors.add("目录内存在非测试数据文件：" + directory + "/" + filename);
-                    continue;
-                }
-                try {
-                    validateFilename(filename);
-                } catch (ProblemException e) {
-                    errors.add("无效历史文件：" + directory + "/" + filename);
-                    continue;
-                }
-                Path safe = safeLegacyFile(root, directory + "/" + filename);
-                if (Files.size(safe) > ProblemConstants.MAX_TEST_CASE_FILE_SIZE) {
-                    errors.add("历史测试数据超过50MB：" + filename);
-                    continue;
-                }
-                result.put(baseName(filename), safe);
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 将已有 info.json 与实际文件配对、路径和摘要逐项比对
-     * @param root 题目历史根目录
-     * @param manifest 从实际文件生成的清单
-     * @param errors 接收不一致问题的列表
-     * @throws IOException 读取历史清单失败
-     */
-    private void validateLegacyInfo(Path root, TestDataManifest manifest, List<String> errors) throws IOException {
-        Path infoPath = root.resolve("info.json");
-        if (!Files.exists(infoPath, LinkOption.NOFOLLOW_LINKS)) {
-            return;
-        }
-        String content = Files.readString(safeLegacyFile(root, "info.json"), StandardCharsets.UTF_8);
-        List<TestDataManifest.Entry> listed;
-        try {
-            listed = JSON.parseArray(content, TestDataManifest.Entry.class);
-        } catch (JSONException e) {
-            errors.add("历史info.json无效");
-            return;
-        }
-        if (listed == null) {
-            errors.add("历史info.json为空");
-            return;
-        }
-        Map<String, TestDataManifest.Entry> actual = new HashMap<>();
-        for (TestDataManifest.Entry entry : manifest.getEntries()) {
-            actual.put(entry.getInput(), entry);
-        }
-        Set<String> seen = new HashSet<>();
-        for (TestDataManifest.Entry listedEntry : listed) {
-            if (listedEntry == null || !seen.add(listedEntry.getInput())) {
-                errors.add("历史info.json含重复或无效测试点");
-                continue;
-            }
-            TestDataManifest.Entry entry = actual.get(listedEntry.getInput());
-            if (entry == null || !Objects.equals(entry.getOutput(), listedEntry.getOutput())) {
-                errors.add("历史info.json与文件不一致");
-            } else if ((listedEntry.getInputSha256() != null
-                    && !listedEntry.getInputSha256().equals(entry.getInputSha256()))
-                    || (listedEntry.getOutputSha256() != null
-                    && !listedEntry.getOutputSha256().equals(entry.getOutputSha256()))) {
-                errors.add("历史info.json哈希与文件不一致");
-            }
-        }
-        if (!seen.equals(actual.keySet())) {
-            errors.add("历史info.json存在缺失或多余测试点");
-        }
-    }
-
-    /**
-     * 在本地私有目录内定位题目历史数据
-     * @param problemId 题目编号
-     * @return 经过路径边界校验的题目目录
-     */
-    private Path legacyRoot(Long problemId) {
-        return StoragePaths.resolve(baseDirectory, "private/problem/" + problemId);
-    }
-
-    /**
-     * 校验历史文件为普通文件并限制真实路径位于题目及本地根目录内
-     * @param root 题目历史目录
-     * @param relativePath 题目目录内相对文件路径
-     * @return 已校验的真实文件路径
-     * @throws IOException 文件不存在、不是普通文件或真实路径越界
-     */
-    private Path safeLegacyFile(Path root, String relativePath) throws IOException {
-        Path path = StoragePaths.resolve(root, relativePath);
-        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("历史文件无效或越界");
-        }
-        Path realRoot = root.toRealPath();
-        Path realPath = path.toRealPath();
-        if (!realRoot.startsWith(baseDirectory.toRealPath()) || !realPath.startsWith(realRoot)) {
-            throw new IOException("历史文件路径越界");
-        }
-        return realPath;
-    }
-
-    /**
-     * 根据清单汇总迁移报告的身份、文件数与总字节数
-     * @param manifest 待汇总的测试数据清单
-     * @return 引用原清单的盘点报告
-     */
-    private TestDataMigrationReport describe(TestDataManifest manifest) {
-        TestDataMigrationReport report = new TestDataMigrationReport();
-        report.setProblemId(manifest.getProblemId());
-        report.setVersionId(manifest.getVersionId());
-        report.setManifest(manifest);
-        report.setFileCount(manifest.getEntries().size() * 2);
-        for (TestDataManifest.Entry entry : manifest.getEntries()) {
-            report.setTotalBytes(report.getTotalBytes() + entry.getInputSize() + entry.getOutputSize());
-        }
-        return report;
-    }
-
-    /**
-     * 拒绝存在盘点问题的历史数据，避免发布不完整版本
-     * @param report 历史数据盘点报告
-     * @throws ProblemException 报告包含至少一个校验错误
-     */
-    private void requireValidLegacy(TestDataMigrationReport report) {
-        if (!report.getErrors().isEmpty()) {
-            throw new ProblemException("历史测试数据校验失败");
-        }
     }
 
     /**
@@ -768,18 +464,6 @@ public class TestDataServiceImpl implements TestDataService {
      */
     private String baseName(String filename) {
         return filename.substring(0, filename.lastIndexOf('.'));
-    }
-
-    /**
-     * 复用存储摘要工具流式计算历史文件哈希
-     * @param path 已校验的本地文件路径
-     * @return 小写十六进制 SHA-256
-     * @throws IOException 文件读取或关闭失败
-     */
-    private String hashFile(Path path) throws IOException {
-        try (InputStream input = Files.newInputStream(path)) {
-            return FileDigests.sha256(input);
-        }
     }
 
     /**

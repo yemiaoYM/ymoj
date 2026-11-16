@@ -1,10 +1,9 @@
 package com.ymcloud.web.service.admin;
 
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
-import com.ymcloud.pojo.bo.TestDataMigrationReport;
+import com.ymcloud.pojo.contract.judge.SpjCompileResult;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.dto.admin.SpjCompileDTO;
-import com.ymcloud.pojo.contract.judge.SpjCompileResult;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ProblemVO;
@@ -28,14 +27,6 @@ public interface AdminProblemService {
      * @return 编译状态及受限诊断
      */
     SpjCompileResult compileSpj(SpjCompileDTO request);
-
-    /**
-     * 检查归属后盘点或迁移历史测试数据
-     * @param problemId 题目 ID
-     * @param execute 是否执行迁移
-     * @return 迁移报告
-     */
-    TestDataMigrationReport migrateTestData(Long problemId, boolean execute);
 
     /**
      * 分页查询题目列表

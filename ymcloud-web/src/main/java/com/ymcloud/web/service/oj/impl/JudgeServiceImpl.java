@@ -48,7 +48,7 @@ import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.service.oj.JudgeService;
-import com.ymcloud.web.service.problem.TestDataService;
+import com.ymcloud.web.service.oj.TestDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -65,7 +65,7 @@ import java.util.UUID;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-12
- * @Description: 校验本站提交权限并持久化可靠任务快照，不携带业务实体或存储凭据。
+ * @Description: 校验本站提交权限并持久化可靠任务快照，不携带业务实体或存储凭据
  */
 @Service
 public class JudgeServiceImpl implements JudgeService {
@@ -311,7 +311,7 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 使用本站语言配置创建正式提交，固定题目测试版本及本次执行身份。
+     * 使用本站语言配置创建正式提交，固定题目测试版本及本次执行身份
      * @param request 提交请求
      * @param user 当前用户
      * @param problem 已验证访问权限的题目，来源仅表示出处
@@ -395,8 +395,8 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 普通练习采用 ACM 判定，比赛按赛制选择单次提交的评分算法。
-     * OI 与 IOI 都按测试点计分，跨提交的取分规则由比赛排名负责。
+     * 普通练习采用 ACM 判定，比赛按赛制选择单次提交的评分算法
+     * OI 与 IOI 都按测试点计分，跨提交的取分规则由比赛排名负责
      * @param contest 所属比赛，普通练习为 null
      * @return Worker 既有评分协议：0=ACM，1=测试点计分
      * @throws JudgeException 比赛模式缺失或不受支持
@@ -413,7 +413,7 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 创建与用户关联的持久自测任务，Web 重启或 Redis 丢失后仍可查询。
+     * 创建与用户关联的持久自测任务，Web 重启或 Redis 丢失后仍可查询
      * @param request 源码、语言、输入及期望输出
      * @return 自测任务的提交 ID
      */
@@ -617,7 +617,7 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 只允许所属用户或已确认的超级管理员读取私有状态。
+     * 只允许所属用户或已确认的超级管理员读取私有状态
      * @param currentUser 从安全上下文取得的当前用户 ID
      * @param owner 任务所属用户 ID
      */
@@ -628,7 +628,7 @@ public class JudgeServiceImpl implements JudgeService {
     }
 
     /**
-     * 检查题目时间和内存范围，非法配置不进入消息队列。
+     * 检查题目时间和内存范围，非法配置不进入消息队列
      * @param time 时间上限，1～60000 毫秒
      * @param memory 内存上限，1024～2097152 KiB
      */

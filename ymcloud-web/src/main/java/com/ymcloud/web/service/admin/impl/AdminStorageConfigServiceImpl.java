@@ -1,32 +1,42 @@
 package com.ymcloud.web.service.admin.impl;
 
+import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.core.storage.client.ObjectStorageService;
 import com.ymcloud.core.storage.config.StorageConfigValidation;
 import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
 import com.ymcloud.core.storage.security.StorageCredentialCipher;
+import com.ymcloud.core.storage.util.FileDigests;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.StorageConfig;
-import com.ymcloud.pojo.entity.StorageConfigState;
 import com.ymcloud.pojo.enums.StorageDriverType;
 import com.ymcloud.pojo.vo.common.StorageConfigVO;
 import com.ymcloud.web.service.admin.AdminStorageConfigService;
-import com.ymcloud.web.service.file.StorageConfigCatalog;
-import com.ymcloud.web.service.file.StorageConnectionTester;
+import com.ymcloud.web.service.file.StorageConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * @Author: Yemiao
@@ -40,13 +50,13 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
     private StorageProperties properties;
 
     @Autowired
-    private StorageConfigCatalog catalog;
+    private StorageConfigService catalog;
 
     @Autowired
     private StorageCredentialCipher cipher;
 
     @Autowired
-    private StorageConnectionTester tester;
+    private StorageRegistry registry;
 
     /**
      * 合并静态与动态配置并返回脱敏管理视图，不解密凭据
@@ -74,7 +84,8 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
             profile.setPathStyle(Boolean.TRUE.equals(config.getPathStyle()));
             result.put(config.getId(), view(config.getId(), config.getName(), config.getProvider(), profile,
                     config.getRemark(), "database", active,
-                    present(config.getEncryptedAccessKey()) && present(config.getEncryptedSecretKey())));
+                    config.getDriverType() == StorageDriverType.LOCAL
+                            || present(config.getEncryptedAccessKey()) && present(config.getEncryptedSecretKey())));
         }
         List<StorageConfigVO> list = new ArrayList<>(result.values());
         list.sort(Comparator.comparing(StorageConfigVO::getKey));
@@ -98,10 +109,10 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         List<File> references = catalog.referencedFiles(dto.getKey());
         if (!references.isEmpty()) {
             // 配置名须与历史记录完全一致，不能借数据库不区分大小写的比较恢复别名。
-            if (references.stream().anyMatch(file -> file == null || !dto.getKey().equals(file.getStorageProfile()))) {
+            if (references.stream().anyMatch(file -> file == null || !dto.getKey().equals(file.getStorageKey()))) {
                 throw new FileException("已有文件的存储配置名不一致，请使用原配置名恢复", HttpStatus.BAD_REQUEST);
             }
-            tester.verifyReferencedFiles(requestProfile(dto, null), references);
+            verifyReferencedFiles(requestProfile(dto, null), references);
         }
         persist(dto, null, null, false);
     }
@@ -154,14 +165,14 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         requireSuperAdmin();
         StorageConfigValidation.validateKey(key);
         if ("local".equals(key)) {
-            tester.test(yamlProfile(key));
+            testProfile(yamlProfile(key));
             return;
         }
         catalog.lockForWrite();
         // 首次读取前取独占锁，避免两个连接测试从共享锁升级时互相等待。
         StorageConfig config = catalog.find(key);
         StorageProperties.Profile profile = config == null ? yamlProfile(key) : catalog.profile(config);
-        tester.test(profile);
+        testProfile(profile);
         if (profile.getDriverType() == StorageDriverType.LOCAL) {
             return;
         }
@@ -188,17 +199,17 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
     public void activate(String key) {
         requireSuperAdmin();
         StorageConfigValidation.validateKey(key);
-        StorageConfigState state = catalog.lockForWrite();
+        catalog.lockForWrite();
         StorageConfig config = catalog.find(key);
-        if ("local".equals(key) && config == null) {
-            tester.test(yamlProfile(key));
+        if ("local".equals(key)) {
+            testProfile(yamlProfile(key));
         } else if (config == null || !Objects.equals(config.getRevision(), config.getTestedRevision())) {
             throw new FileException("请先成功测试当前版本的存储配置");
         } else {
             // 默认选择只更新元数据，仍需确认动态配置的凭据能够解密。
             catalog.profile(config);
         }
-        catalog.activate(state, key);
+        catalog.activate(key);
     }
 
     /**
@@ -215,7 +226,7 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
             throw new FileException("已引用配置的驱动与存储位置不可修改", HttpStatus.BAD_REQUEST);
         }
         if (active) {
-            tester.test(profile);
+            testProfile(profile);
         }
         StorageConfig config = record(dto, profile, existing == null ? 1L : existing.getRevision() + 1);
         if (existing != null) {
@@ -237,6 +248,7 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
      */
     private StorageConfig record(StorageConfigDTO dto, StorageProperties.Profile profile, long revision) {
         StorageConfig config = new StorageConfig();
+        config.setIsDefault(false);
         config.setId(dto.getKey());
         config.setName(dto.getName().trim());
         config.setProvider(dto.getProvider());
@@ -411,6 +423,141 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
     private void requireSuperAdmin() {
         if (!SecurityUtils.isSuperAdmin(SecurityUtils.getAuthentication())) {
             throw new AccessDeniedException("仅超级管理员可以修改或测试存储配置");
+        }
+    }
+
+    /**
+     * 只读校验全部历史引用的大小与摘要，全部通过后才允许恢复配置
+     * @param profile 待恢复的客户端配置
+     * @param files 待核对的非空历史文件引用列表
+     * @throws FileException 引用非法、内容不一致、远端读取或客户端关闭失败
+     */
+    private void verifyReferencedFiles(StorageProperties.Profile profile, List<File> files) {
+        StorageConfigValidation.validate(profile, true);
+        if (files.isEmpty() || profile.getDriverType() == StorageDriverType.LOCAL) {
+            throw new FileException("恢复配置需要非空的远端文件引用", HttpStatus.BAD_REQUEST);
+        }
+        for (File file : files) {
+            validateReference(profile, file);
+        }
+        try (ObjectStorageService driver = registry.createClient(profile)) {
+            byte[] buffer = new byte[64 * 1024];
+            for (File file : files) {
+                MessageDigest digest = FileDigests.digest();
+                long size = 0;
+                try (InputStream input = driver.open(file.getBucket(), file.getObjectKey())) {
+                    int read;
+                    while ((read = input.read(buffer)) != -1) {
+                        if (read > file.getFileSize() - size) {
+                            throw new IOException("历史对象大小不一致");
+                        }
+                        size += read;
+                        digest.update(buffer, 0, read);
+                    }
+                }
+                if (size != file.getFileSize() || !file.getSha256().equalsIgnoreCase(
+                        HexFormat.of().formatHex(digest.digest()))) {
+                    throw new IOException("历史对象内容不一致");
+                }
+            }
+        } catch (RuntimeException | IOException e) {
+            throw new FileException("已有文件完整性校验失败", HttpStatus.BAD_REQUEST, e);
+        }
+    }
+
+    /**
+     * 使用独立客户端测试随机对象并清理探测资源
+     * @param profile 待验证的内部客户端配置
+     * @throws FileException 双桶读写删除、内容校验或探测资源清理失败
+     */
+    private void testProfile(StorageProperties.Profile profile) {
+        StorageConfigValidation.validate(profile, true);
+        Path staged = null;
+        ObjectStorageService driver = null;
+        String key = ".ymcloud-probe/" + UUID.randomUUID();
+        List<String> attemptedBuckets = new ArrayList<>();
+        Exception failure = null;
+        try {
+            byte[] bytes = new byte[1024];
+            new SecureRandom().nextBytes(bytes);
+            String hash = HexFormat.of().formatHex(FileDigests.digest().digest(bytes));
+            staged = Files.createTempFile("ymcloud-storage-probe-", ".bin");
+            Files.write(staged, bytes);
+            driver = registry.createClient(profile);
+            List<String> buckets = profile.getDriverType() == StorageDriverType.LOCAL ? List.of(FileConstants.DIR_PUBLIC, FileConstants.DIR_PRIVATE)
+                    : List.of(profile.getPublicBucket(), profile.getPrivateBucket());
+            for (String bucket : buckets) {
+                // 即使 put 的响应丢失也补偿，不能只清理确认上传成功的对象
+                attemptedBuckets.add(bucket);
+                driver.put(bucket, key, staged, "application/octet-stream", hash);
+                try (InputStream input = driver.open(bucket, key)) {
+                    byte[] result = input.readNBytes(bytes.length + 1);
+                    if (result.length != bytes.length || !hash.equals(HexFormat.of().formatHex(
+                            FileDigests.digest().digest(result)))) {
+                        throw new FileException("连接测试对象校验失败");
+                    }
+                }
+            }
+        } catch (RuntimeException | IOException e) {
+            failure = e;
+        } finally {
+            if (driver != null) {
+                for (String bucket : attemptedBuckets) {
+                    try {
+                        driver.delete(bucket, key);
+                    } catch (RuntimeException e) {
+                        if (failure == null) {
+                            failure = e;
+                        } else {
+                            failure.addSuppressed(e);
+                        }
+                    }
+                }
+                try {
+                    driver.close();
+                } catch (RuntimeException e) {
+                    if (failure == null) {
+                        failure = e;
+                    } else {
+                        failure.addSuppressed(e);
+                    }
+                }
+            }
+            if (staged != null) {
+                try {
+                    Files.deleteIfExists(staged);
+                } catch (IOException e) {
+                    if (failure == null) {
+                        failure = e;
+                    } else {
+                        failure.addSuppressed(e);
+                    }
+                }
+            }
+        }
+        if (failure != null) {
+            throw new FileException("存储连接测试失败", HttpStatus.BAD_REQUEST, failure);
+        }
+    }
+
+    /**
+     * 校验历史记录具有可验证的大小、摘要和对象位置，并属于预期公开或私有桶
+     * @param profile 待恢复的客户端配置
+     * @param file 待核对的历史文件记录
+     * @throws FileException 历史记录缺失完整性字段或存储桶与访问级别不符
+     */
+    private void validateReference(StorageProperties.Profile profile, File file) {
+        if (file == null || file.getIsPublic() == null || (file.getIsPublic() != FileConstants.ACCESS_PRIVATE
+                && file.getIsPublic() != FileConstants.ACCESS_PUBLIC)
+                || file.getFileSize() == null || file.getFileSize() < 0 || file.getSha256() == null
+                || !file.getSha256().matches("[a-fA-F0-9]{64}") || file.getObjectKey() == null
+                || file.getObjectKey().isBlank()
+                || file.getObjectKey().chars().anyMatch(Character::isISOControl)) {
+            throw new FileException("历史文件引用信息不完整或不一致", HttpStatus.BAD_REQUEST);
+        }
+        String expectedBucket = file.getIsPublic() == FileConstants.ACCESS_PUBLIC ? profile.getPublicBucket() : profile.getPrivateBucket();
+        if (!expectedBucket.equals(file.getBucket())) {
+            throw new FileException("历史文件引用信息不完整或不一致", HttpStatus.BAD_REQUEST);
         }
     }
 }

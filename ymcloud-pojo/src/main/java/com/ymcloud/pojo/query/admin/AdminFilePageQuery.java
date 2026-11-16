@@ -7,7 +7,9 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 文件分页使用固定排序，仅接受业务筛选字段。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 文件分页使用固定排序，仅接受业务筛选字段
  */
 @Data
 public class AdminFilePageQuery {
@@ -33,5 +35,5 @@ public class AdminFilePageQuery {
     private Integer bizType;
 
     @Size(max = 64, message = "存储配置名不能超过64个字符")
-    private String storageProfile;
+    private String storageKey;
 }

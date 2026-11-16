@@ -23,8 +23,8 @@ import com.ymcloud.web.judge.JudgeResultListener;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.judge.SpjCompilation;
+import com.ymcloud.web.service.oj.TestDataService;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
-import com.ymcloud.web.service.problem.TestDataService;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -44,7 +44,7 @@ import static org.mockito.Mockito.mock;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-25
- * @Description: 通过真实 Spring 注入处理器验证判题组件依赖与配置，不连接外部服务。
+ * @Description: 通过真实 Spring 注入处理器验证判题组件依赖与配置，不连接外部服务
  */
 class JudgeComponentWiringTest {
 
@@ -76,7 +76,7 @@ class JudgeComponentWiringTest {
     }
 
     /**
-     * 注入每个显式依赖和配置值，Web 发布器须选中专用消息模板。
+     * 注入每个显式依赖和配置值，Web 发布器须选中专用消息模板
      */
     @Test
     void springInjectsRequiredDependenciesAndConfiguredRoutes() {
@@ -185,7 +185,7 @@ class JudgeComponentWiringTest {
     }
 
     /**
-     * 必需依赖缺失时装配失败，不能延迟到消息处理时空指针。
+     * 必需依赖缺失时装配失败，不能延迟到消息处理时空指针
      */
     @Test
     void missingRequiredDependencyFailsInjection() {

@@ -54,10 +54,10 @@ import com.ymcloud.web.service.admin.ResourceDeletionService;
 import com.ymcloud.web.service.admin.impl.AdminContestServiceImpl;
 import com.ymcloud.web.service.admin.impl.AdminProblemServiceImpl;
 import com.ymcloud.web.service.admin.impl.ResourceDeletionServiceImpl;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import com.ymcloud.web.service.oj.ContestService;
+import com.ymcloud.web.service.oj.TestDataService;
 import com.ymcloud.web.service.oj.impl.ContestServiceImpl;
-import com.ymcloud.web.service.problem.TestDataService;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.AfterAll;
@@ -208,7 +208,7 @@ class ResourcePermissionDatabaseIT {
         admin = context.getBean(AdminContestService.class);
         deletion = context.getBean(ResourceDeletionService.class);
         access = context.getBean(ResourceAccessService.class);
-        reset(context.getBean(RedisCache.class), context.getBean(StoredFileService.class));
+        reset(context.getBean(RedisCache.class), context.getBean(FileService.class));
         login(8L, RoleType.CONTEST_MANAGER.getCode());
     }
 
@@ -623,7 +623,7 @@ class ResourcePermissionDatabaseIT {
     void problemDeletionKeepsFileRecordsAndPhysicalFiles(FileBizType type) throws Exception {
         Problem problem = problem(8L, ProblemConstants.PRIVATE);
         File file = registeredFile(problem.getId(), type);
-        Path physicalFile = Path.of(file.getStoragePath());
+        Path physicalFile = storageDirectory.resolve(file.getBucket()).resolve(file.getObjectKey());
         TransactionTemplate transaction = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
         assertThrows(IllegalStateException.class, () -> transaction.executeWithoutResult(status -> {
             deletion.deleteProblems(List.of(problem.getId()));
@@ -637,7 +637,7 @@ class ResourcePermissionDatabaseIT {
         assertNull(problems.getById(problem.getId()));
         assertEquals(file, files.getById(file.getId()));
         assertEquals("1 2\n", Files.readString(physicalFile, StandardCharsets.UTF_8));
-        verifyNoInteractions(context.getBean(StoredFileService.class));
+        verifyNoInteractions(context.getBean(FileService.class));
     }
 
     /**
@@ -653,8 +653,8 @@ class ResourcePermissionDatabaseIT {
         deletion.deleteContests(List.of(contest.getId()));
         assertNull(contests.getById(contest.getId()));
         assertEquals(file, files.getById(file.getId()));
-        assertEquals("1 2\n", Files.readString(Path.of(file.getStoragePath()), StandardCharsets.UTF_8));
-        verifyNoInteractions(context.getBean(StoredFileService.class));
+        assertEquals("1 2\n", Files.readString(storageDirectory.resolve(file.getBucket()).resolve(file.getObjectKey()), StandardCharsets.UTF_8));
+        verifyNoInteractions(context.getBean(FileService.class));
     }
 
     /**
@@ -705,15 +705,18 @@ class ResourcePermissionDatabaseIT {
      * @throws IOException 临时文件写入失败
      */
     private File registeredFile(Long resourceId, FileBizType type) throws IOException {
-        Path physicalFile = storageDirectory.resolve("retained-file");
+        String objectKey = UUID.randomUUID().toString();
+        Path physicalFile = storageDirectory.resolve("private").resolve(objectKey);
+        Files.createDirectories(physicalFile.getParent());
         Files.writeString(physicalFile, "1 2\n", StandardCharsets.UTF_8);
         File file = new File();
         file.setFileName("retained-file");
-        file.setStoragePath(physicalFile.toString());
-        file.setStorageProfile("local");
+        file.setPublicId(UUID.randomUUID().toString().replace("-", ""));
+
+        file.setStorageKey("local");
         file.setBucket("private");
-        file.setObjectKey("retained-file");
-        file.setStorageType(FileConstants.STORAGE_LOCAL);
+        file.setObjectKey(objectKey);
+
         file.setBizType(type);
         file.setBizId(resourceId);
         file.setIsPublic(FileConstants.ACCESS_PRIVATE);
@@ -874,8 +877,8 @@ class ResourcePermissionDatabaseIT {
          * @return 文件服务桩
          */
         @Bean
-        StoredFileService storedFiles() {
-            return mock(StoredFileService.class);
+        FileService storedFiles() {
+            return mock(FileService.class);
         }
 
         /**

@@ -6,7 +6,7 @@ import com.ymcloud.core.web.dao.TestDataVersionEntityService;
 import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.web.service.internal.JudgeWorkerDataService;
-import com.ymcloud.web.service.problem.TestDataService;
+import com.ymcloud.web.service.oj.TestDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -28,7 +28,7 @@ public class JudgeWorkerDataServiceImpl implements JudgeWorkerDataService {
     private TestDataVersionEntityService versionEntityService;
 
     /**
-     * 校验题目、版本归属和清单哈希，再读取原始版本记录。
+     * 校验题目、版本归属和清单哈希，再读取原始版本记录
      * @param problemId 正数题目编号
      * @param versionId 属于该题目的版本编号
      * @return 仅供服务端组装清单响应的版本记录
@@ -49,7 +49,7 @@ public class JudgeWorkerDataServiceImpl implements JudgeWorkerDataService {
     }
 
     /**
-     * 从固定版本清单中解析文件，拒绝读取清单外的文件。
+     * 从固定版本清单中解析文件，拒绝读取清单外的文件
      * @param problemId 正数题目编号
      * @param versionId 属于该题目的版本编号
      * @param fileId 清单中的输入或输出文件编号
@@ -75,7 +75,7 @@ public class JudgeWorkerDataServiceImpl implements JudgeWorkerDataService {
     }
 
     /**
-     * 按服务端已校验的引用打开测试文件。
+     * 按服务端已校验的引用打开测试文件
      * @param problemId 题目编号
      * @param versionId 固定版本编号
      * @param file resolveFile 返回的文件引用，不能来自请求体
@@ -87,7 +87,7 @@ public class JudgeWorkerDataServiceImpl implements JudgeWorkerDataService {
     }
 
     /**
-     * 拒绝不完整的文件引用。
+     * 拒绝不完整的文件引用
      * @param path 清单逻辑路径
      * @param size 字节数，须非空且非负
      * @param hash 清单中的 SHA-256
@@ -101,7 +101,7 @@ public class JudgeWorkerDataServiceImpl implements JudgeWorkerDataService {
     }
 
     /**
-     * 拒绝非法题目或版本编号。
+     * 拒绝非法题目或版本编号
      * @param problemId 题目编号
      * @param versionId 版本编号
      */

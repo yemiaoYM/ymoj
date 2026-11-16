@@ -7,16 +7,14 @@ import com.ymcloud.core.storage.config.StorageProperties;
 import com.ymcloud.core.storage.security.StorageCredentialCipher;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.StorageConfigEntityService;
-import com.ymcloud.core.web.dao.StorageConfigStateEntityService;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.StorageConfig;
-import com.ymcloud.pojo.entity.StorageConfigState;
-import com.ymcloud.web.service.file.StorageConfigCatalog;
+import com.ymcloud.pojo.enums.StorageDriverType;
+import com.ymcloud.web.service.file.StorageConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -26,13 +24,10 @@ import java.util.List;
  * 上传事务锁定状态，避免定位字段竞态
  */
 @Service
-public class StorageConfigCatalogImpl implements StorageConfigCatalog {
+public class StorageConfigServiceImpl implements StorageConfigService {
 
     @Autowired
     private StorageConfigEntityService configs;
-
-    @Autowired
-    private StorageConfigStateEntityService states;
 
     @Autowired
     private FileEntityService files;
@@ -40,17 +35,25 @@ public class StorageConfigCatalogImpl implements StorageConfigCatalog {
     @Autowired
     private StorageCredentialCipher cipher;
 
-    @Autowired
-    private StorageProperties properties;
-
     /**
      * 读取当前默认存储配置标识
      * @return 默认配置标识
      */
     @Override
     public String active() {
-        StorageConfigState state = readState(TransactionSynchronizationManager.isActualTransactionActive(), true);
-        return state == null || state.getActiveKey() == null ? properties.getActive() : state.getActiveKey();
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            lockLocal(false);
+        }
+        var query = configs.lambdaQuery()
+                .eq(StorageConfig::getIsDefault, true);
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            query.last("LOCK IN SHARE MODE");
+        }
+        StorageConfig active = query.one();
+        if (active == null) {
+            throw new FileException("默认存储配置缺失");
+        }
+        return active.getId();
     }
 
     /**
@@ -65,7 +68,7 @@ public class StorageConfigCatalogImpl implements StorageConfigCatalog {
         // 上传事务共持共享锁，后台写入取独占锁
         // 普通历史读取只需读取单条配置 revision
         if (transaction) {
-            readState(true, true);
+            lockLocal(false);
         }
         if (transaction) {
             return exactKey(configs.getByIdForShare(key), key);
@@ -88,11 +91,10 @@ public class StorageConfigCatalogImpl implements StorageConfigCatalog {
 
     /**
      * 配置状态锁不依赖密钥，密钥缺失时仍可切回本地并删除无引用的旧配置
-     * @return 已锁定的存储配置状态
      */
     @Override
-    public StorageConfigState lockForWrite() {
-        return readState(true, false, true);
+    public void lockForWrite() {
+        lockLocal(true);
     }
 
     /**
@@ -103,7 +105,7 @@ public class StorageConfigCatalogImpl implements StorageConfigCatalog {
     @Override
     public boolean referenced(String key) {
         return files.lambdaQuery()
-                .eq(File::getStorageProfile, key)
+                .eq(File::getStorageKey, key)
                 .exists();
     }
 
@@ -116,7 +118,7 @@ public class StorageConfigCatalogImpl implements StorageConfigCatalog {
     public List<File> referencedFiles(String key) {
         StorageConfigValidation.validateKey(key);
         return files.lambdaQuery()
-                .eq(File::getStorageProfile, key)
+                .eq(File::getStorageKey, key)
                 .orderByAsc(File::getId)
                 .list();
     }
@@ -136,8 +138,10 @@ public class StorageConfigCatalogImpl implements StorageConfigCatalog {
         profile.setPublicBucket(config.getPublicBucket());
         profile.setPrivateBucket(config.getPrivateBucket());
         profile.setPathStyle(Boolean.TRUE.equals(config.getPathStyle()));
-        profile.setAccessKey(cipher.decrypt(config.getId(), "accessKey", config.getEncryptedAccessKey()));
-        profile.setSecretKey(cipher.decrypt(config.getId(), "secretKey", config.getEncryptedSecretKey()));
+        if (config.getDriverType() != StorageDriverType.LOCAL) {
+            profile.setAccessKey(cipher.decrypt(config.getId(), "accessKey", config.getEncryptedAccessKey()));
+            profile.setSecretKey(cipher.decrypt(config.getId(), "secretKey", config.getEncryptedSecretKey()));
+        }
         return profile;
     }
 
@@ -190,52 +194,41 @@ public class StorageConfigCatalogImpl implements StorageConfigCatalog {
     }
 
     /**
-     * 更新默认存储配置及状态版本
-     * @param state 已加写锁的配置状态
-     * @param key 存储配置标识
+     * 在调用方持有本地配置写锁的事务内切换唯一默认配置
+     * @param key 已验证且存在的目标配置标识
      */
     @Override
-    public void activate(StorageConfigState state, String key) {
-        if (!states.lambdaUpdate()
-                .eq(StorageConfigState::getId, 1)
-                .set(StorageConfigState::getActiveKey, key)
-                .set(StorageConfigState::getRevision, state.getRevision() + 1)
-                .set(StorageConfigState::getUpdatedTime, LocalDateTime.now())
+    public void activate(String key) {
+        configs.lambdaUpdate()
+                .eq(StorageConfig::getIsDefault, true)
+                .set(StorageConfig::getIsDefault, false)
+                .update();
+        if (!configs.lambdaUpdate()
+                .eq(StorageConfig::getId, key)
+                .set(StorageConfig::getIsDefault, true)
                 .update()) {
             throw new FileException("切换存储配置失败");
         }
     }
 
     /**
-     * 读取状态，事务读取按需获取共享锁
-     * @param lock 是否加锁
-     * @param allowMissing 是否允许尚未配置动态存储
-     * @return 配置状态，允许缺失时可为空
+     * 使用不可删除的本地配置行协调上传和配置变更，不额外维护状态表
+     * @param exclusive 配置写入使用独占锁，上传使用共享锁
+     * @throws FileException 本地配置未初始化
      */
-    private StorageConfigState readState(boolean lock, boolean allowMissing) {
-        return readState(lock, allowMissing, false);
-    }
-
-    /**
-     * 按读写用途锁定配置状态，保证配置切换和文件登记互斥
-     * @param lock 是否加锁
-     * @param allowMissing 是否允许尚未配置动态存储
-     * @param exclusive 是否使用写入独占锁
-     * @return 配置状态，允许缺失时可为空
-     */
-    private StorageConfigState readState(boolean lock, boolean allowMissing, boolean exclusive) {
-        StorageConfigState state;
-        if (lock) {
-            state = states.getForLock(exclusive);
-        } else {
-            state = states.lambdaQuery()
-                    .eq(StorageConfigState::getId, 1)
+    private void lockLocal(boolean exclusive) {
+        StorageConfig local;
+        if (exclusive) {
+            local = configs.lambdaQuery()
+                    .eq(StorageConfig::getId, "local")
+                    .last("FOR UPDATE")
                     .one();
+        } else {
+            local = configs.getByIdForShare("local");
         }
-        if (state == null && !allowMissing) {
-            throw new FileException("存储配置状态缺失");
+        if (local == null) {
+            throw new FileException("本地存储配置未初始化");
         }
-        return state;
     }
 
     /**

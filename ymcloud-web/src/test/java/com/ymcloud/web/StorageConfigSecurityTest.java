@@ -13,17 +13,14 @@ import com.ymcloud.core.storage.security.StorageCredentialCipher;
 import com.ymcloud.core.storage.security.StorageMasterKeyStore;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
 import com.ymcloud.pojo.entity.StorageConfig;
-import com.ymcloud.pojo.entity.StorageConfigState;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.StorageDriverType;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.web.controller.admin.common.AdminStorageConfigController;
 import com.ymcloud.web.service.admin.AdminStorageConfigService;
 import com.ymcloud.web.service.admin.impl.AdminStorageConfigServiceImpl;
-import com.ymcloud.web.service.file.StorageConfigCatalog;
-import com.ymcloud.web.service.file.StorageConnectionTester;
-import com.ymcloud.web.service.file.impl.StorageConnectionTesterImpl;
-import com.ymcloud.web.service.file.impl.StorageConfigCatalogImpl;
+import com.ymcloud.web.service.file.StorageConfigService;
+import com.ymcloud.web.service.file.impl.StorageConfigServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,8 +71,8 @@ class StorageConfigSecurityTest {
 
     private StorageProperties properties;
     private StorageCredentialCipher cipher;
-    private StorageConfigCatalog catalog;
-    private StorageConnectionTester tester;
+    private StorageConfigService catalog;
+    private StorageRegistry registry;
     private AdminStorageConfigServiceImpl service;
     private AnnotationConfigApplicationContext context;
 
@@ -89,21 +86,19 @@ class StorageConfigSecurityTest {
         cipher = new StorageCredentialCipher(properties);
         StorageMasterKeyStore keyStore = mock(StorageMasterKeyStore.class);
         when(keyStore.load(anyBoolean())).thenThrow(new FileException("主密钥不可用"));
-        catalog = mock(StorageConfigCatalog.class);
-        tester = mock(StorageConnectionTester.class);
+        catalog = mock(StorageConfigService.class);
+        registry = mock(StorageRegistry.class);
+        when(registry.createClient(any())).thenAnswer(invocation ->
+                new com.ymcloud.core.storage.client.LocalObjectStorageService(root));
         context = new AnnotationConfigApplicationContext();
         context.registerBean(StorageProperties.class, () -> properties);
-        context.registerBean(StorageConfigCatalog.class, () -> catalog);
+        context.registerBean(StorageConfigService.class, () -> catalog);
         context.registerBean(StorageCredentialCipher.class, () -> cipher);
         context.registerBean(StorageMasterKeyStore.class, () -> keyStore);
-        context.registerBean(StorageConnectionTester.class, () -> tester);
+        context.getBeanFactory().registerSingleton("storageRegistry", registry);
         context.register(AdminStorageConfigServiceImpl.class);
         context.refresh();
         service = context.getBean(AdminStorageConfigServiceImpl.class);
-        StorageConfigState state = new StorageConfigState();
-        state.setId(1);
-        state.setRevision(0L);
-        when(catalog.lockForWrite()).thenReturn(state);
         when(catalog.active()).thenReturn("local");
         authenticate(1L, "*:*:*");
     }
@@ -152,6 +147,9 @@ class StorageConfigSecurityTest {
         assertThrows(FileException.class, cipher::requireKey);
     }
 
+    /**
+     * 普通管理员不能修改、测试或切换存储配置
+     */
     @Test
     void ordinaryAdministratorCannotWriteTestOrActivateEvenWithExplicitPermissions() {
         authenticate(2L, "file:storage:add", "file:storage:edit", "file:storage:remove",
@@ -161,7 +159,7 @@ class StorageConfigSecurityTest {
         assertThrows(AccessDeniedException.class, () -> service.delete("minio"));
         assertThrows(AccessDeniedException.class, () -> service.test("minio"));
         assertThrows(AccessDeniedException.class, () -> service.activate("minio"));
-        verifyNoInteractions(catalog, tester);
+        verifyNoInteractions(catalog, registry);
     }
 
     @Test
@@ -183,6 +181,9 @@ class StorageConfigSecurityTest {
         }
     }
 
+    /**
+     * 配置仅保存加密凭据，启用前必须完成连接测试
+     */
     @Test
     void createStoresOnlyEncryptedCredentialsAndRequiresTestBeforeActivation() {
         service.create(dto());
@@ -193,9 +194,12 @@ class StorageConfigSecurityTest {
         assertNotEquals("secret-value", config.getEncryptedSecretKey());
         when(catalog.find("minio")).thenReturn(config);
         assertThrows(FileException.class, () -> service.activate("minio"));
-        verify(catalog, never()).activate(any(), anyString());
+        verify(catalog, never()).activate(anyString());
     }
 
+    /**
+     * 空凭据保留原配置，启用中的配置更新先测试后保存
+     */
     @Test
     void blankCredentialsPreserveYamlAndActiveUpdateTestsBeforePersistence() {
         StorageProperties.Profile profile = remoteProfile();
@@ -211,7 +215,7 @@ class StorageConfigSecurityTest {
         assertEquals("access-value", cipher.decrypt("minio", "accessKey", captured.getValue().getEncryptedAccessKey()));
         assertEquals("secret-value", cipher.decrypt("minio", "secretKey", captured.getValue().getEncryptedSecretKey()));
         assertEquals(1L, captured.getValue().getTestedRevision());
-        verify(tester).test(any());
+        verify(registry).createClient(any());
     }
 
     /**
@@ -234,10 +238,10 @@ class StorageConfigSecurityTest {
         when(catalog.profile(config)).thenReturn(remoteProfile());
         assertThrows(FileException.class, () -> service.activate("silo"));
         service.test("silo");
-        verify(tester).test(any());
+        verify(registry).createClient(any());
         assertEquals(config.getRevision(), config.getTestedRevision());
         service.activate("silo");
-        verify(catalog).activate(any(), eq("silo"));
+        verify(catalog).activate("silo");
         assertEquals("silo", service.list().stream().filter(row -> "silo".equals(row.getKey()))
                 .findFirst().orElseThrow().getProvider());
     }
@@ -258,17 +262,20 @@ class StorageConfigSecurityTest {
                 .findFirst().orElseThrow().getProvider());
         service.test("silo");
         ArgumentCaptor<StorageProperties.Profile> tested = ArgumentCaptor.forClass(StorageProperties.Profile.class);
-        verify(tester).test(tested.capture());
+        verify(registry).createClient(tested.capture());
         assertEquals(StorageDriverType.S3, tested.getValue().getDriverType());
         assertTrue(tested.getValue().isPathStyle());
         assertEquals("test-private", tested.getValue().getPrivateBucket());
     }
 
+    /**
+     * 启用中的配置测试失败不保存候选配置
+     */
     @Test
     void activeUpdateFailureDoesNotPersistCandidate() {
         properties.getProfiles().put("minio", remoteProfile());
         when(catalog.active()).thenReturn("minio");
-        doThrow(new FileException("probe failed", 400)).when(tester).test(any());
+        doThrow(new FileException("probe failed", 400)).when(registry).createClient(any());
         assertThrows(FileException.class, () -> service.update("minio", dto()));
         verify(catalog, never()).save(any(), eq(false));
     }
@@ -315,11 +322,14 @@ class StorageConfigSecurityTest {
         assertTrue(json.contains("\"source\":\"config\""));
     }
 
+    /**
+     * 本地存储测试不依赖凭据密钥或动态配置写锁
+     */
     @Test
     void localConnectionTestDoesNotRequireAnEncryptionKeyOrDynamicConfigurationLock() {
         properties.setConfigEncryptionKey(null);
         service.test("local");
-        verify(tester).test(any());
+        verify(registry).createClient(any());
         verify(catalog, never()).lockForWrite();
         verify(catalog, never()).save(any(), eq(false));
     }
@@ -332,18 +342,21 @@ class StorageConfigSecurityTest {
         properties.setConfigEncryptionKey(null);
         properties.getProfiles().put("minio", remoteProfile());
         assertThrows(FileException.class, () -> service.test("minio"));
-        verify(tester).test(any());
+        verify(registry).createClient(any());
         verify(catalog).lockForWrite();
         verify(catalog, never()).save(any(), eq(false));
     }
 
+    /**
+     * 地址校验拒绝元数据端点、非回环明文连接及多余 URL 成分
+     */
     @Test
     void endpointValidationRejectsMetadataHttpOutsideLoopbackAndUrlExtras() {
         for (String endpoint : List.of("http://192.168.1.1:9000", "https://169.254.169.254",
                 "https://100.100.100.200", "https://[fd00:ec2::254]", "https://[fd00:ec2:0:0:0:0:0:254]",
                 "https://metadata.google.internal",
-                "https://user:password@storage.example", "https://storage.example/path",
-                "https://storage.example?secret=value", "https://storage.example#fragment",
+                "https://user:password@storage.example", "http://127.0.0.1:8333/path",
+                "http://127.0.0.1:8333?secret=value", "http://127.0.0.1:8333#fragment",
                 "https://0.0.0.0", "https://2130706433", "https://127.1")) {
             StorageProperties.Profile profile = remoteProfile();
             profile.setEndpoint(endpoint);
@@ -408,9 +421,8 @@ class StorageConfigSecurityTest {
                 .when(driver).put(anyString(), anyString(), any(), anyString(), anyString());
         StorageProperties.Profile profile = remoteProfile();
         profile.setEndpoint("http://127.0.0.1:8333");
-        StorageConnectionTester tester = new StorageConnectionTesterImpl();
-        ReflectionTestUtils.setField(tester, "registry", registry);
-        FileException error = assertThrows(FileException.class, () -> tester.test(profile));
+        ReflectionTestUtils.setField(service, "registry", registry);
+        FileException error = assertThrows(FileException.class, () -> ReflectionTestUtils.invokeMethod(service, "testProfile", profile));
         assertEquals(400, error.getCode());
         assertFalse(error.getMessage().contains("secret-value"));
         assertSame(failure, error.getCause());
@@ -459,7 +471,7 @@ class StorageConfigSecurityTest {
         verify(catalog).save(saved.capture(), eq(false));
         assertEquals(StorageDriverType.S3, saved.getValue().getDriverType());
 
-        var source = new StorageConfigCatalogImpl();
+        var source = new StorageConfigServiceImpl();
         ReflectionTestUtils.setField(source, "cipher", cipher);
         assertEquals(StorageDriverType.S3, source.profile(saved.getValue()).getDriverType());
         saved.getValue().setProvider("自建对象服务");
@@ -520,7 +532,7 @@ class StorageConfigSecurityTest {
         StorageProperties.Profile profile = new StorageProperties.Profile();
         profile.setDriverType(StorageDriverType.S3);
         profile.setProvider("minio");
-        profile.setEndpoint("https://storage.example");
+        profile.setEndpoint("http://127.0.0.1:8333");
         profile.setAccessKey("access-value");
         profile.setSecretKey("secret-value");
         profile.setPublicBucket("test-public");
@@ -538,7 +550,7 @@ class StorageConfigSecurityTest {
         dto.setName("MinIO");
         dto.setProvider("minio");
         dto.setDriverType(StorageDriverType.S3);
-        dto.setEndpoint("https://storage.example");
+        dto.setEndpoint("http://127.0.0.1:8333");
         dto.setRegion("us-east-1");
         dto.setPublicBucket("test-public");
         dto.setPrivateBucket("test-private");

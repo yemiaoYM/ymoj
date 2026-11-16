@@ -31,7 +31,7 @@ class StorageArchitectureTest {
         assertTrue(Files.isDirectory(core));
         List<String> businessTypes = List.of("FileBizType", "pojo.entity.Problem",
                 "pojo.entity.Contest", "pojo.entity.User", "pojo.contract.judge",
-                "TestDataService", "StoredFileService", "core.security");
+                "TestDataService", "FileService", "core.security");
         try (var paths = Files.walk(core)) {
             for (Path path : paths.filter(file -> file.toString().endsWith(".java")).toList()) {
                 String source = Files.readString(path, StandardCharsets.UTF_8);
@@ -44,7 +44,7 @@ class StorageArchitectureTest {
                 }
             }
         }
-        assertFalse(Files.exists(core.resolve("com/ymcloud/core/storage/StoredFileService.java")));
+        assertFalse(Files.exists(core.resolve("com/ymcloud/core/storage/FileService.java")));
         assertFalse(Files.exists(core.resolve("com/ymcloud/core/storage/TestDataServiceImpl.java")));
     }
 }

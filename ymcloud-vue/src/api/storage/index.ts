@@ -34,10 +34,10 @@ export function getAdminFiles(params: FilePageQuery) {
 
 /**
  * 下载授权文件，业务错误由请求层统一处理
- * @param id 文件 ID
+ * @param id 对外 UUIDv4 文件标识
  * @returns 包含文件内容的完整响应
  */
-export function downloadAdminFile(id: number) {
+export function downloadAdminFile(id: string) {
   return request<Blob>({
     url: `/admin/file/${id}/download`,
     method: 'GET',
@@ -67,10 +67,10 @@ export function uploadAdminFile(
 
 /**
  * 删除可管理的通用文件，测试数据生命周期由题目版本接口维护
- * @param id 文件 ID
+ * @param id 对外 UUIDv4 文件标识
  * @returns 操作结果，不包含业务数据
  */
-export function deleteAdminFile(id: number) {
+export function deleteAdminFile(id: string) {
   return request<ApiResult<void>>({
     url: `/admin/file/${id}`,
     method: 'DELETE',

@@ -11,15 +11,12 @@ import com.ymcloud.core.storage.util.FileDigests;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.StorageConfig;
-import com.ymcloud.pojo.entity.StorageConfigState;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.StorageDriverType;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.web.handler.GlobalExceptionHandler;
 import com.ymcloud.web.service.admin.impl.AdminStorageConfigServiceImpl;
-import com.ymcloud.web.service.file.StorageConfigCatalog;
-import com.ymcloud.web.service.file.StorageConnectionTester;
-import com.ymcloud.web.service.file.impl.StorageConnectionTesterImpl;
+import com.ymcloud.web.service.file.StorageConfigService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,10 +64,9 @@ class StorageConfigRestoreTest {
 
     private StorageProperties properties;
     private StorageCredentialCipher cipher;
-    private StorageConfigCatalog catalog;
+    private StorageConfigService catalog;
     private StorageRegistry registry;
     private ObjectStorageService driver;
-    private StorageConnectionTester tester;
     private AdminStorageConfigServiceImpl service;
     private AnnotationConfigApplicationContext context;
 
@@ -82,25 +78,18 @@ class StorageConfigRestoreTest {
         properties = new StorageProperties();
         properties.setConfigEncryptionKey(Base64.getEncoder().encodeToString(new byte[32]));
         cipher = new StorageCredentialCipher(properties);
-        catalog = mock(StorageConfigCatalog.class);
+        catalog = mock(StorageConfigService.class);
         registry = mock(StorageRegistry.class);
         driver = mock(ObjectStorageService.class);
-        tester = new StorageConnectionTesterImpl();
-        ReflectionTestUtils.setField(tester, "registry", registry);
         context = new AnnotationConfigApplicationContext();
         context.registerBean(StorageProperties.class, () -> properties);
-        context.registerBean(StorageConfigCatalog.class, () -> catalog);
+        context.registerBean(StorageConfigService.class, () -> catalog);
         context.registerBean(StorageCredentialCipher.class, () -> cipher);
         context.registerBean(StorageMasterKeyStore.class, () -> mock(StorageMasterKeyStore.class));
         context.getBeanFactory().registerSingleton("storageRegistry", registry);
-        context.registerBean(StorageConnectionTester.class, () -> tester);
         context.register(AdminStorageConfigServiceImpl.class);
         context.refresh();
         service = context.getBean(AdminStorageConfigServiceImpl.class);
-        StorageConfigState state = new StorageConfigState();
-        state.setId(1);
-        state.setRevision(0L);
-        when(catalog.lockForWrite()).thenReturn(state);
         when(catalog.active()).thenReturn("local");
         when(registry.createClient(any())).thenReturn(driver);
         User user = new User();
@@ -120,6 +109,10 @@ class StorageConfigRestoreTest {
         context.close();
     }
 
+    /**
+     * 恢复配置逐一读取原对象，恢复完成后仍需显式测试再启用
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void restorationReadsEveryObjectAndStillRequiresManualTestBeforeActivation() throws Exception {
         byte[] publicBytes = new byte[128 * 1024 + 3];
@@ -153,7 +146,7 @@ class StorageConfigRestoreTest {
         assertEquals("secret-value", cipher.decrypt("seaweedfs", "secretKey", config.getEncryptedSecretKey()));
         when(catalog.find("seaweedfs")).thenReturn(config);
         assertThrows(FileException.class, () -> service.activate("seaweedfs"));
-        verify(catalog, never()).activate(any(), anyString());
+        verify(catalog, never()).activate(anyString());
     }
 
     @Test
@@ -347,10 +340,13 @@ class StorageConfigRestoreTest {
         assertNotSaved();
     }
 
+    /**
+     * 大小写别名不能绑定不同标识的文件引用
+     */
     @Test
     void caseAliasCannotBindToHistoricalProfileReferences() {
         File file = reference(1, false, "object", new byte[]{1});
-        file.setStorageProfile("SeaweedFS");
+        file.setStorageKey("SeaweedFS");
         when(catalog.referencedFiles("seaweedfs")).thenReturn(List.of(file));
 
         assertSanitizedFailure(() -> service.create(dto()));
@@ -359,21 +355,32 @@ class StorageConfigRestoreTest {
         assertNotSaved();
     }
 
+    /**
+     * 本地驱动不能用于绕过远程对象恢复校验
+     */
     @Test
     void localDriverCannotBypassRemoteObjectValidation() {
         StorageProperties.Profile local = new StorageProperties.Profile();
         local.setDriverType(StorageDriverType.LOCAL);
-        assertSanitizedFailure(() -> tester.verifyReferencedFiles(local,
+        assertSanitizedFailure(() -> ReflectionTestUtils.invokeMethod(service, "verifyReferencedFiles", local,
                 List.of(reference(1, false, "object", new byte[]{1}))));
 
         verifyNoInteractions(registry, driver);
     }
 
+    /**
+     * 构建用于恢复验证的文件引用及内容摘要
+     * @param id 内部文件编号
+     * @param publicAccess 是否为公开文件
+     * @param objectKey 桶内对象键
+     * @param bytes 预期文件内容
+     * @return 待验证的文件元数据
+     */
     private File reference(long id, boolean publicAccess, String objectKey, byte[] bytes) {
         File file = new File();
         file.setId(id);
-        file.setStorageType(3);
-        file.setStorageProfile("seaweedfs");
+
+        file.setStorageKey("seaweedfs");
         file.setIsPublic(publicAccess ? 1 : 0);
         file.setBucket(publicAccess ? "test-public" : "test-private");
         file.setObjectKey(objectKey);

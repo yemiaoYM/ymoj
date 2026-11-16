@@ -46,15 +46,14 @@ public class AdminContestController {
     private PublicImageService publicImages;
 
     /**
-     * 上传比赛封面；文件保存后仍需另行保存比赛
-     * @param file 裁剪为 1:1 的 JPEG 或 PNG 图片
+     * 上传比赛封面，文件保存后仍需另行保存比赛
+     * @param file 前端完成裁剪的图片，后端校验内容类型及容量
      * @return 已登记文件的公开地址
      */
     @PostMapping("/image")
     @PreAuthorize("@ss.hasAnyPermi('contest:contest:add', 'contest:contest:edit')")
     public Result<String> uploadContest(@RequestParam("file") MultipartFile file) {
-        log.info("上传比赛封面");
-        return Result.ok(publicImages.upload(file, "contest", 1, 1).getUrl());
+        return Result.ok(publicImages.upload(file));
     }
 
     /**

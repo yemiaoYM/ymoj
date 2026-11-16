@@ -4,7 +4,6 @@ import com.ymcloud.core.storage.config.StorageConfigSource;
 import com.ymcloud.core.storage.config.StorageProperties;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.StorageConfig;
-import com.ymcloud.pojo.entity.StorageConfigState;
 
 import java.util.List;
 
@@ -13,7 +12,7 @@ import java.util.List;
  * @CreateTime: 2026-11-16
  * @Description: 动态存储配置管理及文件引用核验入口
  */
-public interface StorageConfigCatalog extends StorageConfigSource {
+public interface StorageConfigService extends StorageConfigSource {
 
     /**
      * 读取当前默认存储配置标识
@@ -36,9 +35,8 @@ public interface StorageConfigCatalog extends StorageConfigSource {
 
     /**
      * 锁定存储配置状态以串行化配置修改
-     * @return 已锁定的配置状态
      */
-    StorageConfigState lockForWrite();
+    void lockForWrite();
 
     /**
      * 判断存储配置是否被文件引用
@@ -75,9 +73,8 @@ public interface StorageConfigCatalog extends StorageConfigSource {
     void remove(String key);
 
     /**
-     * 更新默认存储配置及状态版本
-     * @param state 已加写锁的配置状态
+     * 在配置写事务内更新唯一默认配置
      * @param key 存储配置标识
      */
-    void activate(StorageConfigState state, String key);
+    void activate(String key);
 }

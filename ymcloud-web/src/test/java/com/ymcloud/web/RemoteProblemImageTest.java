@@ -5,6 +5,7 @@ import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.core.storage.factory.StorageRegistry;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
@@ -15,7 +16,7 @@ import com.ymcloud.web.remote.ProblemImageEncoder;
 import com.ymcloud.web.remote.ProblemImageReferences;
 import com.ymcloud.web.remote.RemoteProblemHttpClient;
 import com.ymcloud.web.remote.RemoteProblemImages;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -75,20 +76,20 @@ class RemoteProblemImageTest {
     private static final String IMAGE = "https://cdn.luogu.com.cn/upload/image_hosting/test.png";
     private RemoteProblemImages importer;
     private RemoteProblemHttpClient client;
-    private StoredFileService files;
+    private FileService files;
     private PlatformTransactionManager transactions;
     private final List<byte[]> saved = new ArrayList<>();
     private final List<File> metadata = new ArrayList<>();
 
     /**
-     * 装配真实导入处理器及隔离的文件存储边界。
+     * 装配真实导入处理器及隔离的文件存储边界
      * @throws IOException 读取保存的图片流失败
      */
     @BeforeEach
     void setUp() throws IOException {
         importer = new RemoteProblemImages();
         client = mock(RemoteProblemHttpClient.class);
-        files = mock(StoredFileService.class);
+        files = mock(FileService.class);
         transactions = mock(PlatformTransactionManager.class);
         var registry = mock(StorageRegistry.class);
         when(registry.maxFileSize()).thenReturn(50L * 1024 * 1024);
@@ -97,12 +98,12 @@ class RemoteProblemImageTest {
         ReflectionTestUtils.setField(importer, "storedFiles", files);
         ReflectionTestUtils.setField(importer, "storage", registry);
         ReflectionTestUtils.setField(importer, "transactionManager", transactions);
-        when(files.save(any(InputStream.class), anyLong(), any(File.class))).thenAnswer(invocation -> {
-            byte[] bytes = ((InputStream) invocation.getArgument(0)).readAllBytes();
+        when(files.create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong())).thenAnswer(invocation -> {
+            byte[] bytes = ((InputStream) invocation.getArgument(1)).readAllBytes();
             saved.add(bytes);
-            File file = invocation.getArgument(2);
-            assertEquals((long) bytes.length, (long) invocation.getArgument(1));
-            file.setUrl("/files/public/test/" + saved.size() + ".png");
+            File file = StoredFileFixture.saved(invocation.getArgument(0));
+            assertEquals((long) bytes.length, (long) invocation.getArgument(2));
+            file.setPublicId(String.format("%012x40008000000000000001", saved.size()));
             metadata.add(file);
             return file;
         });
@@ -113,7 +114,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 清除测试身份，避免影响其他权限用例。
+     * 清除测试身份，避免影响其他权限用例
      */
     @AfterEach
     void tearDown() {
@@ -121,7 +122,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 定位内联、引用和 HTML 图片，不匹配代码示例或修改数学语法。
+     * 定位内联、引用和 HTML 图片，不匹配代码示例或修改数学语法
      */
     @Test
     void replacesOnlyActualImages() {
@@ -155,7 +156,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 同图跨字段只保存一次，公式恢复为 LaTeX 且不产生下载或存储请求。
+     * 同图跨字段只保存一次，公式恢复为 LaTeX 且不产生下载或存储请求
      * @throws IOException 生成或读取测试插图失败
      */
     @Test
@@ -168,15 +169,15 @@ class RemoteProblemImageTest {
         draft.setOutput("![输出图](" + IMAGE + ")");
         importer.importImages(draft);
         verify(client).getImage(IMAGE);
-        verify(files).save(any(InputStream.class), anyLong(), any(File.class));
+        verify(files).create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong());
         verify(transactions).commit(any());
         assertEquals(1, saved.size());
         assertEquals(64, ImageIO.read(new ByteArrayInputStream(saved.get(0))).getWidth());
         assertTrue(draft.getContent().contains("$x_{1}$"));
         assertTrue(draft.getContent().contains("$S_{1,1}$"));
         assertFalse(draft.getContent().contains("https://"));
-        assertTrue(draft.getInput().contains("/files/public/test/1.png"));
-        assertTrue(draft.getOutput().contains("/files/public/test/1.png"));
+        assertTrue(draft.getInput().contains("/files/public/00000000000140008000000000000001"));
+        assertTrue(draft.getOutput().contains("/files/public/00000000000140008000000000000001"));
         assertEquals("原始来源", draft.getSource());
         File file = metadata.get(0);
         assertEquals(FileConstants.ACCESS_PUBLIC, file.getIsPublic());
@@ -187,7 +188,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 只有公式时完全不访问文件存储，缺少 alt 时从 tex 参数恢复。
+     * 只有公式时完全不访问文件存储，缺少 alt 时从 tex 参数恢复
      */
     @Test
     void formulaImagesDoNotUseStorage() {
@@ -205,7 +206,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 下载失败时不进入文件事务，存储失败时请求回滚且不修改草稿。
+     * 下载失败时不进入文件事务，存储失败时请求回滚且不修改草稿
      * @throws IOException 生成测试插图失败
      */
     @Test
@@ -219,10 +220,10 @@ class RemoteProblemImageTest {
         verifyNoInteractions(files, transactions);
         assertEquals(original, draft.getContent());
         doReturn(png(3, 3, false)).when(client).getImage(second);
-        when(files.save(any(InputStream.class), anyLong(), any(File.class)))
+        when(files.create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong()))
                 .thenAnswer(invocation -> {
-                    File file = invocation.getArgument(2);
-                    file.setUrl("/files/public/first.png");
+                    File file = StoredFileFixture.saved(invocation.getArgument(0));
+                    file.setPublicId("a0c3440ccd014a6ea014bf4c2e818a96");
                     return file;
                 }).thenThrow(new FileException("storage"));
         assertThrows(FileException.class, () -> importer.importImages(draft));
@@ -232,7 +233,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 大图压缩后可解码且保留透明度及比例，小图保持尺寸。
+     * 大图压缩后可解码且保留透明度及比例，小图保持尺寸
      * @throws IOException 编解码测试图片失败
      */
     @Test
@@ -250,7 +251,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * JPEG 和 WebP 可统一解码，GIF 动画不被静默转换为第一帧。
+     * JPEG 和 WebP 可统一解码，GIF 动画不被静默转换为第一帧
      * @throws IOException 编解码测试图片失败
      */
     @Test
@@ -284,7 +285,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 图片地址不允许访问内网、伪造域名、非标准端口或重定向目标。
+     * 图片地址不允许访问内网、伪造域名、非标准端口或重定向目标
      * @throws IOException 生成图片失败
      */
     @Test
@@ -320,7 +321,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 显式启用时真实下载洛谷 P1002 插图，存储边界隔离以免修改业务库。
+     * 显式启用时真实下载洛谷 P1002 插图，存储边界隔离以免修改业务库
      * @throws IOException 保存本地验证产物失败
      */
     @Test
@@ -335,7 +336,7 @@ class RemoteProblemImageTest {
         var draft = provider.fetch("P1002");
         importer.importImages(draft);
         assertFalse(saved.isEmpty());
-        assertTrue(draft.getContent().contains("/files/public/test/1.png"));
+        assertTrue(draft.getContent().contains("/files/public/00000000000140008000000000000001"));
         assertTrue(draft.getContent().contains("$A$"));
         for (byte[] image : saved) {
             assertTrue(ImageIO.read(new ByteArrayInputStream(image)).getWidth() > 0);
@@ -345,7 +346,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 创建只有题面字段的草稿，用于验证图片处理不改动来源。
+     * 创建只有题面字段的草稿，用于验证图片处理不改动来源
      * @param content 题干
      * @return 待处理草稿
      */
@@ -359,7 +360,7 @@ class RemoteProblemImageTest {
     }
 
     /**
-     * 生成无压缩捷径的透明插图，以验证真实体积压缩。
+     * 生成无压缩捷径的透明插图，以验证真实体积压缩
      * @param width 宽度
      * @param height 高度
      * @param noise 是否填充随机像素

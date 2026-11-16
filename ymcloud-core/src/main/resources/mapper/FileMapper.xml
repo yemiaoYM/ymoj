@@ -24,7 +24,7 @@
             OR (#{scope.testData} = TRUE AND f.biz_type = #{testData}))
         <if test="query.fileName != null and query.fileName.trim() != ''">AND f.file_name LIKE CONCAT('%', #{query.fileName}, '%')</if>
         <if test="query.bizType != null">AND f.biz_type = #{query.bizType}</if>
-        <if test="query.storageProfile != null and query.storageProfile.trim() != ''">AND f.storage_profile = #{query.storageProfile}</if>
+        <if test="query.storageKey != null and query.storageKey.trim() != ''">AND f.storage_key = #{query.storageKey}</if>
         <if test="query.isPublic != null and query.isPublic == publicAccess">AND f.is_public = #{publicAccess} AND (f.biz_type IS NULL OR f.biz_type != #{testData})</if>
         <if test="query.isPublic != null and query.isPublic == privateAccess">AND (f.is_public IS NULL OR f.is_public != #{publicAccess} OR f.biz_type = #{testData})</if>
         ORDER BY f.id DESC

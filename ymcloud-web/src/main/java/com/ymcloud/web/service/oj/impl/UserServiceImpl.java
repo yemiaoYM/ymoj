@@ -34,7 +34,7 @@ import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.pojo.vo.oj.UserCalendarHeatmapVO;
 import com.ymcloud.pojo.vo.oj.UserInfoVO;
 import com.ymcloud.web.service.common.SystemSettingService;
-import com.ymcloud.web.service.oj.FileService;
+import com.ymcloud.web.service.file.FileService;
 import com.ymcloud.web.service.oj.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -463,22 +463,22 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
-     * 用户上传头像
+     * 更新当前用户的公开头像 URL，提交后删除原头像对象
      * @param file 头像文件
      */
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void uploadAvatar(MultipartFile file) {
         //检查是否为空
-        if(file.isEmpty()){
+        if (file.isEmpty()) {
             throw new FileEmptyException();
         }
         //检查文件大小
-        if(file.getSize() > 2*1024*1024){
+        if (file.getSize() > 2 * 1024 * 1024) {
             throw new FileException("用户头像大小不能超过2MB");
         }
         //检查文件类型
-        String originalFilename=file.getOriginalFilename();
+        String originalFilename = file.getOriginalFilename();
         String ext = FileUtil.extName(originalFilename);
         if (!StrUtil.equalsAny(ext, "png", "jpg", "jpeg")) {
             throw new FileTypeNotMatchException(ext);
@@ -495,27 +495,27 @@ public class UserServiceImpl implements UserService {
         fileRecord.setFileType(file.getContentType());
         fileRecord.setFileSize(file.getSize());
         fileRecord.setFileExt(ext);
-        //头像存储位置由文件服务的默认配置决定。
+        //头像存储位置由文件服务的默认配置决定
         //文件存储相对路径和文件可访问URL在fileService中处理
         fileRecord.setUploaderId(user.getId());
         fileRecord.setUploaderUsername(user.getUsername());
         fileRecord.setBizType(FileBizType.IMAGE);
         fileRecord.setIsPublic(FileConstants.ACCESS_PUBLIC);
         //保存文件并向文件表中插入数据
-        fileService.saveFile(file,fileRecord);
+        fileRecord = fileService.saveFile(file, fileRecord);
         //更新当前用户头像
-        //这里用户头像保存的是后端请求url：/api/文件相对路径
-        String url = fileRecord.getUrl();
-        User updateUser=new User();
+        //头像字段仅保存稳定的公开 URL
+        String url = FileConstants.PUBLIC_URL_PREFIX + fileRecord.getPublicId();
+        User updateUser = new User();
         updateUser.setId(user.getId());
         updateUser.setAvatar(url);
-        boolean b = userEntityService.updateById(updateUser);
-        if(!b){
+        boolean updated = userEntityService.updateById(updateUser);
+        if (!updated) {
             throw new UserException("用户头像更新失败，请稍后再试");
         }
         //先保存更新是为了防止删除文件后业务失败使得原头像不可用
         //删除当前用户头像和数据库中记录
-        if(StrUtil.isNotBlank(oldAvatar)){
+        if (StrUtil.isNotBlank(oldAvatar)) {
             fileService.deleteFileByUrl(oldAvatar);
         }
         //刷新当前用户缓存

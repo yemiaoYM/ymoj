@@ -25,9 +25,8 @@ import com.ymcloud.web.controller.common.PublicCarouselController;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.impl.CarouselSettingServiceImpl;
 import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
-import com.ymcloud.web.service.file.StoredFileService;
-import com.ymcloud.web.service.oj.FileService;
-import com.ymcloud.web.service.oj.impl.FileServiceImpl;
+import com.ymcloud.web.service.file.FileService;
+import com.ymcloud.web.service.file.impl.FileServiceImpl;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.AfterEach;
@@ -81,12 +80,14 @@ class CarouselCacheTest {
     private CarouselSettingService service;
     private SystemSettingMapper settingMapper;
     private FileMapper fileMapper;
-    private StoredFileService storage;
+    private FileService storage;
     private RedisCache redisCache;
     private RedisCacheWriter writer;
     private TestTransactionManager transactions;
 
-    /** 启用真实缓存拦截器，不直接调用被缓存的实现对象。 */
+    /**
+     * 启用真实缓存拦截器，不直接调用被缓存的实现对象
+     */
     @org.springframework.context.annotation.Configuration
     @EnableCaching
     static class CacheConfig {}
@@ -109,8 +110,10 @@ class CarouselCacheTest {
         fileMapper = mock(FileMapper.class);
         FileEntityService files = mock(FileEntityService.class);
         when(files.lambdaQuery()).thenAnswer(call -> new LambdaQueryChainWrapper<>(fileMapper, File.class));
-        storage = mock(StoredFileService.class);
+        storage = mock(FileServiceImpl.class);
+        org.mockito.Mockito.doCallRealMethod().when(storage).deleteFileByUrl(anyString());
         redisCache = mock(RedisCache.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(storage, "redisCache", redisCache);
         when(redisCache.deleteObject(anyString())).thenAnswer(call -> values.remove(call.getArgument(0)) != null);
         writer = mock(RedisCacheWriter.class);
         doAnswer(call -> {
@@ -141,7 +144,7 @@ class CarouselCacheTest {
         context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
         context.registerBean("cacheManager", RedisCacheManager.class, () -> manager);
         context.registerBean("transactionManager", TestTransactionManager.class, () -> transactions);
-        context.register(CacheConfig.class, PublicImageServiceImpl.class, CarouselSettingServiceImpl.class, FileServiceImpl.class,
+        context.register(CacheConfig.class, PublicImageServiceImpl.class, CarouselSettingServiceImpl.class,
                 PublicCarouselController.class, AdminCarouselController.class);
         context.getBeanFactory().registerSingleton("problemEntityService", mock(ProblemEntityService.class));
         context.getBeanFactory().registerSingleton("contestEntityService", mock(ContestEntityService.class));
@@ -169,7 +172,7 @@ class CarouselCacheTest {
         when(fileMapper.selectList(any(Wrapper.class))).thenReturn(List.of(image(1), image(2)));
         CarouselSettingVO first = readPublic();
         assertEquals(first, readPublic());
-        assertEquals(List.of("2", "1"), first.images().stream().map(CarouselSettingVO.Image::id).toList());
+        assertEquals(List.of(image(2).getPublicId(), image(1).getPublicId()), first.images().stream().map(CarouselSettingVO.Image::id).toList());
         assertNotNull(values.get(REDIS_KEY));
         verify(settingMapper).selectOne(any(Wrapper.class));
         verify(fileMapper).selectList(any(Wrapper.class));
@@ -223,10 +226,10 @@ class CarouselCacheTest {
     @Test
     void outerRollbackKeepsPreviousCache() {
         File file = image(1);
-        when(storage.resolvePublicUrl(file.getUrl())).thenReturn(file);
+        when(storage.resolvePublicUrl("/files/public/" + file.getPublicId())).thenReturn(file);
         readPublic();
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
-            context.getBean(FileService.class).deleteFileByUrl(file.getUrl());
+            context.getBean(FileService.class).deleteFileByUrl("/files/public/" + file.getPublicId());
             status.setRollbackOnly();
         });
         assertTrue(values.containsKey(REDIS_KEY));
@@ -252,17 +255,17 @@ class CarouselCacheTest {
     @Test
     void deletingImageInvalidatesThroughBusinessService() {
         File file = image(1);
-        when(storage.resolvePublicUrl(file.getUrl())).thenReturn(file);
+        when(storage.resolvePublicUrl("/files/public/" + file.getPublicId())).thenReturn(file);
         FileService fileService = context.getBean(FileService.class);
         readPublic();
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
-            fileService.deleteFileByUrl(file.getUrl());
+            fileService.deleteFileByUrl("/files/public/" + file.getPublicId());
             assertTrue(values.containsKey(REDIS_KEY));
         });
         assertFalse(values.containsKey(REDIS_KEY));
         readPublic();
         doThrow(new IllegalStateException("storage failure")).when(storage).delete(1L);
-        assertThrows(IllegalStateException.class, () -> fileService.deleteFileByUrl(file.getUrl()));
+        assertThrows(IllegalStateException.class, () -> fileService.deleteFileByUrl("/files/public/" + file.getPublicId()));
         assertTrue(values.containsKey(REDIS_KEY));
         verify(redisCache).deleteObject(REDIS_KEY);
     }
@@ -299,7 +302,7 @@ class CarouselCacheTest {
     }
 
     /**
-     * 通过 Controller 代理读取，只解开现有一层 HTTP 响应壳。
+     * 通过 Controller 代理读取，只解开现有一层 HTTP 响应壳
      * @return 公开配置
      */
     private CarouselSettingVO readPublic() {
@@ -307,7 +310,7 @@ class CarouselCacheTest {
     }
 
     /**
-     * 还原 Redis 物理键。
+     * 还原 Redis 物理键
      * @param bytes UTF-8 键字节
      * @return 字符串键
      */
@@ -316,7 +319,7 @@ class CarouselCacheTest {
     }
 
     /**
-     * 构造关闭轮播的请求。
+     * 构造关闭轮播的请求
      * @return 空文件列表请求
      */
     private static CarouselSettingDTO emptyRequest() {
@@ -326,7 +329,7 @@ class CarouselCacheTest {
     }
 
     /**
-     * 构造轮播配置。
+     * 构造轮播配置
      * @param value 文件 ID JSON
      * @return 配置实体
      */
@@ -337,7 +340,7 @@ class CarouselCacheTest {
     }
 
     /**
-     * 构造公开图片。
+     * 构造公开图片
      * @param id 文件编号
      * @return 图片元数据
      */
@@ -346,17 +349,19 @@ class CarouselCacheTest {
         file.setId(id);
         file.setBizType(FileBizType.IMAGE);
         file.setIsPublic(1);
-        file.setUrl("/files/public/test/" + id + ".png");
+        file.setPublicId(String.format("%012x40008000000000000001", id));
         return file;
     }
 
-    /** 提供真实 REQUIRED 嵌套和同步回调，不连接数据库。 */
+    /**
+     * 提供真实 REQUIRED 嵌套和同步回调，不连接数据库
+     */
     static class TestTransactionManager extends AbstractPlatformTransactionManager {
 
         private final ThreadLocal<boolean[]> active = ThreadLocal.withInitial(() -> new boolean[1]);
 
         /**
-         * 获取当前线程的模拟事务状态，供嵌套调用共享。
+         * 获取当前线程的模拟事务状态，供嵌套调用共享
          * @return 单元素数组，记录事务是否已经开始
          */
         @Override
@@ -365,7 +370,7 @@ class CarouselCacheTest {
         }
 
         /**
-         * 判断当前线程是否已有事务，使 REQUIRED 调用加入外层事务。
+         * 判断当前线程是否已有事务，使 REQUIRED 调用加入外层事务
          * @param transaction 当前线程共享的模拟事务状态
          * @return true 表示已有活动事务
          */
@@ -375,7 +380,7 @@ class CarouselCacheTest {
         }
 
         /**
-         * 标记模拟事务开始，不连接数据库。
+         * 标记模拟事务开始，不连接数据库
          * @param transaction 当前线程共享的模拟事务状态
          * @param definition Spring 传入的事务定义，本测试不模拟隔离级别和超时
          */
@@ -385,21 +390,21 @@ class CarouselCacheTest {
         }
 
         /**
-         * 模拟成功提交；没有数据库操作，同步回调由父类触发。
+         * 模拟成功提交；没有数据库操作，同步回调由父类触发
          * @param status 待提交的事务状态
          */
         @Override
         protected void doCommit(DefaultTransactionStatus status) {}
 
         /**
-         * 模拟回滚；没有数据库操作，由父类完成回滚回调且不执行 afterCommit。
+         * 模拟回滚；没有数据库操作，由父类完成回滚回调且不执行 afterCommit
          * @param status 待回滚的事务状态
          */
         @Override
         protected void doRollback(DefaultTransactionStatus status) {}
 
         /**
-         * 移除线程事务状态，避免影响下一次测试调用。
+         * 移除线程事务状态，避免影响下一次测试调用
          * @param transaction 已完成提交或回滚的模拟事务状态
          */
         @Override

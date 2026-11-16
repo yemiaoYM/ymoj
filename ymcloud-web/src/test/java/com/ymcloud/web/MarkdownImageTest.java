@@ -3,11 +3,12 @@ package com.ymcloud.web;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -45,7 +46,7 @@ import static org.mockito.Mockito.when;
 class MarkdownImageTest {
 
     private final PublicImageServiceImpl images = new PublicImageServiceImpl();
-    private final StoredFileService storage = mock(StoredFileService.class);
+    private final FileService storage = mock(FileService.class);
     private byte[] savedBytes;
     private File savedFile;
 
@@ -57,12 +58,12 @@ class MarkdownImageTest {
     void setup() throws IOException {
         ReflectionTestUtils.setField(images, "storedFiles", storage);
         doAnswer(call -> {
-            savedBytes = ((InputStream) call.getArgument(0)).readAllBytes();
-            assertEquals(savedBytes.length, (long) call.getArgument(1));
-            savedFile = call.getArgument(2);
-            savedFile.setUrl("/files/public/local/image.png");
+            savedBytes = ((InputStream) call.getArgument(1)).readAllBytes();
+            assertEquals(savedBytes.length, (long) call.getArgument(2));
+            savedFile = StoredFileFixture.saved(call.getArgument(0));
+            savedFile.setPublicId("c0e28d63621d4830a6492bfa37c8a8c5");
             return savedFile;
-        }).when(storage).save(any(InputStream.class), anyLong(), any(File.class));
+        }).when(storage).create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong());
     }
 
     /**
@@ -82,7 +83,7 @@ class MarkdownImageTest {
         assertTrue(savedBytes.length <= 2 * 1024 * 1024);
         assertFalse(new String(savedBytes, StandardCharsets.ISO_8859_1).contains("<script>"));
         assertEquals("image/jpeg", savedFile.getFileType());
-        assertEquals("markdown.jpeg", savedFile.getFileName());
+        assertEquals("image.jpeg", savedFile.getFileName());
         assertEquals(9L, savedFile.getUploaderId());
         assertEquals("tester", savedFile.getUploaderUsername());
         assertEquals(FileBizType.IMAGE, savedFile.getBizType());
@@ -136,7 +137,7 @@ class MarkdownImageTest {
                 "not an image".getBytes(StandardCharsets.UTF_8)
         }) {
             FileException error = assertThrows(FileException.class,
-                    () -> images.upload(new MockMultipartFile("file", "fake.png", "image/png", payload), "markdown", 0, 0));
+                    () -> images.upload(new MockMultipartFile("file", "fake.png", "image/png", payload)));
             assertEquals(HttpStatus.BAD_REQUEST, error.getCode());
         }
         verifyNoInteractions(storage);
@@ -151,7 +152,7 @@ class MarkdownImageTest {
         byte[] png = picture(1, 1, false, false);
         ByteBuffer.wrap(png).putInt(16, 100_000).putInt(20, 100_000);
         FileException error = assertThrows(FileException.class,
-                () -> images.upload(new MockMultipartFile("file", png), "markdown", 0, 0));
+                () -> images.upload(new MockMultipartFile("file", png)));
         assertEquals("图片不能超过2400万像素", error.getMessage());
         verifyNoInteractions(storage);
     }
@@ -163,7 +164,7 @@ class MarkdownImageTest {
     @Test
     void propagatesStorageFailure() throws Exception {
         FileException failure = new FileException("存储不可用", HttpStatus.SERVICE_UNAVAILABLE);
-        when(storage.save(any(InputStream.class), anyLong(), any(File.class))).thenThrow(failure);
+        when(storage.create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong())).thenThrow(failure);
         byte[] bytes = picture(10, 10, false, false);
         assertSame(failure, assertThrows(FileException.class, () -> upload(new MockMultipartFile("file", bytes))));
     }
@@ -178,7 +179,7 @@ class MarkdownImageTest {
         user.setUsername("tester");
         try (var security = mockStatic(SecurityUtils.class)) {
             security.when(SecurityUtils::getUser).thenReturn(user);
-            assertEquals("/files/public/local/image.png", images.upload(file, "markdown", 0, 0).getUrl());
+            assertEquals("/files/public/c0e28d63621d4830a6492bfa37c8a8c5", images.upload(file));
         }
     }
 

@@ -5,6 +5,7 @@ import com.ymcloud.core.storage.config.StorageProperties;
 import com.ymcloud.core.storage.util.StorageDirectoryResolver;
 import com.ymcloud.core.web.dao.StorageConfigEntityService;
 import com.ymcloud.pojo.entity.StorageConfig;
+import com.ymcloud.pojo.enums.StorageDriverType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -90,6 +91,7 @@ public class StorageMasterKeyStore {
                             if (Files.exists(legacyKeyFile, LinkOption.NOFOLLOW_LINKS)) {
                                 importLegacy(directory);
                             } else if (!allowCreate || configs.lambdaQuery()
+                                    .ne(StorageConfig::getDriverType, StorageDriverType.LOCAL)
                                     .exists()) {
                                 throw missingKey();
                             } else {
@@ -135,6 +137,7 @@ public class StorageMasterKeyStore {
             original.setConfigEncryptionKey(Base64.getEncoder().encodeToString(key));
             StorageCredentialCipher probe = new StorageCredentialCipher(original);
             for (StorageConfig config : configs.lambdaQuery()
+                    .ne(StorageConfig::getDriverType, StorageDriverType.LOCAL)
                     .list()) {
                 probe.decrypt(config.getId(), "accessKey", config.getEncryptedAccessKey());
                 probe.decrypt(config.getId(), "secretKey", config.getEncryptedSecretKey());

@@ -17,6 +17,23 @@ import java.nio.file.Path;
 public final class StoragePaths {
 
     /**
+     * 校验各存储驱动共用的相对对象键，不修补非法路径
+     * @param key 使用正斜杠分隔且不超过 1024 个字符的对象键或命名空间
+     * @throws FileException 包含空路径段、目录跳转、控制字符或平台路径语法
+     */
+    public static void validateObjectKey(String key) {
+        if (key == null || key.isBlank() || key.length() > 1024 || key.contains("\\") || key.contains(":")) {
+            throw new FileException("对象路径不合法");
+        }
+        for (String part : key.split("/", -1)) {
+            if (part.isEmpty() || part.equals(".") || part.equals("..")
+                    || part.chars().anyMatch(character -> character < 32 || character == 127)) {
+                throw new FileException("对象路径不合法");
+            }
+        }
+    }
+
+    /**
      * 将对象键解析到指定根目录内，并拒绝目录穿越和符号链接逃逸
      * @param root 允许访问的存储根目录
      * @param key 使用正斜杠分隔的相对对象键

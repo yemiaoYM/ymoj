@@ -37,7 +37,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="存储配置">
-              <el-input v-model="queryParams.storageProfile" maxlength="64" placeholder="例如 seaweedfs" clearable />
+              <el-input v-model="queryParams.storageKey" maxlength="64" placeholder="例如 seaweedfs" clearable />
             </el-form-item>
             <el-form-item>
               <el-button type="primary" :icon="Search" native-type="submit">搜索</el-button>
@@ -73,7 +73,7 @@
           class="file-alert"
         />
         <el-table :data="files" v-loading="loading" row-key="id">
-          <el-table-column label="ID" prop="id" width="80" align="center" />
+          <el-table-column label="ID" prop="id" width="160" show-overflow-tooltip />
           <el-table-column label="文件名称" prop="fileName" min-width="220" show-overflow-tooltip />
           <el-table-column label="大小" width="110" align="center">
             <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
@@ -89,7 +89,7 @@
             </template>
           </el-table-column>
           <el-table-column label="存储配置" min-width="120">
-            <template #default="{ row }">{{ row.storageProfile || '旧本地文件' }}</template>
+            <template #default="{ row }">{{ row.storageKey }}</template>
           </el-table-column>
           <el-table-column label="上传者" prop="uploaderUsername" min-width="110" show-overflow-tooltip />
           <el-table-column label="上传时间" prop="createdTime" min-width="170" />
@@ -211,9 +211,9 @@ const files = ref<StorageFileVO[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const loaded = ref(false);
-const downloadingId = ref<number | null>(null);
+const downloadingId = ref<string | null>(null);
 const { beforeChange: downloadFile } = useAsyncChange();
-const deletingId = ref<number | null>(null);
+const deletingId = ref<string | null>(null);
 const uploadVisible = ref(false);
 const uploading = ref(false);
 const uploadPublic = ref<0 | 1>(1);
@@ -238,7 +238,7 @@ const loadFiles = async () => {
     const response = await getAdminFiles({
       ...queryParams.value,
       fileName: queryParams.value.fileName?.trim() || undefined,
-      storageProfile: queryParams.value.storageProfile?.trim() || undefined,
+      storageKey: queryParams.value.storageKey?.trim() || undefined,
     });
     if (requestId === listRequestId) {
       files.value = response.data.data.records;

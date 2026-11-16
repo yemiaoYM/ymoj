@@ -5,11 +5,12 @@ import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.storage.factory.StorageRegistry;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.vo.admin.RemoteProblemVO;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -37,7 +38,7 @@ public class RemoteProblemImages {
     private RemoteProblemHttpClient httpClient;
 
     @Autowired
-    private StoredFileService storedFiles;
+    private FileService storedFiles;
 
     @Autowired
     private StorageRegistry storage;
@@ -46,7 +47,7 @@ public class RemoteProblemImages {
     private PlatformTransactionManager transactionManager;
 
     /**
-     * 将题干及输入输出说明中的插图保存到当前存储，下载和压缩均在数据库事务之外完成。
+     * 将题干及输入输出说明中的插图保存到当前存储，下载和压缩均在数据库事务之外完成
      * @param draft 已解析且公式已转换的远程草稿，成功后原地更新图片地址
      */
     public void importImages(RemoteProblemVO draft) {
@@ -80,15 +81,11 @@ public class RemoteProblemImages {
             new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                 for (var entry : images.entrySet()) {
                     var image = entry.getValue();
-                    File file = new File();
-                    file.setFileName("problem-image." + image.extension());
-                    file.setFileType(image.contentType());
-                    file.setBizType(FileBizType.IMAGE);
-                    file.setIsPublic(FileConstants.ACCESS_PUBLIC);
-                    file.setUploaderId(user.getId());
-                    file.setUploaderUsername(user.getUsername());
-                    storedFiles.save(new ByteArrayInputStream(image.bytes()), image.bytes().length, file);
-                    urls.put(entry.getKey(), file.getUrl());
+                    File file = storedFiles.create(new CreateStoredFileCommand(
+                            "problem-image." + image.extension(), image.contentType(), FileConstants.SUB_DIR_IMAGE,
+                            FileBizType.IMAGE, null, true, user.getId(), user.getUsername()),
+                            new ByteArrayInputStream(image.bytes()), image.bytes().length);
+                    urls.put(entry.getKey(), FileConstants.PUBLIC_URL_PREFIX + file.getPublicId());
                 }
             });
         }

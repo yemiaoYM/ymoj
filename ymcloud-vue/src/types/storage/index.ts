@@ -3,16 +3,16 @@
  */
 export type StorageFileVO = {
   /**
-   * 文件 ID
+   * 对外 UUIDv4 文件标识
    */
-  id: number;
+  id: string;
   fileName: string;
   fileType: string | null;
   fileSize: number | null;
   bizType: number | null;
   bizId: number | null;
   isPublic: number | null;
-  storageProfile: string | null;
+  storageKey: string;
   uploaderUsername: string | null;
   /**
    * 格式：yyyy-MM-dd HH:mm:ss
@@ -36,7 +36,7 @@ export type FilePageQuery = {
   fileName?: string | null;
   isPublic?: number | null;
   bizType?: number | null;
-  storageProfile?: string | null;
+  storageKey?: string | null;
 };
 
 /**

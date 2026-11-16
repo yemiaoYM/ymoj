@@ -15,6 +15,7 @@ import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
@@ -24,7 +25,7 @@ import com.ymcloud.web.controller.admin.common.AdminFileController;
 import com.ymcloud.web.handler.GlobalExceptionHandler;
 import com.ymcloud.web.service.admin.FileAccessPolicy;
 import com.ymcloud.web.service.admin.impl.AdminFileServiceImpl;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -116,9 +117,13 @@ class AdminFileHttpSecurityTest {
             return mock(ContestUserEntityService.class);
         }
 
+        /**
+         * 构建文件服务替身，隔离 HTTP 权限测试与对象存储
+         * @return 文件服务替身
+         */
         @Bean
-        StoredFileService storedFileService() {
-            return mock(StoredFileService.class);
+        FileService storedFileService() {
+            return mock(FileService.class);
         }
 
         @Bean
@@ -134,7 +139,7 @@ class AdminFileHttpSecurityTest {
 
     private AnnotationConfigWebApplicationContext context;
     private MockMvc mvc;
-    private StoredFileService storedFiles;
+    private FileService storedFiles;
     private FileEntityService entities;
     private LambdaQueryChainWrapper<File> query;
 
@@ -174,7 +179,7 @@ class AdminFileHttpSecurityTest {
         });
         context.register(TestConfig.class);
         context.refresh();
-        storedFiles = context.getBean(StoredFileService.class);
+        storedFiles = context.getBean(FileService.class);
         Problem owned = new Problem();
         owned.setId(10L);
         owned.setAuthorId(9L);
@@ -202,17 +207,25 @@ class AdminFileHttpSecurityTest {
         }
     }
 
+    /**
+     * 匿名请求在业务查询和存储访问前被拒绝
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void anonymousRequestsAreRejectedBeforeBusinessOrStorageAccess() throws Exception {
         mvc.perform(get("/admin/file/list")).andExpect(jsonPath("$.code").value(401));
-        mvc.perform(get("/admin/file/17/download")).andExpect(jsonPath("$.code").value(401));
+        mvc.perform(get("/admin/file/b2b4724a5da148fa9437b46b52d174c8/download")).andExpect(jsonPath("$.code").value(401));
         mvc.perform(multipart("/admin/file/upload").file(upload()).param("isPublic", "1"))
                 .andExpect(jsonPath("$.code").value(401));
-        mvc.perform(delete("/admin/file/17")).andExpect(jsonPath("$.code").value(401));
+        mvc.perform(delete("/admin/file/b2b4724a5da148fa9437b46b52d174c8")).andExpect(jsonPath("$.code").value(401));
         verifyNoInteractions(storedFiles);
         verify(entities, never()).lambdaQuery();
     }
 
+    /**
+     * 后台入口与操作权限不能由角色名称或普通通配符替代
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void adminEntryAndEndpointPermissionCannotBeSubstitutedByRoleOrWildcard() throws Exception {
         mvc.perform(get("/admin/file/list").header("Mock-Permissions", "file:file:list"))
@@ -220,14 +233,18 @@ class AdminFileHttpSecurityTest {
         for (String permissions : new String[]{"admin:access", "admin:access,ROLE_ADMIN,*:*:*,file:file:*"}) {
             mvc.perform(get("/admin/file/list").header("Mock-Permissions", permissions))
                     .andExpect(jsonPath("$.code").value(403));
-            mvc.perform(get("/admin/file/17/download").header("Mock-Permissions", permissions))
+            mvc.perform(get("/admin/file/b2b4724a5da148fa9437b46b52d174c8/download").header("Mock-Permissions", permissions))
                     .andExpect(jsonPath("$.code").value(403));
-            mvc.perform(delete("/admin/file/17").header("Mock-Permissions", permissions))
+            mvc.perform(delete("/admin/file/b2b4724a5da148fa9437b46b52d174c8").header("Mock-Permissions", permissions))
                     .andExpect(jsonPath("$.code").value(403));
         }
         verifyNoInteractions(storedFiles);
     }
 
+    /**
+     * 列表只暴露允许的元数据，列表权限不授予下载和删除
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void fileListExposesOnlySafeMetadataAndDoesNotGrantDownloadOrDeletion() throws Exception {
         page(List.of(file(FileBizType.GENERAL, true)));
@@ -235,7 +252,7 @@ class AdminFileHttpSecurityTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.records[0].bizType").value(0))
-                .andExpect(jsonPath("$.data.records[0].storageProfile").value("seaweed"))
+                .andExpect(jsonPath("$.data.records[0].storageKey").value("seaweed"))
                 .andExpect(jsonPath("$.data.records[0].canDownload").value(false))
                 .andExpect(jsonPath("$.data.records[0].canDelete").value(false))
                 .andExpect(jsonPath("$.data.records[0].storagePath").doesNotExist())
@@ -244,15 +261,19 @@ class AdminFileHttpSecurityTest {
                 .andExpect(jsonPath("$.data.records[0].objectKey").doesNotExist());
     }
 
+    /**
+     * 私有文件查询和下载同时要求对应私有权限
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void privateMetadataAndDownloadsNeedSpecificPrivatePermission() throws Exception {
         File file = file(FileBizType.GENERAL, false);
         page(List.of());
-        when(storedFiles.get(17L)).thenReturn(file);
+        when(storedFiles.getByPublicId("b2b4724a5da148fa9437b46b52d174c8")).thenReturn(file);
         mvc.perform(get("/admin/file/list").header("Mock-Permissions", "admin:access,file:file:list"))
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.records").isEmpty());
-        mvc.perform(get("/admin/file/17/download").header("Mock-Permissions", "admin:access,file:file:download"))
+        mvc.perform(get("/admin/file/b2b4724a5da148fa9437b46b52d174c8/download").header("Mock-Permissions", "admin:access,file:file:download"))
                 .andExpect(jsonPath("$.code").value(403));
         page(List.of(file));
         mvc.perform(get("/admin/file/list")
@@ -262,11 +283,15 @@ class AdminFileHttpSecurityTest {
         verify(storedFiles, never()).open(any(File.class));
     }
 
+    /**
+     * 测试数据管理权限不授予普通私有文件访问
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void testcaseManagerCanReadTestDataButCannotReadOrdinaryPrivateFiles() throws Exception {
         File testData = file(FileBizType.TEST_DATA, true);
         page(List.of(testData));
-        when(storedFiles.get(17L)).thenReturn(testData);
+        when(storedFiles.getByPublicId("b2b4724a5da148fa9437b46b52d174c8")).thenReturn(testData);
         byte[] bytes = "  中文\n".getBytes(StandardCharsets.UTF_8);
         when(storedFiles.open(testData)).thenReturn(new ByteArrayInputStream(bytes));
         String permissions = "admin:access,problem:testcase:query";
@@ -277,89 +302,44 @@ class AdminFileHttpSecurityTest {
                 .andExpect(jsonPath("$.data.records[0].url").doesNotExist())
                 .andExpect(jsonPath("$.data.records[0].canDownload").value(true))
                 .andExpect(jsonPath("$.data.records[0].canDelete").value(false));
-        mvc.perform(get("/admin/file/17/download").header("Mock-Permissions", permissions))
+        mvc.perform(get("/admin/file/b2b4724a5da148fa9437b46b52d174c8/download").header("Mock-Permissions", permissions))
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(bytes))
                 .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM))
                 .andExpect(header().string("X-Content-Type-Options", "nosniff"))
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")));
-        when(storedFiles.get(17L)).thenReturn(file(FileBizType.GENERAL, false));
-        mvc.perform(get("/admin/file/17/download").header("Mock-Permissions", permissions))
+        when(storedFiles.getByPublicId("b2b4724a5da148fa9437b46b52d174c8")).thenReturn(file(FileBizType.GENERAL, false));
+        mvc.perform(get("/admin/file/b2b4724a5da148fa9437b46b52d174c8/download").header("Mock-Permissions", permissions))
                 .andExpect(jsonPath("$.code").value(403));
     }
 
+    /**
+     * 普通下载及私有权限不能读取隐藏测试数据
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void fileDownloadAndPrivatePermissionsCannotDownloadTestData() throws Exception {
-        when(storedFiles.get(17L)).thenReturn(file(FileBizType.TEST_DATA, false));
-        mvc.perform(get("/admin/file/17/download")
+        when(storedFiles.getByPublicId("b2b4724a5da148fa9437b46b52d174c8")).thenReturn(file(FileBizType.TEST_DATA, false));
+        mvc.perform(get("/admin/file/b2b4724a5da148fa9437b46b52d174c8/download")
                         .header("Mock-Permissions", "admin:access,file:file:download,file:file:private"))
                 .andExpect(jsonPath("$.code").value(403));
         verify(storedFiles, never()).open(any(File.class));
     }
 
-    @Test
-    void historicalPublicAvatarDownloadsFromConfinedCopyInsteadOfOldLinuxAbsolutePath() throws Exception {
-        File file = file(FileBizType.IMAGE, true);
-        file.setStorageProfile(null);
-        file.setStorageType(0);
-        file.setStoragePath("/home/ymcloud/files/public/image/avatar.jpg");
-        file.setUrl("/files/public/image/avatar.jpg");
-        when(storedFiles.get(17L)).thenReturn(file);
-        byte[] bytes = new byte[]{3, 4, 5};
-        when(storedFiles.openLegacyPublic("image/avatar.jpg")).thenReturn(new ByteArrayInputStream(bytes));
-
-        mvc.perform(get("/admin/file/17/download")
-                        .header("Mock-Permissions", "admin:access,file:file:download"))
-                .andExpect(content().bytes(bytes))
-                .andExpect(content().contentType(MediaType.APPLICATION_OCTET_STREAM))
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
-
-        verify(storedFiles, never()).open(file);
-    }
-
-    @Test
-    void privateFileNeverUsesHistoricalPublicUrlFallback() throws Exception {
-        File file = file(FileBizType.GENERAL, false);
-        file.setStorageProfile(null);
-        file.setStorageType(0);
-        file.setStoragePath("/home/ymcloud/files/private/data.txt");
-        file.setUrl("/files/public/image/avatar.jpg");
-        when(storedFiles.get(17L)).thenReturn(file);
-        when(storedFiles.open(file)).thenReturn(new ByteArrayInputStream(new byte[]{1}));
-
-        mvc.perform(get("/admin/file/17/download")
-                        .header("Mock-Permissions", "admin:access,file:file:download,file:file:private"))
-                .andExpect(content().bytes(new byte[]{1}));
-
-        verify(storedFiles, never()).openLegacyPublic(any());
-    }
-
-    @Test
-    void historicalPublicDownloadRejectsTraversalAndEncodedPaths() throws Exception {
-        File file = file(FileBizType.IMAGE, true);
-        file.setStorageProfile(null);
-        file.setStorageType(0);
-        when(storedFiles.get(17L)).thenReturn(file);
-        for (String path : new String[]{"image/../private.txt", "%2e%2e/secret.txt", "image\\secret.txt", "image/\nsecret.txt"}) {
-            file.setUrl("/files/public/" + path);
-            mvc.perform(get("/admin/file/17/download")
-                            .header("Mock-Permissions", "admin:access,file:file:download"))
-                    .andExpect(jsonPath("$.code").value(404));
-        }
-        verify(storedFiles, never()).openLegacyPublic(any());
-        verify(storedFiles, never()).open(file);
-    }
-
+    /**
+     * 上传不能指定业务类型和物理位置，私有上传另行鉴权
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void uploadCannotChooseBusinessTypeOrLocationAndPrivateUploadRequiresPermission() throws Exception {
         doAnswer(invocation -> {
-            File file = invocation.getArgument(2);
+            File file = StoredFileFixture.saved(invocation.getArgument(0));
             file.setId(17L);
-            file.setStorageProfile("seaweed");
+            file.setStorageKey("seaweed");
             file.setFileSize(3L);
             return file;
-        }).when(storedFiles).save(any(InputStream.class), anyLong(), any(File.class));
+        }).when(storedFiles).create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong());
         mvc.perform(multipart("/admin/file/upload").file(upload()).param("isPublic", "0")
                         .header("Mock-Permissions", "admin:access,file:file:upload"))
                 .andExpect(jsonPath("$.code").value(403));
@@ -380,41 +360,49 @@ class AdminFileHttpSecurityTest {
                 .andExpect(jsonPath("$.code").value(400));
     }
 
+    /**
+     * 删除权限只能删除尚未关联的普通文件
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void removePermissionOnlyDeletesUnassociatedGeneralFiles() throws Exception {
         String permissions = "admin:access,file:file:remove,file:file:private";
         for (FileBizType type : new FileBizType[]{FileBizType.IMAGE, FileBizType.PROBLEM_ATTACHMENT,
                 FileBizType.CONTEST_ATTACHMENT, FileBizType.ANNOUNCEMENT_ATTACHMENT, FileBizType.TEST_DATA}) {
             when(query.one()).thenReturn(file(type, false));
-            mvc.perform(delete("/admin/file/17").header("Mock-Permissions", permissions))
+            mvc.perform(delete("/admin/file/b2b4724a5da148fa9437b46b52d174c8").header("Mock-Permissions", permissions))
                     .andExpect(jsonPath("$.code").value(403));
         }
         File linked = file(FileBizType.GENERAL, false);
         linked.setBizId(10L);
         when(query.one()).thenReturn(linked);
-        mvc.perform(delete("/admin/file/17").header("Mock-Permissions", permissions))
+        mvc.perform(delete("/admin/file/b2b4724a5da148fa9437b46b52d174c8").header("Mock-Permissions", permissions))
                 .andExpect(jsonPath("$.code").value(403));
         verify(storedFiles, never()).delete(anyLong());
         when(query.one()).thenReturn(file(FileBizType.GENERAL, false));
-        mvc.perform(delete("/admin/file/17").header("Mock-Permissions", permissions))
+        mvc.perform(delete("/admin/file/b2b4724a5da148fa9437b46b52d174c8").header("Mock-Permissions", permissions))
                 .andExpect(jsonPath("$.code").value(200));
         verify(storedFiles).delete(17L);
     }
 
+    /**
+     * 超级管理员具备新权限但通用入口仍禁止删除测试数据
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     void superAdministratorHasNewPermissionsButStillCannotDeleteTestData() throws Exception {
         File privateFile = file(FileBizType.GENERAL, false);
         page(List.of(privateFile));
-        when(storedFiles.get(17L)).thenReturn(privateFile);
+        when(storedFiles.getByPublicId("b2b4724a5da148fa9437b46b52d174c8")).thenReturn(privateFile);
         when(storedFiles.open(privateFile)).thenReturn(new ByteArrayInputStream(new byte[]{1}));
         mvc.perform(get("/admin/file/list").header("Mock-User-Id", "1").header("Mock-Permissions", "*:*:*"))
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.records[0].canDownload").value(true))
                 .andExpect(jsonPath("$.data.records[0].canDelete").value(true));
-        mvc.perform(get("/admin/file/17/download").header("Mock-User-Id", "1").header("Mock-Permissions", "*:*:*"))
+        mvc.perform(get("/admin/file/b2b4724a5da148fa9437b46b52d174c8/download").header("Mock-User-Id", "1").header("Mock-Permissions", "*:*:*"))
                 .andExpect(content().bytes(new byte[]{1}));
         when(query.one()).thenReturn(file(FileBizType.TEST_DATA, false));
-        mvc.perform(delete("/admin/file/17").header("Mock-User-Id", "1").header("Mock-Permissions", "*:*:*"))
+        mvc.perform(delete("/admin/file/b2b4724a5da148fa9437b46b52d174c8").header("Mock-User-Id", "1").header("Mock-Permissions", "*:*:*"))
                 .andExpect(jsonPath("$.code").value(403));
         verify(storedFiles, never()).delete(anyLong());
     }
@@ -443,17 +431,22 @@ class AdminFileHttpSecurityTest {
         }).when(entities).pageAuthorized(any(Page.class), any(), any());
     }
 
+    /**
+     * 构建具有规范对象位置的权限测试文件
+     * @param businessType 文件业务类型
+     * @param publicAccess 是否允许公开访问
+     * @return 文件元数据夹具
+     */
     private File file(FileBizType businessType, boolean publicAccess) {
         File file = new File();
         file.setId(17L);
         file.setFileName("文件.html");
         file.setFileType("text/html");
-        file.setStorageProfile("seaweed");
-        file.setStoragePath("private/internal-object");
-        file.setLegacyPath("C:/internal/file.txt");
+        file.setStorageKey("seaweed");
+
         file.setBucket("private-bucket");
         file.setObjectKey("internal-key");
-        file.setUrl("/files/public/legacy-url");
+        file.setPublicId("b2b4724a5da148fa9437b46b52d174c8");
         file.setBizType(businessType);
         file.setBizId(businessType == FileBizType.GENERAL ? null : 10L);
         file.setIsPublic(publicAccess ? 1 : 0);

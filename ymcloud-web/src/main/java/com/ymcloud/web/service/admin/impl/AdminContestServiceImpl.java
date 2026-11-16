@@ -33,7 +33,7 @@ import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminContestService;
 import com.ymcloud.web.service.admin.ResourceDeletionService;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -76,7 +76,7 @@ public class AdminContestServiceImpl implements AdminContestService {
     private ProblemEntityService problemEntityService;
 
     @Autowired
-    private StoredFileService storedFiles;
+    private FileService storedFiles;
 
     /**
      * 分页查询比赛列表
@@ -653,7 +653,7 @@ public class AdminContestServiceImpl implements AdminContestService {
     }
 
     /**
-     * 非空封面必须引用统一存储中的公开图片，不能通过比赛暴露私有文件。
+     * 非空封面必须引用统一存储中的公开图片，不能通过比赛暴露私有文件
      * @param image 封面地址；null 表示使用默认图
      */
     private void validateContestImage(String image) {

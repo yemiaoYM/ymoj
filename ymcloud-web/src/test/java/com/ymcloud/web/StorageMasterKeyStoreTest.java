@@ -181,11 +181,17 @@ class StorageMasterKeyStoreTest {
         return cipher;
     }
 
+    /**
+     * 模拟是否存在需要主密钥解密的非本地配置
+     * @param existing 是否存在非本地配置
+     * @return 存储配置数据访问替身
+     */
     @SuppressWarnings("unchecked")
     private StorageConfigEntityService configs(boolean existing) {
         StorageConfigEntityService configs = mock(StorageConfigEntityService.class);
-        LambdaQueryChainWrapper<StorageConfig> query = mock(LambdaQueryChainWrapper.class);
+        LambdaQueryChainWrapper<StorageConfig> query = mock(LambdaQueryChainWrapper.class, org.mockito.Mockito.RETURNS_SELF);
         when(configs.lambdaQuery()).thenReturn(query);
+        when(query.ne(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(query);
         when(query.exists()).thenReturn(existing);
         return configs;
     }

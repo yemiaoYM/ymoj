@@ -2,7 +2,6 @@ package com.ymcloud.web.controller.common;
 
 import com.ymcloud.common.result.Result;
 import com.ymcloud.web.service.common.PublicImageService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -14,7 +13,6 @@ import org.springframework.web.multipart.MultipartFile;
  * @CreateTime: 2026-10-31
  * @Description: 个人资料、题目、比赛及公告编辑器共用的正文图片上传入口
  */
-@Slf4j
 @RestController
 public class ImageController {
 
@@ -29,8 +27,7 @@ public class ImageController {
      */
     @PostMapping("/markdown/image")
     public Result<String> uploadImage(@RequestParam("file") MultipartFile file) {
-        log.info("上传 Markdown 插图");
-        return Result.ok(publicImages.upload(file, "markdown", 0, 0).getUrl());
+        return Result.ok(publicImages.upload(file));
     }
 
 }

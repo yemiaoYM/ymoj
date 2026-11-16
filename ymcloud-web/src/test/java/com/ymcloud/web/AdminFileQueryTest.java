@@ -163,7 +163,7 @@ class AdminFileQueryTest {
         query.setPageNum(3);
         query.setPageSize(50);
         query.setFileName("' OR 1=1 --");
-        query.setStorageProfile("seaweed");
+        query.setStorageKey("seaweed");
         query.setBizType(0);
         service.queryList(query);
         assertFalse(bound.getSql().contains(query.getFileName()));

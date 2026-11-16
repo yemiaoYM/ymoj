@@ -10,7 +10,7 @@ import com.ymcloud.web.config.JudgeWorkerSecurityConfig;
 import com.ymcloud.web.controller.internal.JudgeWorkerDataController;
 import com.ymcloud.web.controller.internal.JudgeWorkerDataExceptionHandler;
 import com.ymcloud.web.service.internal.impl.JudgeWorkerDataServiceImpl;
-import com.ymcloud.web.service.problem.TestDataService;
+import com.ymcloud.web.service.oj.TestDataService;
 import jakarta.servlet.Filter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

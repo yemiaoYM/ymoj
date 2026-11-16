@@ -1,8 +1,6 @@
 package com.ymcloud.common.constant;
 
 /**
- * @PackageName: com.ymcloud.common.constant
- * @ClassName: FileConstants
  * @Author: Yemiao
  * @CreateTime: 2025-08-02  22:02
  * @Description: 文件相关常量
@@ -10,21 +8,10 @@ package com.ymcloud.common.constant;
 public class FileConstants {
 
     /**
-     * 本地存储
+     * 公开文件访问前缀，后接与存储位置无关的 publicId
      */
-    public static final int STORAGE_LOCAL = 0;
-    /**
-     * 阿里云 OSS
-     */
-    public static final int STORAGE_OSS = 1;
-    /**
-     * MinIO
-     */
-    public static final int STORAGE_MINIO = 2;
-    /**
-     * 通用 S3 兼容对象存储。
-     */
-    public static final int STORAGE_S3 = 3;
+    public static final String PUBLIC_URL_PREFIX = "/files/public/";
+
     /**
      * 私有文件（需权限访问）
      */
@@ -57,6 +44,16 @@ public class FileConstants {
      * 公告业务子目录
      */
     public static final String SUB_DIR_ANNOUNCEMENT = "announcement";
+    /**
+     * 通用文件对象目录
+     */
+    public static final String SUB_DIR_FILE = "file";
+
+    /**
+     * 用户头像对象目录
+     */
+    public static final String SUB_DIR_AVATAR = "avatar";
+
     /**
      * 图片图像业务子目录
      */

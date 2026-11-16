@@ -7,6 +7,7 @@ import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.FileEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.bo.FileAccessScope;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.User;
@@ -16,7 +17,7 @@ import com.ymcloud.pojo.vo.admin.AdminFileVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminFileService;
 import com.ymcloud.web.service.admin.FileAccessPolicy;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -39,7 +40,7 @@ public class AdminFileServiceImpl implements AdminFileService {
     private FileEntityService files;
 
     @Autowired
-    private StoredFileService storedFiles;
+    private FileService storedFiles;
 
     @Autowired
     private FileAccessPolicy access;
@@ -73,12 +74,12 @@ public class AdminFileServiceImpl implements AdminFileService {
 
     /**
      * 校验文件下载权限并返回存储元数据
-     * @param id 文件 ID
+     * @param id 对外 UUIDv4 文件标识
      * @return 已授权下载的文件
      */
     @Override
-    public File requireDownload(Long id) {
-        File file = storedFiles.get(id);
+    public File requireDownload(String id) {
+        File file = storedFiles.getByPublicId(id);
         access.requireDownload(file);
         return file;
     }
@@ -99,15 +100,11 @@ public class AdminFileServiceImpl implements AdminFileService {
         boolean publicAccess = Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(isPublic);
         access.requireUpload(publicAccess);
         User user = SecurityUtils.getUser();
-        File file = new File();
-        file.setFileName(upload.getOriginalFilename());
-        file.setFileType(upload.getContentType());
-        file.setBizType(FileBizType.GENERAL);
-        file.setIsPublic(isPublic);
-        file.setUploaderId(user.getId());
-        file.setUploaderUsername(user.getUsername());
+        File file;
         try (InputStream input = upload.getInputStream()) {
-            storedFiles.save(input, upload.getSize(), file);
+            file = storedFiles.create(new CreateStoredFileCommand(
+                    upload.getOriginalFilename(), upload.getContentType(), FileConstants.SUB_DIR_FILE,
+                    FileBizType.GENERAL, null, publicAccess, user.getId(), user.getUsername()), input, upload.getSize());
         } catch (IOException e) {
             throw new FileException("读取上传文件失败", e);
         }
@@ -116,21 +113,21 @@ public class AdminFileServiceImpl implements AdminFileService {
 
     /**
      * 锁定文件并校验删除权限，实际文件由存储服务在事务提交后删除
-     * @param id 文件 ID
+     * @param id 对外 UUIDv4 文件标识
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void delete(Long id) {
+    public void delete(String id) {
         // 与存储层删除和迁移使用相同的行锁，鉴权后关联信息不会并发变化
         File file = files.lambdaQuery()
-                .eq(File::getId, id)
+                .eq(File::getPublicId, id)
                 .last("FOR UPDATE")
                 .one();
         if (file == null) {
             throw new FileException("文件不存在", HttpStatus.NOT_FOUND);
         }
         access.requireDelete(file);
-        storedFiles.delete(id);
+        storedFiles.delete(file.getId());
     }
 
     /**
@@ -155,17 +152,17 @@ public class AdminFileServiceImpl implements AdminFileService {
      */
     private AdminFileVO metadata(File file) {
         AdminFileVO view = new AdminFileVO();
-        view.setId(file.getId());
+        view.setId(file.getPublicId());
         view.setFileName(file.getFileName());
         view.setFileType(file.getFileType());
         view.setFileSize(file.getFileSize());
         view.setBizType(file.getBizType() == null ? null : file.getBizType().getCode());
         view.setBizId(file.getBizId());
         view.setIsPublic(access.isPublic(file) ? FileConstants.ACCESS_PUBLIC : FileConstants.ACCESS_PRIVATE);
-        view.setStorageProfile(file.getStorageProfile());
+        view.setStorageKey(file.getStorageKey());
         view.setUploaderUsername(file.getUploaderUsername());
         view.setCreatedTime(file.getCreatedTime());
-        view.setUrl(access.isPublic(file) ? file.getUrl() : null);
+        view.setUrl(access.isPublic(file) ? FileConstants.PUBLIC_URL_PREFIX + file.getPublicId() : null);
         view.setSha256(file.getSha256());
         view.setCanDownload(access.canDownloadAuthorizedFile(file));
         view.setCanDelete(access.canDelete(file));

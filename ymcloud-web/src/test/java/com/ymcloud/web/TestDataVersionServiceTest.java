@@ -10,14 +10,14 @@ import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
 import com.ymcloud.core.web.mapper.ProblemMapper;
 import com.ymcloud.core.web.mapper.TestDataVersionMapper;
-import com.ymcloud.pojo.bo.TestDataMigrationReport;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.enums.FileBizType;
-import com.ymcloud.web.service.file.StoredFileService;
-import com.ymcloud.web.service.problem.impl.TestDataServiceImpl;
+import com.ymcloud.web.service.file.FileService;
+import com.ymcloud.web.service.oj.impl.TestDataServiceImpl;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,7 +49,7 @@ import static org.mockito.Mockito.*;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-11
- * @Description: 验证测试数据版本发布、迁移幂等及私有文件读取边界
+ * @Description: 验证测试数据版本发布、历史目录拒绝及私有文件读取边界
  */
 @ExtendWith(MockitoExtension.class)
 class TestDataVersionServiceTest {
@@ -66,7 +66,7 @@ class TestDataVersionServiceTest {
     @Mock
     TestDataVersionMapper versionMapper;
     @Mock
-    StoredFileService storage;
+    FileService storage;
 
     TestDataServiceImpl service;
     Problem problem;
@@ -76,13 +76,20 @@ class TestDataVersionServiceTest {
     final AtomicLong nextFileId = new AtomicLong(100);
     TestDataVersion lastSaved;
 
+    /**
+     * 装配内存版本记录与文件服务替身，保留真实版本发布逻辑
+     * @throws Exception 测试依赖装配失败
+     */
     @BeforeEach
     void prepare() throws Exception {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new Configuration(), ""), Problem.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new Configuration(), ""), TestDataVersion.class);
         problem = new Problem();
         problem.setId(7L);
-        service = new TestDataServiceImpl(problems, versions, storage, directory.toString());
+        service = new TestDataServiceImpl();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "problemEntityService", problems);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "versionEntityService", versions);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "storedFileService", storage);
         lenient().when(problems.lambdaQuery())
                 .thenAnswer(invocation -> new LambdaQueryChainWrapper<>(problemMapper, Problem.class));
         lenient().when(problems.lambdaUpdate())
@@ -109,12 +116,11 @@ class TestDataVersionServiceTest {
             problem.setTestDataVersionId(lastSaved.getId());
             return 1;
         });
-        lenient().when(storage.save(any(InputStream.class), anyLong(), anyString(), anyString(),
-                eq(FileBizType.TEST_DATA), eq(7L), eq(false))).thenAnswer(invocation -> {
-            InputStream input = invocation.getArgument(0);
+        lenient().when(storage.create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong())).thenAnswer(invocation -> {
+            InputStream input = invocation.getArgument(1);
             byte[] bytes = input.readAllBytes();
-            assertEquals((long) invocation.getArgument(1), bytes.length);
-            File file = file(bytes, invocation.getArgument(2));
+            assertEquals((long) invocation.getArgument(2), bytes.length);
+            File file = file(bytes, invocation.<CreateStoredFileCommand>getArgument(0).fileName());
             files.put(file.getId(), file);
             content.put(file.getId(), bytes);
             return file;
@@ -166,12 +172,14 @@ class TestDataVersionServiceTest {
         verify(storage, never()).delete(anyLong());
     }
 
+    /**
+     * 对象上传失败不发布不完整测试版本
+     */
     @Test
     void failedObjectUploadDoesNotPublishPartialVersion() {
         service.upload(7L, pair("a", "input", "output"));
         Long oldVersion = problem.getTestDataVersionId();
-        when(storage.save(any(InputStream.class), anyLong(), eq("a.out"), anyString(),
-                eq(FileBizType.TEST_DATA), eq(7L), eq(false))).thenThrow(new ProblemException("storage down"));
+        when(storage.create(argThat(command -> command.fileName().equals("a.out")), any(InputStream.class), anyLong())).thenThrow(new ProblemException("storage down"));
         assertThrows(ProblemException.class, () -> service.upload(7L, pair("a", "new", "new")));
         assertEquals(oldVersion, problem.getTestDataVersionId());
         assertEquals(1, versionRows.size());
@@ -242,6 +250,9 @@ class TestDataVersionServiceTest {
         }
     }
 
+    /**
+     * 拒绝不成对或重复删除，保持当前版本不变
+     */
     @Test
     void partialDeleteAndDuplicateDeleteAreRejectedWithoutPublishing() {
         service.upload(7L, pair("a", "input", "output"));
@@ -254,91 +265,18 @@ class TestDataVersionServiceTest {
     }
 
     /**
-     * 历史清单读取故障保留原因并中止盘点，不伪装成可继续的格式问题
-     * @throws Exception 创建测试数据夹具失败
+     * 未登记历史目录不能再通过运行时读取或隐式创建测试数据版本
+     * @throws Exception 创建历史文件夹具失败
      */
     @Test
-    void unreadableManifestFailsInsteadOfReturningInventoryErrors() throws Exception {
+    void unregisteredHistoricalFilesAreNotReadOrImported() throws Exception {
         legacyPair("a", "input", "output");
-        Files.createDirectory(directory.resolve("private/problem/7/info.json"));
-        ProblemException failure = assertThrows(ProblemException.class, () -> service.migrateLegacy(7L, false));
-        assertInstanceOf(IOException.class, failure.getCause());
+        assertTrue(service.getManifest(7L, null).getEntries().isEmpty());
+        assertThrows(ProblemException.class, () -> service.getCurrentVersion(7L));
+        assertThrows(ProblemException.class, () -> service.openFile(7L, null, "/in/a.in"));
+        assertNull(problem.getTestDataVersionId());
+        verifyNoInteractions(storage);
         verify(versions, never()).save(any());
-        verifyNoInteractions(storage);
-    }
-
-    @Test
-    void legacyInventoryIsReadOnlyAndImportIsIdempotent() throws Exception {
-        legacyPair("a", "  input\n", "output");
-        TestDataMigrationReport inventory = service.migrateLegacy(7L, false);
-        assertTrue(inventory.getErrors().isEmpty());
-        assertEquals(2, inventory.getFileCount());
-        assertEquals(14, inventory.getTotalBytes());
-        assertNull(inventory.getVersionId());
-        assertFalse(inventory.isApplied());
-        verifyNoInteractions(storage);
-        TestDataMigrationReport imported = service.migrateLegacy(7L, true);
-        assertTrue(imported.isApplied());
-        Long versionId = imported.getVersionId();
-        assertNotNull(versionId);
-        service.migrateLegacy(7L, true);
-        assertEquals(versionId, problem.getTestDataVersionId());
-        assertEquals(1, versionRows.size());
-        verify(storage, times(2)).save(any(InputStream.class), anyLong(), anyString(), anyString(),
-                eq(FileBizType.TEST_DATA), eq(7L), eq(false));
-    }
-
-    @Test
-    void missingPairAndMismatchedInfoRemainInErrorReportWithoutPublishing() throws Exception {
-        Path root = directory.resolve("private/problem/7");
-        Files.createDirectories(root.resolve("in"));
-        Files.writeString(root.resolve("in/missing.in"), "input", StandardCharsets.UTF_8);
-        TestDataMigrationReport report = service.migrateLegacy(7L, true);
-        assertFalse(report.getErrors().isEmpty());
-        assertFalse(report.isApplied());
-        assertNull(problem.getTestDataVersionId());
-        Files.delete(root.resolve("in/missing.in"));
-        legacyPair("a", "input", "output");
-        Files.writeString(root.resolve("info.json"), "[{\"id\":1,\"input\":\"/in/other.in\",\"output\":\"/out/other.out\"}]",
-                StandardCharsets.UTF_8);
-        assertFalse(service.migrateLegacy(7L, true).getErrors().isEmpty());
-        assertThrows(ProblemException.class, () -> service.getCurrentVersion(7L));
-        verifyNoInteractions(storage);
-    }
-
-    @Test
-    void legacyHashMismatchBlocksMigration() throws Exception {
-        legacyPair("a", "input", "output");
-        Path root = directory.resolve("private/problem/7");
-        Files.writeString(root.resolve("info.json"), "[{\"id\":1,\"input\":\"/in/a.in\",\"output\":\"/out/a.out\","
-                + "\"inputSha256\":\"" + "0".repeat(64) + "\"}]", StandardCharsets.UTF_8);
-        assertFalse(service.migrateLegacy(7L, true).getErrors().isEmpty());
-        assertNull(problem.getTestDataVersionId());
-        verifyNoInteractions(storage);
-    }
-
-    @Test
-    void newSubmissionLazilyPinsLegacySnapshotAndEmptyDataFails() throws Exception {
-        assertThrows(ProblemException.class, () -> service.getCurrentVersion(7L));
-        legacyPair("a", "input", "output");
-        Long versionId = service.getCurrentVersion(7L);
-        assertNotNull(versionId);
-        Files.writeString(directory.resolve("private/problem/7/in/a.in"), "changed", StandardCharsets.UTF_8);
-        assertEquals(versionId, service.getCurrentVersion(7L));
-        try (InputStream input = service.openFile(7L, versionId, "/in/a.in")) {
-            assertEquals("input", new String(input.readAllBytes(), StandardCharsets.UTF_8));
-        }
-    }
-
-    @Test
-    void oldQueuedTaskCanReadSafeLegacyFilesWithoutCreatingVersion() throws Exception {
-        legacyPair("a", "  input\n", "output");
-        assertNull(service.getManifest(7L, null).getVersionId());
-        try (InputStream input = service.openFile(7L, null, "/in/a.in")) {
-            assertEquals("  input\n", new String(input.readAllBytes(), StandardCharsets.UTF_8));
-        }
-        assertNull(problem.getTestDataVersionId());
-        verifyNoInteractions(storage, versions);
     }
 
     private MultipartFile[] pair(String name, String input, String output) {

@@ -14,17 +14,15 @@ import com.ymcloud.core.web.dao.impl.FileEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.ProblemEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.TestDataVersionEntityServiceImpl;
 import com.ymcloud.core.web.mapper.FileMapper;
-import com.ymcloud.pojo.bo.TestDataMigrationReport;
 import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.StorageDriverType;
-import com.ymcloud.web.service.file.StoredFileService;
-import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
-import com.ymcloud.web.service.problem.TestDataService;
-import com.ymcloud.web.service.problem.impl.TestDataServiceImpl;
+import com.ymcloud.web.service.file.impl.FileServiceImpl;
+import com.ymcloud.web.service.oj.TestDataService;
+import com.ymcloud.web.service.oj.impl.TestDataServiceImpl;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -84,7 +82,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-11
- * @Description: 在本机独立临时数据库中验证测试数据发布、事务回滚和文件迁移
+ * @Description: 在本机独立临时数据库中验证测试数据发布、事务回滚和固定版本读取
  */
 @EnabledIfEnvironmentVariable(named = "YMCLOUD_STORAGE_DB_IT", matches = "true")
 class TestDataVersionDatabaseIT {
@@ -98,7 +96,6 @@ class TestDataVersionDatabaseIT {
     static FileEntityService files;
     static TestDataVersionEntityService versions;
     static StorageRegistry storage;
-    static StoredFileService fileStorage;
     static JdbcTemplate jdbc;
     static DriverManagerDataSource adminDataSource;
     static DruidDataSource preparedDataSource;
@@ -129,9 +126,16 @@ class TestDataVersionDatabaseIT {
             ScriptUtils.executeSqlScript(connection, new EncodedResource(new ByteArrayResource(
                     schema.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
         }
+        new JdbcTemplate(preparedDataSource).update("INSERT INTO storage_config "
+                + "(id,name,driver_type,public_bucket,private_bucket,is_default,created_time,updated_time) "
+                + "VALUES ('local','本地文件','LOCAL','public','private',1,NOW(),NOW())");
         context = new AnnotationConfigApplicationContext();
         context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("storage-it",
                 Map.of("ymcloud.file.base-dir", directory.toString())));
+        context.getBeanFactory().registerSingleton("redisCache",
+                org.mockito.Mockito.mock(com.ymcloud.common.utils.RedisCache.class));
+        context.getBeanFactory().registerSingleton("contestEntityService",
+                org.mockito.Mockito.mock(com.ymcloud.core.web.dao.ContestEntityService.class));
         context.register(DatabaseConfiguration.class);
         context.refresh();
         assertIsolatedTables();
@@ -140,7 +144,6 @@ class TestDataVersionDatabaseIT {
         files = context.getBean(FileEntityService.class);
         versions = context.getBean(TestDataVersionEntityService.class);
         storage = context.getBean(StorageRegistry.class);
-        fileStorage = context.getBean(StoredFileService.class);
         jdbc = new JdbcTemplate(context.getBean(DataSource.class));
         assertEquals(temporarySchema, jdbc.queryForObject("SELECT DATABASE()", String.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns "
@@ -160,6 +163,9 @@ class TestDataVersionDatabaseIT {
         problemId = problem.getId();
     }
 
+    /**
+     * 删除本次题目及版本记录，按精确位置清理测试对象
+     */
     @AfterEach
     void removeOnlyOwnRecords() {
         if (problemId == null) {
@@ -178,9 +184,7 @@ class TestDataVersionDatabaseIT {
                 .eq(Problem::getId, problemId)
                 .remove();
         for (File file : ownFiles) {
-            if (file.getStorageProfile() != null) {
-                storage.client(file.getStorageProfile()).delete(file.getBucket(), file.getObjectKey());
-            }
+            storage.client(file.getStorageKey()).delete(file.getBucket(), file.getObjectKey());
         }
     }
 
@@ -357,81 +361,10 @@ class TestDataVersionDatabaseIT {
         assertEquals(4, fileCount());
     }
 
-    @Test
-    void realLegacyMigrationIsReadOnlyThenIdempotentAndRetainsSource() throws Exception {
-        Path root = legacyPair("数据", "\n 输入 \n", "");
-        TestDataMigrationReport inventory = testData.migrateLegacy(problemId, false);
-        assertTrue(inventory.getErrors().isEmpty());
-        assertEquals(2, inventory.getFileCount());
-        assertEquals(0, versionCount());
-        assertEquals(0, fileCount());
-        TestDataMigrationReport imported = testData.migrateLegacy(problemId, true);
-        assertTrue(imported.isApplied());
-        assertNotNull(imported.getVersionId());
-        assertEquals(imported.getVersionId(), testData.migrateLegacy(problemId, true).getVersionId());
-        assertEquals(1, versionCount());
-        assertEquals(2, fileCount());
-        assertEquals("\n 输入 \n", read(imported.getVersionId(), "/in/数据.in"));
-        assertEquals("", read(imported.getVersionId(), "/out/数据.out"));
-        assertTrue(Files.exists(root.resolve("in/数据.in")));
-        assertTrue(Files.exists(root.resolve("out/数据.out")));
-    }
-
-    @Test
-    void legacyHashMismatchAndTraversalNeverPublish() throws Exception {
-        Path root = legacyPair("a", "input", "output");
-        Files.writeString(root.resolve("info.json"), "[{\"id\":1,\"input\":\"/in/a.in\",\"output\":\"/out/a.out\","
-                + "\"inputSha256\":\"" + "0".repeat(64) + "\"}]", StandardCharsets.UTF_8);
-        TestDataMigrationReport report = testData.migrateLegacy(problemId, true);
-        assertFalse(report.getErrors().isEmpty());
-        assertFalse(report.isApplied());
-        assertEquals(0, versionCount());
-        assertEquals(0, fileCount());
-        assertThrows(RuntimeException.class, () -> testData.openFile(problemId, null, "/in/../a.in"));
-    }
-
-    @Test
-    void publicLegacyFileMigrationKeepsIdUrlAndBytesAndCanRepeat() throws Exception {
-        byte[] bytes = "历史公开头像\n".getBytes(StandardCharsets.UTF_8);
-        File original = legacyPublicFile(bytes);
-        String originalPath = original.getStoragePath();
-        String originalUrl = original.getUrl();
-        File inventory = fileStorage.migrateLocal(original.getId(), false);
-        assertNotNull(inventory.getSha256());
-        assertNull(files.getById(original.getId()).getSha256());
-        assertNull(files.getById(original.getId()).getStorageProfile());
-        File migrated = fileStorage.migrateLocal(original.getId(), true);
-        assertEquals(original.getId(), migrated.getId());
-        assertEquals(originalUrl, migrated.getUrl());
-        assertEquals(originalPath, migrated.getLegacyPath());
-        assertEquals("local", migrated.getStorageProfile());
-        assertEquals(migrated.getObjectKey(), fileStorage.migrateLocal(original.getId(), true).getObjectKey());
-        assertEquals(original.getId(), fileStorage.resolvePublicUrl(originalUrl).getId());
-        try (InputStream input = fileStorage.open(migrated)) {
-            assertArrayEquals(bytes, input.readAllBytes());
-        }
-        assertArrayEquals(bytes, Files.readAllBytes(directory.resolve(originalPath)));
-    }
-
-    @Test
-    void legacyFileSizeAndHashMismatchDoNotChangeOriginalMetadata() throws Exception {
-        File original = legacyPublicFile("bytes".getBytes(StandardCharsets.UTF_8));
-        files.lambdaUpdate()
-                .eq(File::getId, original.getId())
-                .set(File::getFileSize, 6L)
-                .update();
-        assertThrows(RuntimeException.class, () -> fileStorage.migrateLocal(original.getId(), true));
-        assertNull(files.getById(original.getId()).getStorageProfile());
-        files.lambdaUpdate()
-                .eq(File::getId, original.getId())
-                .set(File::getFileSize, 5L)
-                .set(File::getSha256, "0".repeat(64))
-                .update();
-        assertThrows(RuntimeException.class, () -> fileStorage.migrateLocal(original.getId(), true));
-        assertNull(files.getById(original.getId()).getStorageProfile());
-        assertEquals(original.getStoragePath(), files.getById(original.getId()).getStoragePath());
-    }
-
+    /**
+     * 真实 S3 发布失败时同时回滚数据库与本次上传对象
+     * @throws Exception 测试资源操作或请求执行失败
+     */
     @Test
     @EnabledIfEnvironmentVariable(named = "YMCLOUD_RUN_S3_TESTS", matches = "true")
     void realSeaweedPublicationFailureRollsBackDatabaseAndObjectsTogether() throws Exception {
@@ -443,6 +376,9 @@ class TestDataVersionDatabaseIT {
         profile.setSecretKey(System.getenv("YMCLOUD_S3_SECRET_KEY"));
         properties.getProfiles().put("seaweedfs", profile);
         properties.setActive("seaweedfs");
+        jdbc.update("INSERT INTO storage_config (id,name,driver_type,public_bucket,private_bucket,created_time,updated_time) "
+                + "VALUES ('seaweedfs','集成测试对象存储','S3',?,?,NOW(),NOW())",
+                profile.getPublicBucket(), profile.getPrivateBucket());
         boolean triggerCreated = false;
         try (S3Client observer = S3Client.builder()
                 .endpointOverride(URI.create(profile.getEndpoint()))
@@ -480,27 +416,6 @@ class TestDataVersionDatabaseIT {
                 .sum();
     }
 
-    private File legacyPublicFile(byte[] bytes) throws Exception {
-        String path = "public/avatar/" + UUID.randomUUID() + ".png";
-        Path original = directory.resolve(path);
-        Files.createDirectories(original.getParent());
-        Files.write(original, bytes);
-        File file = new File();
-        file.setFileName("历史头像.png");
-        file.setFileType("image/png");
-        file.setFileSize((long) bytes.length);
-        file.setStoragePath(path);
-        file.setStorageType(0);
-        file.setUrl("/files/" + path.substring("public/".length()));
-        file.setBizType(FileBizType.IMAGE);
-        file.setBizId(problemId);
-        file.setIsPublic(1);
-        file.setCreatedTime(LocalDateTime.now());
-        file.setUpdatedTime(file.getCreatedTime());
-        assertTrue(files.save(file));
-        return file;
-    }
-
     private void concurrentUpload(CountDownLatch start, String name) {
         try {
             if (!start.await(10, TimeUnit.SECONDS)) {
@@ -532,12 +447,17 @@ class TestDataVersionDatabaseIT {
                 .count();
     }
 
+    /**
+     * 递归统计本次测试的私有对象，覆盖命名空间下的回滚清理
+     * @return 实际普通对象文件数量
+     * @throws Exception 遍历对象目录失败
+     */
     private long storedObjectCount() throws Exception {
         Path privateDirectory = directory.resolve("private");
         if (!Files.exists(privateDirectory)) {
             return 0;
         }
-        try (Stream<Path> paths = Files.list(privateDirectory)) {
+        try (Stream<Path> paths = Files.walk(privateDirectory)) {
             return paths.filter(Files::isRegularFile).count();
         }
     }
@@ -548,20 +468,11 @@ class TestDataVersionDatabaseIT {
                 output.getBytes(StandardCharsets.UTF_8))};
     }
 
-    private Path legacyPair(String name, String input, String output) throws Exception {
-        Path root = directory.resolve("private/problem/" + problemId);
-        Files.createDirectories(root.resolve("in"));
-        Files.createDirectories(root.resolve("out"));
-        Files.writeString(root.resolve("in/" + name + ".in"), input, StandardCharsets.UTF_8);
-        Files.writeString(root.resolve("out/" + name + ".out"), output, StandardCharsets.UTF_8);
-        return root;
-    }
-
     @Configuration
     @EnableTransactionManagement
     @MapperScan(basePackageClasses = FileMapper.class)
     @Import({FileEntityServiceImpl.class, ProblemEntityServiceImpl.class, TestDataVersionEntityServiceImpl.class,
-            StorageRegistry.class, StoredFileServiceImpl.class, TestDataServiceImpl.class})
+            StorageRegistry.class, FileServiceImpl.class, TestDataServiceImpl.class})
     static class DatabaseConfiguration {
 
         @Bean

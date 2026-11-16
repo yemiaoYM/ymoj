@@ -14,6 +14,7 @@ import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.SystemSettingEntityService;
 import com.ymcloud.core.web.mapper.FileMapper;
 import com.ymcloud.core.web.mapper.SystemSettingMapper;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.dto.admin.CarouselSettingDTO;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.SystemSetting;
@@ -23,7 +24,7 @@ import com.ymcloud.web.controller.admin.common.AdminCarouselController;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.impl.CarouselSettingServiceImpl;
 import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import jakarta.validation.Validation;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
@@ -69,7 +70,7 @@ class CarouselSettingServiceTest {
     private SystemSettingEntityService settings;
     private SystemSettingMapper settingMapper;
     private FileMapper fileMapper;
-    private StoredFileService storage;
+    private FileService storage;
     private PlatformTransactionManager transactions;
     private CarouselSettingService service;
     private AdminCarouselController imageController;
@@ -85,7 +86,7 @@ class CarouselSettingServiceTest {
         settingMapper = mock(SystemSettingMapper.class);
         fileMapper = mock(FileMapper.class);
         FileEntityService files = mock(FileEntityService.class);
-        storage = mock(StoredFileService.class);
+        storage = mock(FileService.class);
         transactions = mock(PlatformTransactionManager.class);
         when(transactions.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         when(settings.lambdaQuery()).thenAnswer(call -> new LambdaQueryChainWrapper<>(settingMapper, SystemSetting.class));
@@ -96,7 +97,6 @@ class CarouselSettingServiceTest {
         imageController = new AdminCarouselController();
         ReflectionTestUtils.setField(imageController, "publicImages", publicImages);
         service = new CarouselSettingServiceImpl();
-        ReflectionTestUtils.setField(service, "publicImages", publicImages);
         ReflectionTestUtils.setField(service, "settings", settings);
         ReflectionTestUtils.setField(service, "files", files);
         ReflectionTestUtils.setField(service, "storedFiles", storage);
@@ -104,7 +104,9 @@ class CarouselSettingServiceTest {
         ReflectionTestUtils.setField(service, "transactionManager", transactions);
     }
 
-    /** 未配置与明确清空必须保持不同含义。 */
+    /**
+     * 未配置与明确清空必须保持不同含义
+     */
     @Test
     void distinguishesMissingAndExplicitlyEmptyConfig() {
         assertFalse(service.get().configured());
@@ -114,15 +116,19 @@ class CarouselSettingServiceTest {
         verifyNoInteractions(fileMapper);
     }
 
-    /** 读取顺序遵循配置，缺失图片跳过，ID 按字符串公开。 */
+    /**
+     * 读取顺序遵循配置，缺失图片跳过，ID 按字符串公开
+     */
     @Test
     void preservesOrderAndSkipsMissingImages() {
         when(settingMapper.selectOne(any(Wrapper.class))).thenReturn(setting("[3,1,2]"));
         when(fileMapper.selectList(any(Wrapper.class))).thenReturn(List.of(image(1), image(3)));
-        assertEquals(List.of("3", "1"), service.get().images().stream().map(item -> item.id()).toList());
+        assertEquals(List.of(image(3).getPublicId(), image(1).getPublicId()), service.get().images().stream().map(item -> item.id()).toList());
     }
 
-    /** 损坏配置不能伪装为未配置并恢复内置图片。 */
+    /**
+     * 损坏配置不能伪装为未配置并恢复内置图片
+     */
     @Test
     void rejectsDamagedConfiguration() {
         for (String value : List.of("broken", "null", "[null]", "[-1]")) {
@@ -131,7 +137,9 @@ class CarouselSettingServiceTest {
         }
     }
 
-    /** 结构校验允许空列表，拒绝缺失、空元素、非法 ID 和超过十张图片。 */
+    /**
+     * 结构校验允许空列表，拒绝缺失、空元素、非法 ID 和超过十张图片
+     */
     @Test
     void validatesRequestShape() {
         try (var factory = Validation.buildDefaultValidatorFactory()) {
@@ -144,16 +152,19 @@ class CarouselSettingServiceTest {
         }
     }
 
-    /** 重复 ID 及 Long 溢出在访问文件和事务前失败。 */
+    /**
+     * 重复或格式非法的公开标识在访问文件和事务前失败
+     */
     @Test
     void rejectsDuplicateAndOverflowIds() {
         assertThrows(ServiceException.class, () -> service.save(request(List.of("1", "1"))));
-        assertThrows(ServiceException.class, () -> service.save(request(List.of("9999999999999999999"))));
         verifyNoInteractions(storage, fileMapper);
         verify(transactions, never()).getTransaction(any());
     }
 
-    /** 首次保存补齐键，空列表用于隐藏；写入失败要求事务回滚。 */
+    /**
+     * 首次保存补齐键，空列表用于隐藏；写入失败要求事务回滚
+     */
     @Test
     void insertsEmptyConfigAndRollsBackWriteFailure() {
         when(settingMapper.selectOne(any(Wrapper.class))).thenReturn(setting("true")).thenReturn(null);
@@ -168,18 +179,21 @@ class CarouselSettingServiceTest {
     }
 
     /**
-     * 图片内容在事务外校验，事务内复核访问状态并保存顺序。
+     * 图片内容在事务外校验，事务内复核访问状态并保存顺序
      * @throws IOException 测试图片编码失败
      */
     @Test
     void validatesThenSavesOrderedImages() throws IOException {
-        when(fileMapper.selectOne(any(Wrapper.class))).thenReturn(image(2), image(1), image(1), image(2));
+        when(storage.getByPublicId(image(2).getPublicId())).thenReturn(image(2));
+        when(storage.getByPublicId(image(1).getPublicId())).thenReturn(image(1));
+        when(fileMapper.selectOne(any(Wrapper.class))).thenReturn(image(1), image(2));
         when(storage.open(any())).thenAnswer(call -> new ByteArrayInputStream(png(160, 90)));
         when(settingMapper.selectOne(any(Wrapper.class))).thenReturn(setting("true"), setting("[]"));
         when(settingMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
-        service.save(request(List.of("2", "1")));
+        service.save(request(List.of(image(2).getPublicId(), image(1).getPublicId())));
         var ordered = inOrder(storage, transactions);
-        ordered.verify(storage, times(2)).open(any());
+        ordered.verify(storage, times(2)).getByPublicId(any());
+        verify(storage, never()).open(any());
         ordered.verify(transactions).getTransaction(any());
         verify(settingMapper).update(isNull(), argThat(wrapper -> {
             wrapper.getSqlSegment(); // MyBatis 实际执行时会渲染 SQL 并填充参数
@@ -188,7 +202,7 @@ class CarouselSettingServiceTest {
     }
 
     /**
-     * 私有文件、测试数据及内容比例不符的图片不允许配置。
+     * 私有文件及测试数据不能作为公开轮播图片
      * @throws IOException 测试图片编码失败
      */
     @Test
@@ -197,37 +211,37 @@ class CarouselSettingServiceTest {
         privateImage.setIsPublic(0);
         File testData = image(1);
         testData.setBizType(FileBizType.TEST_DATA);
-        when(fileMapper.selectOne(any(Wrapper.class))).thenReturn(null, privateImage, testData, image(1));
-        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
-        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
-        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
-        when(storage.open(any())).thenReturn(new ByteArrayInputStream(png(100, 100)));
-        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
+        when(storage.getByPublicId(image(1).getPublicId())).thenThrow(new FileException("文件不存在"))
+                .thenReturn(privateImage, testData);
+        assertThrows(FileException.class, () -> service.save(request(List.of(image(1).getPublicId()))));
+        assertThrows(FileException.class, () -> service.save(request(List.of(image(1).getPublicId()))));
+        assertThrows(FileException.class, () -> service.save(request(List.of(image(1).getPublicId()))));
         verify(transactions, never()).getTransaction(any());
     }
 
     /**
-     * 校验后被删除的文件不能因竞态被写入配置。
+     * 校验后被删除的文件不能因竞态被写入配置
      * @throws IOException 测试图片编码失败
      */
     @Test
     void rechecksFileInsideTransaction() throws IOException {
-        when(fileMapper.selectOne(any(Wrapper.class))).thenReturn(image(1)).thenReturn(null);
+        when(storage.getByPublicId(image(1).getPublicId())).thenReturn(image(1));
+        when(fileMapper.selectOne(any(Wrapper.class))).thenReturn(null);
         when(storage.open(any())).thenReturn(new ByteArrayInputStream(png(160, 90)));
         when(settingMapper.selectOne(any(Wrapper.class))).thenReturn(setting("true"));
-        assertThrows(FileException.class, () -> service.save(request(List.of("1"))));
+        assertThrows(FileException.class, () -> service.save(request(List.of(image(1).getPublicId()))));
         verify(settings, never()).save(any());
         verify(transactions).rollback(any());
     }
 
     /**
-     * 上传拒绝伪造 MIME、空文件、错误比例及超限内容。
+     * 上传拒绝伪造 MIME、空文件及超限内容，不限制业务宽高比例
      * @throws IOException 测试图片编码失败
      */
     @Test
     void rejectsInvalidUploadsBeforeStorage() throws IOException {
         for (byte[] bytes : List.of(new byte[0], "not png".getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                png(160, 100), new byte[5 * 1024 * 1024 + 1])) {
+                new byte[5 * 1024 * 1024 + 1])) {
             var upload = new MockMultipartFile("file", "fake.png", "image/png", bytes);
             assertEquals(HttpStatus.BAD_REQUEST,
                          assertThrows(FileException.class, () -> imageController.uploadCarousel(upload)).getCode());
@@ -236,7 +250,7 @@ class CarouselSettingServiceTest {
     }
 
     /**
-     * 合法上传重新编码，存储元数据标记为公开图片，并返回字符串 ID。
+     * 合法上传重新编码，存储元数据标记为公开图片，并返回字符串 ID
      * @throws IOException 测试图片编码失败
      */
     @Test
@@ -246,23 +260,23 @@ class CarouselSettingServiceTest {
         user.setUsername("admin");
         try (var security = mockStatic(SecurityUtils.class)) {
             security.when(SecurityUtils::getUser).thenReturn(user);
-            when(storage.save(any(), anyLong(), any(File.class))).thenAnswer(call -> {
-                File file = call.getArgument(2);
+            when(storage.create(any(CreateStoredFileCommand.class), any(), anyLong())).thenAnswer(call -> {
+                File file = StoredFileFixture.saved(call.getArgument(0));
                 assertEquals(FileBizType.IMAGE, file.getBizType());
                 assertEquals(1, file.getIsPublic());
-                assertEquals("image/png", file.getFileType());
-                assertEquals("carousel.png", file.getFileName());
+                assertEquals("image/jpeg", file.getFileType());
+                assertEquals("image.jpeg", file.getFileName());
                 file.setId(17L);
-                file.setUrl("/files/public/test/image.png");
+                file.setPublicId("4bb2a4ead90f4608916f06e49a0e7113");
                 return file;
             });
             var upload = new MockMultipartFile("file", "photo.png", "image/png", png(160, 90));
-            assertEquals("17", imageController.uploadCarousel(upload).getData().id());
+            assertEquals("4bb2a4ead90f4608916f06e49a0e7113", imageController.uploadCarousel(upload).getData().id());
         }
     }
 
     /**
-     * 构造测试图片，不使用外部图片文件。
+     * 构造测试图片，不使用外部图片文件
      * @param width 宽度，像素
      * @param height 高度，像素
      * @return PNG 字节
@@ -275,7 +289,7 @@ class CarouselSettingServiceTest {
     }
 
     /**
-     * 构造轮播输入。
+     * 构造轮播输入
      * @param ids 有序 ID 字符串
      * @return 请求对象
      */
@@ -286,7 +300,7 @@ class CarouselSettingServiceTest {
     }
 
     /**
-     * 构造配置记录。
+     * 构造配置记录
      * @param value 配置值
      * @return 配置记录
      */
@@ -297,7 +311,7 @@ class CarouselSettingServiceTest {
     }
 
     /**
-     * 构造安全图片元数据。
+     * 构造安全图片元数据
      * @param id 文件 ID
      * @return 公开图片
      */
@@ -306,7 +320,7 @@ class CarouselSettingServiceTest {
         file.setId(id);
         file.setBizType(FileBizType.IMAGE);
         file.setIsPublic(1);
-        file.setUrl("/files/public/test/" + id + ".png");
+        file.setPublicId(String.format("%012x40008000000000000001", id));
         return file;
     }
 }

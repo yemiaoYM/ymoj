@@ -29,6 +29,11 @@ public class StorageConfig {
     private String name;
 
     /**
+     * 是否为新上传使用的默认配置，数据库限制最多一条默认记录
+     */
+    private Boolean isDefault;
+
+    /**
      * 服务商描述，不参与驱动选择
      */
     private String provider;

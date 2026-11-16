@@ -16,15 +16,12 @@ import com.ymcloud.pojo.entity.SystemSetting;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.vo.common.CarouselSettingVO;
 import com.ymcloud.web.service.common.CarouselSettingService;
-import com.ymcloud.web.service.common.PublicImageService;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -47,10 +44,7 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
     private FileEntityService files;
 
     @Autowired
-    private StoredFileService storedFiles;
-
-    @Autowired
-    private PublicImageService publicImages;
+    private FileService storedFiles;
 
     @Autowired
     private ObjectMapper json;
@@ -59,7 +53,7 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
     private PlatformTransactionManager transactionManager;
 
     /**
-     * 直接读取数据库中的最新顺序；已删除或非公开图片不对外暴露。
+     * 直接读取数据库中的最新顺序；已删除或非公开图片不对外暴露
      * @return 是否配置及仍可公开展示的图片，空配置不回退内置图片
      */
     @Override
@@ -72,7 +66,7 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
         }
         List<Long> ids;
         try {
-            ids = json.readValue(setting.getSettingValue(), new TypeReference<List<Long>>() { });
+            ids = json.readValue(setting.getSettingValue(), new TypeReference<List<Long>>() {});
         } catch (JsonProcessingException e) {
             throw new ServiceException("轮播配置损坏，请联系管理员", e);
         }
@@ -91,47 +85,34 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
                 .collect(Collectors.toMap(File::getId, Function.identity()));
         List<CarouselSettingVO.Image> images = ids.stream()
                 .map(found::get)
-                .filter(file -> file != null && file.getUrl() != null && file.getUrl().startsWith("/files/public/"))
-                .map(file -> new CarouselSettingVO.Image(file.getId().toString(), file.getUrl()))
+                .filter(java.util.Objects::nonNull)
+                .map(file -> new CarouselSettingVO.Image(file.getPublicId(), FileConstants.PUBLIC_URL_PREFIX + file.getPublicId()))
                 .toList();
         return new CarouselSettingVO(true, images);
     }
 
     /**
-     * 保存轮播顺序；空数组明确关闭，移除引用不会删除可能被其他位置使用的文件。
+     * 保存轮播顺序；空数组明确关闭，移除引用不会删除可能被其他位置使用的文件
      * @param request 通过结构校验的图片 ID 列表
      */
     @Override
     public void save(CarouselSettingDTO request) {
-        List<Long> ids = new ArrayList<>();
-        try {
-            for (String id : request.getFileIds()) {
-                ids.add(Long.parseLong(id));
-            }
-        } catch (NumberFormatException e) {
-            throw new ServiceException("图片ID超出范围", HttpStatus.BAD_REQUEST, e);
-        }
-        if (new HashSet<>(ids).size() != ids.size()) {
+        List<String> publicIds = request.getFileIds();
+        if (new HashSet<>(publicIds).size() != publicIds.size()) {
             throw new ServiceException("轮播图不能重复", HttpStatus.BAD_REQUEST);
         }
-        for (Long id : ids) {
-            File file = files.lambdaQuery()
-                    .eq(File::getId, id)
-                    .one();
+        List<Long> ids = new ArrayList<>();
+        for (String publicId : publicIds) {
+            File file = storedFiles.getByPublicId(publicId);
+            ids.add(file.getId());
             requirePublicImage(file);
-            // 先校验不可变文件内容，再进入短事务
-            // 其他图片入口可能未校验比例
-            try (InputStream input = storedFiles.open(file)) {
-                publicImages.validate(input, 16, 9);
-            } catch (IOException e) {
-                throw new FileException("轮播图片读取失败", e);
-            }
+
         }
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> saveLocked(ids));
     }
 
     /**
-     * 在短事务内锁定配置和文件，复核图片未被删除或改为私有后保存。
+     * 在短事务内锁定配置和文件，复核图片未被删除或改为私有后保存
      * @param ids 已校验内容的有序文件 ID
      */
     private void saveLocked(List<Long> ids) {
@@ -177,13 +158,12 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
     }
 
     /**
-     * 拒绝将私有数据或非图片通过轮播配置公开。
+     * 拒绝将私有数据或非图片通过轮播配置公开
      * @param file 待引用文件；允许 null，由本方法给出业务错误
      */
     private void requirePublicImage(File file) {
         if (file == null || file.getBizType() != FileBizType.IMAGE
-                || !Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())
-                || file.getUrl() == null || !file.getUrl().startsWith("/files/public/")) {
+                || !Integer.valueOf(FileConstants.ACCESS_PUBLIC).equals(file.getIsPublic())) {
             throw new FileException("图片不存在或不是公开图片，请重新上传", HttpStatus.BAD_REQUEST);
         }
     }

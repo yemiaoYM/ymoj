@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InitializationSqlTestSupportTest {
 
     private static final String DEFINITIONS = """
+            CREATE TABLE `storage_config` (`id` varchar(64));
             CREATE TABLE `file` (`id` bigint, `name` text COMMENT '引号''与分号;保持原样');
             CREATE TABLE `problem` (`id` bigint);
             CREATE TABLE `test_data_version` (`id` bigint PRIMARY KEY);
@@ -24,7 +25,7 @@ class InitializationSqlTestSupportTest {
             """;
 
     /**
-     * 排除种子数据和任意业务写入，保留完整正式表定义。
+     * 排除种子数据和任意业务写入，保留完整正式表定义
      */
     @Test
     void excludesSeedDataAndPreservesForeignKeysAndConstraintNames() {
@@ -38,7 +39,7 @@ class InitializationSqlTestSupportTest {
                 ALTER TABLE `problem` ADD `fake` bigint;
                 DROP TABLE `judge`;
                 """);
-        assertEquals(4, schema.lines().filter(line -> line.startsWith("CREATE TABLE")).count());
+        assertEquals(5, schema.lines().filter(line -> line.startsWith("CREATE TABLE")).count());
         assertFalse(schema.contains("INSERT"));
         assertFalse(schema.contains("DELETE FROM"));
         assertFalse(schema.contains("ALTER TABLE"));
@@ -50,7 +51,7 @@ class InitializationSqlTestSupportTest {
     }
 
     /**
-     * 表缺失、重复或外键跨出测试表集合时，在执行前失败。
+     * 表缺失、重复或外键跨出测试表集合时，在执行前失败
      */
     @Test
     void rejectsMissingDuplicateAndExternalReferencedTables() {
@@ -63,7 +64,7 @@ class InitializationSqlTestSupportTest {
     }
 
     /**
-     * 未闭合的字符串与注释不得被截断为可执行语句。
+     * 未闭合的字符串与注释不得被截断为可执行语句
      */
     @Test
     void rejectsIncompleteStatementsBeforeExecution() {
@@ -74,15 +75,15 @@ class InitializationSqlTestSupportTest {
     }
 
     /**
-     * 验证真实初始化脚本可提取当前存储结构且不包含种子数据。
+     * 验证真实初始化脚本可提取当前存储结构且不包含种子数据
      *
      * @throws Exception 初始化脚本读取失败
      */
     @Test
     void extractsCurrentBaselineWithoutInitializationData() throws Exception {
         String schema = InitializationSqlTestSupport.storageSchema();
-        assertEquals(4, schema.lines().filter(line -> line.startsWith("CREATE TABLE")).count());
-        assertTrue(schema.contains("`storage_profile`"));
+        assertEquals(5, schema.lines().filter(line -> line.startsWith("CREATE TABLE")).count());
+        assertTrue(schema.contains("`storage_key`"));
         assertTrue(schema.contains("`manifest_sha256`"));
         assertTrue(schema.contains("REFERENCES `test_data_version`"));
         assertFalse(schema.contains("INSERT"));

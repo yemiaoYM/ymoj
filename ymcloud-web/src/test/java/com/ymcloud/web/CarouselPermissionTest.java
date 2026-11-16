@@ -46,8 +46,7 @@ class CarouselPermissionTest {
 
     @Configuration
     @EnableMethodSecurity
-    static class MethodSecurityConfig {
-    }
+    static class MethodSecurityConfig {}
 
     /**
      * 未登录不能读取；只读权限不能保存或上传；编辑权限才能进入写服务
@@ -58,8 +57,8 @@ class CarouselPermissionTest {
         PublicImageService images = mock(PublicImageService.class);
         File file = new File();
         file.setId(17L);
-        file.setUrl("/files/public/carousel.png");
-        when(images.upload(null, "carousel", 16, 9)).thenReturn(file);
+        file.setPublicId("1deb01436099496fb12c89ddde335f12");
+        when(images.upload(null)).thenReturn("/files/public/" + file.getPublicId());
         try (var context = new AnnotationConfigApplicationContext()) {
             context.register(MethodSecurityConfig.class, AdminCarouselController.class, PermissionService.class);
             context.getBeanFactory().registerSingleton("carouselSettingService", service);
@@ -78,14 +77,14 @@ class CarouselPermissionTest {
                     new TestingAuthenticationToken("editor", "", "system:setting:edit"));
             assertDoesNotThrow(() -> controller.save(new CarouselSettingDTO()));
             assertDoesNotThrow(() -> controller.uploadCarousel(null));
-            verify(images).upload(null, "carousel", 16, 9);
+            verify(images).upload(null);
         } finally {
             SecurityContextHolder.clearContext();
         }
     }
 
     /**
-     * MVC 绑定拒绝缺少列表和非法元素，空列表允许隐藏轮播。
+     * MVC 绑定拒绝缺少列表和非法元素，空列表允许隐藏轮播
      * @throws Exception MVC 执行失败
      */
     @Test

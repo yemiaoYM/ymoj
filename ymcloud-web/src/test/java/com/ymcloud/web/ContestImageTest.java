@@ -8,6 +8,7 @@ import com.ymcloud.core.security.service.PermissionService;
 import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestEntityService;
+import com.ymcloud.pojo.bo.CreateStoredFileCommand;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.File;
@@ -18,7 +19,7 @@ import com.ymcloud.web.service.admin.AdminContestService;
 import com.ymcloud.web.service.admin.impl.AdminContestServiceImpl;
 import com.ymcloud.web.service.common.PublicImageService;
 import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
-import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.FileService;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.Test;
@@ -59,68 +60,69 @@ import static org.mockito.Mockito.when;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-28
- * @Description: 比赛方形封面的内容、存储、默认图恢复及权限回归。
+ * @Description: 比赛方形封面的内容、存储、默认图恢复及权限回归
  */
 class ContestImageTest {
 
-    /** 测试真实方法权限拦截。 */
+    /**
+     * 测试真实方法权限拦截
+     */
     @EnableMethodSecurity
     @org.springframework.context.annotation.Configuration
     static class SecurityConfig {}
 
     /**
-     * 方形封面重编码后保存，非方形与伪造图片均不能写入存储。
+     * 封面不限制展示比例，真实图片重编码后保存，伪造图片不能写入存储
      * @throws Exception 测试图片构造或读取失败
      */
     @Test
     void uploadsSquareCoverThroughSharedStorage() throws Exception {
-        StoredFileService storage = mock(StoredFileService.class);
+        FileService storage = mock(FileService.class);
         PublicImageServiceImpl images = new PublicImageServiceImpl();
         ReflectionTestUtils.setField(images, "storedFiles", storage);
         AdminContestController controller = new AdminContestController();
         ReflectionTestUtils.setField(controller, "publicImages", images);
         doAnswer(call -> {
-            BufferedImage image = ImageIO.read((InputStream) call.getArgument(0));
-            assertEquals(1024, image.getWidth());
+            BufferedImage image = ImageIO.read((InputStream) call.getArgument(1));
             assertEquals(1024, image.getHeight());
-            File file = call.getArgument(2);
-            assertEquals("contest.png", file.getFileName());
+            File file = StoredFileFixture.saved(call.getArgument(0));
+            assertEquals("image.jpeg", file.getFileName());
             assertEquals(FileBizType.IMAGE, file.getBizType());
             assertEquals(1, file.getIsPublic());
-            file.setUrl("/files/public/cover.png");
+            file.setPublicId("fa8376e2f8b146e09fdba98f8f39463a");
             return file;
-        }).when(storage).save(any(InputStream.class), anyLong(), any(File.class));
+        }).when(storage).create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong());
         User user = new User();
         user.setId(2L);
         user.setUsername("editor");
         try (var security = mockStatic(SecurityUtils.class)) {
             security.when(SecurityUtils::getUser).thenReturn(user);
-            assertEquals("/files/public/cover.png", controller.uploadContest(picture(1024, 1024)).getData());
+            assertEquals("/files/public/fa8376e2f8b146e09fdba98f8f39463a", controller.uploadContest(picture(1024, 1024)).getData());
+            assertEquals("/files/public/fa8376e2f8b146e09fdba98f8f39463a", controller.uploadContest(picture(1600, 1024)).getData());
         }
-        assertThrows(FileException.class, () -> controller.uploadContest(picture(1600, 900)));
         assertThrows(FileException.class, () -> controller.uploadContest(
                 new MockMultipartFile("file", "fake.png", "image/png", "not an image".getBytes(StandardCharsets.UTF_8))));
-        verify(storage, times(1)).save(any(InputStream.class), anyLong(), any(File.class));
+        verify(storage, times(2)).create(any(CreateStoredFileCommand.class), any(InputStream.class), anyLong());
     }
 
     /**
-     * 文件拒绝仍返回参数错误，读取失败保留 cause，不能退化为通用业务异常。
+     * 文件拒绝仍返回参数错误，读取失败保留 cause，不能退化为通用业务异常
      * @throws IOException 配置模拟读取失败
      */
     @Test
     void preservesFileErrorCodeAndCause() throws IOException {
         PublicImageServiceImpl images = new PublicImageServiceImpl();
         FileException empty = assertThrows(FileException.class, () -> images.upload(
-                new MockMultipartFile("file", new byte[0]), "contest", 1, 1));
+                new MockMultipartFile("file", new byte[0])));
         assertEquals(HttpStatus.BAD_REQUEST, empty.getCode());
         FileException large = assertThrows(FileException.class, () -> images.upload(
-                new MockMultipartFile("file", new byte[5 * 1024 * 1024 + 1]), "contest", 1, 1));
+                new MockMultipartFile("file", new byte[5 * 1024 * 1024 + 1])));
         assertEquals(HttpStatus.BAD_REQUEST, large.getCode());
         IOException cause = new IOException("test read failure");
         var unreadable = mock(org.springframework.web.multipart.MultipartFile.class);
         when(unreadable.getInputStream()).thenThrow(cause);
         FileException read = assertThrows(FileException.class,
-                () -> images.upload(unreadable, "contest", 1, 1));
+                () -> images.upload(unreadable));
         assertEquals(HttpStatus.BAD_REQUEST, read.getCode());
         assertSame(cause, read.getCause());
     }
@@ -133,7 +135,7 @@ class ContestImageTest {
     @SuppressWarnings("unchecked")
     void persistsCoverAndCanRestoreDefault() {
         ContestEntityService contests = mock(ContestEntityService.class);
-        StoredFileService storage = mock(StoredFileService.class);
+        FileService storage = mock(FileService.class);
         AdminContestServiceImpl service = new AdminContestServiceImpl();
         ReflectionTestUtils.setField(service, "resourceAccess", mock(ResourceAccessService.class));
         ReflectionTestUtils.setField(service, "contestEntityService", contests);
@@ -194,8 +196,8 @@ class ContestImageTest {
     void requiresContestWritePermission() {
         PublicImageService images = mock(PublicImageService.class);
         File file = new File();
-        file.setUrl("/files/public/cover.png");
-        when(images.upload(null, "contest", 1, 1)).thenReturn(file);
+        file.setPublicId("fa8376e2f8b146e09fdba98f8f39463a");
+        when(images.upload(null)).thenReturn("/files/public/" + file.getPublicId());
         try (var context = new AnnotationConfigApplicationContext()) {
             context.register(SecurityConfig.class, AdminContestController.class, PermissionService.class);
             context.getBeanFactory().registerSingleton("publicImageService", images);
@@ -211,14 +213,14 @@ class ContestImageTest {
                         new TestingAuthenticationToken("editor", "", permission));
                 assertDoesNotThrow(() -> controller.uploadContest(null));
             }
-            verify(images, times(2)).upload(null, "contest", 1, 1);
+            verify(images, times(2)).upload(null);
         } finally {
             SecurityContextHolder.clearContext();
         }
     }
 
     /**
-     * 生成无外部依赖的 PNG 测试图。
+     * 生成无外部依赖的 PNG 测试图
      * @param width 图宽
      * @param height 图高
      * @return multipart 图片
