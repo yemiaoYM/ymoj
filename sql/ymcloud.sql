@@ -370,7 +370,8 @@ CREATE TABLE `announcement` (
 CREATE TABLE `storage_config` (
   `id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '配置标识',
   `name` varchar(100) NOT NULL COMMENT '配置名称',
-  `provider` varchar(16) NOT NULL COMMENT 'seaweedfs/minio/aliyun/s3',
+  `provider` varchar(100) DEFAULT NULL COMMENT '服务商描述，不参与驱动选择',
+  `driver_type` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '访问驱动：LOCAL/S3/ALIYUN_OSS',
   `endpoint` varchar(512) NOT NULL COMMENT '后端可达的存储服务地址',
   `region` varchar(64) NOT NULL COMMENT 'S3地域标识',
   `public_bucket` varchar(128) NOT NULL COMMENT '公开业务文件桶；桶自身保持私有',
@@ -384,7 +385,8 @@ CREATE TABLE `storage_config` (
   `tested_at` datetime DEFAULT NULL COMMENT '最近测试通过时间',
   `created_time` datetime NOT NULL COMMENT '创建时间',
   `updated_time` datetime NOT NULL COMMENT '更新时间',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  CONSTRAINT `chk_storage_driver_type` CHECK (`driver_type` IN ('LOCAL', 'S3', 'ALIYUN_OSS'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='命名存储配置，凭据独立加密';
 
 CREATE TABLE `storage_config_state` (

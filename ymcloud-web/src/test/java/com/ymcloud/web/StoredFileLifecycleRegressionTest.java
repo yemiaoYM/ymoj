@@ -3,18 +3,21 @@ package com.ymcloud.web;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.ymcloud.common.constant.FileConstants;
-import com.ymcloud.core.storage.LocalObjectStorageService;
-import com.ymcloud.core.storage.ObjectStorageService;
-import com.ymcloud.core.storage.StorageProperties;
-import com.ymcloud.core.storage.StorageRegistry;
-import com.ymcloud.core.storage.StoredFileService;
+import com.ymcloud.core.storage.client.LocalObjectStorageService;
+import com.ymcloud.core.storage.client.ObjectStorageService;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.enums.FileBizType;
+import com.ymcloud.pojo.enums.StorageDriverType;
+import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -54,7 +57,9 @@ class StoredFileLifecycleRegressionTest {
     void setup() {
         entities = mock(FileEntityService.class);
         registry = new StorageRegistry(new StorageProperties(), root.toString());
-        storedFiles = new StoredFileService(entities, registry);
+        storedFiles = new StoredFileServiceImpl();
+        ReflectionTestUtils.setField(storedFiles, "files", entities);
+        ReflectionTestUtils.setField(storedFiles, "storage", registry);
         when(entities.save(any(File.class))).thenAnswer(invocation -> {
             invocation.<File>getArgument(0).setId(10L);
             return true;
@@ -291,10 +296,15 @@ class StoredFileLifecycleRegressionTest {
         assertEquals(1, dynamic.closed().get());
     }
 
+    /**
+     * 构造可切换物理根目录的存储，并统计客户端关闭次数
+     * @return 动态配置、参数及关闭计数
+     */
     private DynamicStorage dynamicStorage() {
         registry.close();
         StorageProperties properties = new StorageProperties();
         StorageProperties.Profile profile = new StorageProperties.Profile();
+        profile.setDriverType(StorageDriverType.LOCAL);
         profile.setEndpoint("first");
         properties.getProfiles().put("dynamic", profile);
         properties.setActive("dynamic");
@@ -327,7 +337,9 @@ class StoredFileLifecycleRegressionTest {
                 };
             }
         };
-        storedFiles = new StoredFileService(entities, registry);
+        storedFiles = new StoredFileServiceImpl();
+        ReflectionTestUtils.setField(storedFiles, "files", entities);
+        ReflectionTestUtils.setField(storedFiles, "storage", registry);
         return new DynamicStorage(properties, profile, closed);
     }
 
@@ -341,8 +353,7 @@ class StoredFileLifecycleRegressionTest {
         return collision;
     }
 
-    private record DynamicStorage(StorageProperties properties, StorageProperties.Profile profile, AtomicInteger closed) {
-    }
+    private record DynamicStorage(StorageProperties properties, StorageProperties.Profile profile, AtomicInteger closed) {}
 
     private File saveImage() {
         return storedFiles.save(new ByteArrayInputStream(new byte[]{1}), 1L, "avatar.png", "image/png",

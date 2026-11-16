@@ -8,7 +8,6 @@ import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.SystemSettingConstants;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.exception.file.FileException;
-import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.SystemSettingEntityService;
 import com.ymcloud.pojo.dto.admin.CarouselSettingDTO;
@@ -18,6 +17,7 @@ import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.vo.common.CarouselSettingVO;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.PublicImageService;
+import com.ymcloud.web.service.file.StoredFileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -109,7 +109,7 @@ public class CarouselSettingServiceImpl implements CarouselSettingService {
                 ids.add(Long.parseLong(id));
             }
         } catch (NumberFormatException e) {
-            throw new ServiceException("图片ID超出范围", HttpStatus.BAD_REQUEST);
+            throw new ServiceException("图片ID超出范围", HttpStatus.BAD_REQUEST, e);
         }
         if (new HashSet<>(ids).size() != ids.size()) {
             throw new ServiceException("轮播图不能重复", HttpStatus.BAD_REQUEST);

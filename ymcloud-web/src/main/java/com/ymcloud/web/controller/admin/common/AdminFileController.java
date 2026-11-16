@@ -4,14 +4,13 @@ import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.result.Result;
-import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.query.admin.AdminFilePageQuery;
 import com.ymcloud.pojo.vo.admin.AdminFileVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminFileService;
-import lombok.extern.slf4j.Slf4j;
+import com.ymcloud.web.service.file.StoredFileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -40,7 +39,6 @@ import java.util.Arrays;
  * @CreateTime: 2026-10-11
  * @Description: 通用文件管理，测试数据权限与删除生命周期由业务服务单独检查。
  */
-@Slf4j
 @RestController
 @RequestMapping("/admin/file")
 public class AdminFileController {
@@ -59,7 +57,6 @@ public class AdminFileController {
     @PreAuthorize("@ss.hasAnyPermi('file:file:list', 'problem:testcase:query')")
     @GetMapping("/list")
     public Result<PageVO<AdminFileVO>> list(@Validated AdminFilePageQuery query) {
-        log.info("查询文件列表，页码：{}", query.getPageNum());
         return Result.ok(service.queryList(query));
     }
 
@@ -71,7 +68,6 @@ public class AdminFileController {
     @PreAuthorize("@ss.hasAnyPermi('file:file:download', 'problem:testcase:query')")
     @GetMapping("/{id}/download")
     public ResponseEntity<Resource> download(@PathVariable("id") Long id) {
-        log.info("下载管理文件，文件编号：{}", id);
         File file = service.requireDownload(id);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
@@ -98,7 +94,6 @@ public class AdminFileController {
     @PostMapping("/upload")
     public Result<AdminFileVO> upload(@RequestParam("file") MultipartFile file,
                                     @RequestParam("isPublic") Integer isPublic) {
-        log.info("上传管理文件，公开状态：{}", isPublic);
         return Result.ok(service.upload(file, isPublic));
     }
 
@@ -110,11 +105,15 @@ public class AdminFileController {
     @PreAuthorize("@ss.hasPermi('file:file:remove')")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable("id") Long id) {
-        log.info("删除管理文件，文件编号：{}", id);
         service.delete(id);
         return Result.ok();
     }
 
+    /**
+     * 根据已授权文件记录打开内容，历史公开路径仍须通过本地路径校验
+     * @param file 已完成下载授权的文件元数据
+     * @return 由 HTTP 资源处理器关闭的内容流
+     */
     private InputStream openDownload(File file) {
         String url = file.getUrl();
         boolean legacyPublic = file.getBizType() != FileBizType.TEST_DATA

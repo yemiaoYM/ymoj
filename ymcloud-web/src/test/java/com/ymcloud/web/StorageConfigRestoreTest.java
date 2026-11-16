@@ -2,28 +2,33 @@ package com.ymcloud.web;
 
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.domain.LoginUser;
-import com.ymcloud.core.storage.FileDigests;
-import com.ymcloud.core.storage.ObjectStorageService;
-import com.ymcloud.core.storage.StorageConfigCatalog;
-import com.ymcloud.core.storage.StorageConnectionTester;
-import com.ymcloud.core.storage.StorageCredentialCipher;
-import com.ymcloud.core.storage.StorageMasterKeyStore;
-import com.ymcloud.core.storage.StorageProperties;
-import com.ymcloud.core.storage.StorageRegistry;
+import com.ymcloud.core.storage.client.ObjectStorageService;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
+import com.ymcloud.core.storage.security.StorageCredentialCipher;
+import com.ymcloud.core.storage.security.StorageMasterKeyStore;
+import com.ymcloud.core.storage.util.FileDigests;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.StorageConfig;
 import com.ymcloud.pojo.entity.StorageConfigState;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.StorageDriverType;
 import com.ymcloud.pojo.enums.UserStatus;
+import com.ymcloud.web.handler.GlobalExceptionHandler;
 import com.ymcloud.web.service.admin.impl.AdminStorageConfigServiceImpl;
+import com.ymcloud.web.service.file.StorageConfigCatalog;
+import com.ymcloud.web.service.file.StorageConnectionTester;
+import com.ymcloud.web.service.file.impl.StorageConnectionTesterImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -39,6 +44,7 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -79,12 +85,14 @@ class StorageConfigRestoreTest {
         catalog = mock(StorageConfigCatalog.class);
         registry = mock(StorageRegistry.class);
         driver = mock(ObjectStorageService.class);
-        tester = new StorageConnectionTester(registry);
+        tester = new StorageConnectionTesterImpl();
+        ReflectionTestUtils.setField(tester, "registry", registry);
         context = new AnnotationConfigApplicationContext();
         context.registerBean(StorageProperties.class, () -> properties);
         context.registerBean(StorageConfigCatalog.class, () -> catalog);
         context.registerBean(StorageCredentialCipher.class, () -> cipher);
         context.registerBean(StorageMasterKeyStore.class, () -> mock(StorageMasterKeyStore.class));
+        context.getBeanFactory().registerSingleton("storageRegistry", registry);
         context.registerBean(StorageConnectionTester.class, () -> tester);
         context.register(AdminStorageConfigServiceImpl.class);
         context.refresh();
@@ -194,10 +202,11 @@ class StorageConfigRestoreTest {
     @Test
     void missingObjectIsSanitizedAndClientClosedWithoutSaving() {
         when(catalog.referencedFiles("seaweedfs")).thenReturn(List.of(reference(1, false, "object", new byte[]{1})));
-        when(driver.open("test-private", "object"))
-                .thenThrow(new IllegalStateException("secret-value signed URL missing object"));
+        IllegalStateException failure = new IllegalStateException("secret-value signed URL missing object");
+        when(driver.open("test-private", "object")).thenThrow(failure);
 
-        assertSanitizedFailure(() -> service.create(dto()));
+        FileException error = assertSanitizedFailure(() -> service.create(dto()));
+        assertSame(failure, error.getCause());
 
         verify(driver).close();
         assertReadOnly();
@@ -353,6 +362,7 @@ class StorageConfigRestoreTest {
     @Test
     void localDriverCannotBypassRemoteObjectValidation() {
         StorageProperties.Profile local = new StorageProperties.Profile();
+        local.setDriverType(StorageDriverType.LOCAL);
         assertSanitizedFailure(() -> tester.verifyReferencedFiles(local,
                 List.of(reference(1, false, "object", new byte[]{1}))));
 
@@ -387,6 +397,7 @@ class StorageConfigRestoreTest {
         dto.setKey("seaweedfs");
         dto.setName("SeaweedFS");
         dto.setProvider("seaweedfs");
+        dto.setDriverType(StorageDriverType.S3);
         dto.setEndpoint("http://127.0.0.1:8333");
         dto.setRegion("us-east-1");
         dto.setPublicBucket("test-public");
@@ -397,11 +408,20 @@ class StorageConfigRestoreTest {
         return dto;
     }
 
-    private void assertSanitizedFailure(Runnable operation) {
+    /**
+     * 校验恢复失败的业务码及最终安全响应，内部异常链允许保留原始故障
+     * @param operation 应当拒绝的恢复操作
+     * @return 捕获的领域异常，供调用方进一步核对原始 Cause
+     */
+    private FileException assertSanitizedFailure(Runnable operation) {
         FileException error = assertThrows(FileException.class, operation::run);
         assertEquals(400, error.getCode());
         assertFalse(error.getMessage().contains("secret-value"));
-        assertNull(error.getCause());
+        var response = new GlobalExceptionHandler().handleServiceException(error, new MockHttpServletRequest());
+        assertEquals(400, response.getCode());
+        assertFalse(response.getMsg().contains("secret-value"));
+        assertNull(response.getData());
+        return error;
     }
 
     private void assertReadOnly() {

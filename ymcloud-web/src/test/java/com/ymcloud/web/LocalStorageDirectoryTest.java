@@ -2,11 +2,9 @@ package com.ymcloud.web;
 
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.ymcloud.common.exception.file.FileException;
-import com.ymcloud.core.storage.StorageDirectoryResolver;
-import com.ymcloud.core.storage.StorageProperties;
-import com.ymcloud.core.storage.StorageRegistry;
-import com.ymcloud.core.storage.StoredFileService;
-import com.ymcloud.core.storage.TestDataServiceImpl;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
+import com.ymcloud.core.storage.util.StorageDirectoryResolver;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
@@ -14,9 +12,13 @@ import com.ymcloud.pojo.contract.judge.TestDataManifest;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.enums.FileBizType;
+import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
+import com.ymcloud.web.service.problem.impl.TestDataServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -39,11 +41,29 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/** 全部目录和字节均位于临时工作区，不修改 user.dir 或访问数据库及消息服务。 */
+/**
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 验证多模块及独立部署入口解析同一本地文件根目录
+ */
 class LocalStorageDirectoryTest {
 
     @TempDir
     private Path directory;
+
+    /**
+     * 匹配项目结构的 POM 损坏时明确失败，不改用模块目录创建文件根
+     * @throws Exception 创建隔离项目夹具失败
+     */
+    @Test
+    void malformedProjectPomDoesNotFallBackToModuleDirectory() throws Exception {
+        Path repository = repository("invalid-project");
+        Files.writeString(repository.resolve("pom.xml"), "<project>", StandardCharsets.UTF_8);
+        FileException failure = assertThrows(FileException.class,
+                () -> StorageDirectoryResolver.resolve("files", repository, repository));
+        assertTrue(failure.getCause() instanceof org.xml.sax.SAXException);
+        assertFalse(Files.exists(repository.resolve("files")));
+    }
 
     @Test
     void localStartupAutomaticallyCreatesPublicAndPrivateDirectoriesWithoutRemoteCredentials() {
@@ -191,6 +211,10 @@ class LocalStorageDirectoryTest {
         }
     }
 
+    /**
+     * 验证公开、私有及历史测试数据共享同一个解析后的存储根目录
+     * @throws Exception 临时目录与文件操作失败
+     */
     @Test
     void localPublicPrivateAndLegacyTestDataUseOneResolvedBase() throws Exception {
         Path repository = repository("shared-root-checkout");
@@ -204,7 +228,9 @@ class LocalStorageDirectoryTest {
             invocation.<File>getArgument(0).setId(ids.incrementAndGet());
             return true;
         });
-        StoredFileService storage = new StoredFileService(metadata, registry);
+        StoredFileService storage = new StoredFileServiceImpl();
+        ReflectionTestUtils.setField(storage, "files", metadata);
+        ReflectionTestUtils.setField(storage, "storage", registry);
         byte[] publicBytes = "图片文件\n".getBytes(StandardCharsets.UTF_8);
         byte[] privateBytes = " \r\n私有输入\t ".getBytes(StandardCharsets.UTF_8);
         try {

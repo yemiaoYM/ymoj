@@ -48,7 +48,11 @@ export type StorageConfigDTO = {
    */
   key: string;
   name: string;
-  provider: StorageProvider;
+  provider: string | null;
+  /**
+   * 显式存储访问协议，不由服务商推导
+   */
+  driverType: StorageDriverType;
   endpoint: string;
   region: string;
   publicBucket: string;
@@ -68,7 +72,11 @@ export type StorageConfigVO = {
    */
   key: string;
   name: string;
-  provider: StorageProvider;
+  provider: string | null;
+  /**
+   * 显式存储访问协议，不由服务商推导
+   */
+  driverType: StorageDriverType;
   endpoint: string;
   region: string;
   publicBucket: string;
@@ -83,6 +91,6 @@ export type StorageConfigVO = {
 };
 
 /**
- * 后台支持的存储实现
+ * 已实现的存储访问协议
  */
-export type StorageProvider = 'seaweedfs' | 'silo' | 'minio' | 'aliyun' | 's3' | 'local';
+export type StorageDriverType = 'LOCAL' | 'S3' | 'ALIYUN_OSS';

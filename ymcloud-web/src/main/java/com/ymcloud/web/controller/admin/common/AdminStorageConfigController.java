@@ -4,7 +4,6 @@ import com.ymcloud.common.result.Result;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
 import com.ymcloud.pojo.vo.common.StorageConfigVO;
 import com.ymcloud.web.service.admin.AdminStorageConfigService;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -23,7 +22,6 @@ import java.util.List;
  * @CreateTime: 2026-10-11
  * @Description: 管理存储配置及连接测试，不记录存储凭据
  */
-@Slf4j
 @RestController
 @RequestMapping("/admin/storage/config")
 public class AdminStorageConfigController {
@@ -38,7 +36,6 @@ public class AdminStorageConfigController {
     @PreAuthorize("@ss.hasPermi('file:storage:list')")
     @GetMapping
     public Result<List<StorageConfigVO>> list() {
-        log.info("查询存储配置列表");
         return Result.ok(configs.list());
     }
 
@@ -50,7 +47,6 @@ public class AdminStorageConfigController {
     @PreAuthorize("@ss.hasPermi('file:storage:add')")
     @PostMapping
     public Result<Void> create(@RequestBody StorageConfigDTO dto) {
-        log.info("创建存储配置");
         configs.create(dto);
         return Result.ok();
     }
@@ -64,7 +60,6 @@ public class AdminStorageConfigController {
     @PreAuthorize("@ss.hasPermi('file:storage:edit')")
     @PutMapping("/{key}")
     public Result<Void> update(@PathVariable("key") String key, @RequestBody StorageConfigDTO dto) {
-        log.info("修改存储配置");
         configs.update(key, dto);
         return Result.ok();
     }
@@ -77,7 +72,6 @@ public class AdminStorageConfigController {
     @PreAuthorize("@ss.hasPermi('file:storage:remove')")
     @DeleteMapping("/{key}")
     public Result<Void> delete(@PathVariable("key") String key) {
-        log.info("删除存储配置");
         configs.delete(key);
         return Result.ok();
     }
@@ -90,7 +84,6 @@ public class AdminStorageConfigController {
     @PreAuthorize("@ss.hasPermi('file:storage:test')")
     @PostMapping("/{key}/test")
     public Result<Void> test(@PathVariable("key") String key) {
-        log.info("测试存储连接");
         configs.test(key);
         return Result.ok();
     }
@@ -103,7 +96,6 @@ public class AdminStorageConfigController {
     @PreAuthorize("@ss.hasPermi('file:storage:activate')")
     @PostMapping("/{key}/activate")
     public Result<Void> activate(@PathVariable("key") String key) {
-        log.info("启用存储配置");
         configs.activate(key);
         return Result.ok();
     }

@@ -1,18 +1,21 @@
-package com.ymcloud.core.storage;
+package com.ymcloud.web.service.file.impl;
 
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
+import com.ymcloud.core.storage.config.StorageConfigValidation;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.security.StorageCredentialCipher;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.StorageConfigEntityService;
 import com.ymcloud.core.web.dao.StorageConfigStateEntityService;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.StorageConfig;
 import com.ymcloud.pojo.entity.StorageConfigState;
-import org.springframework.dao.DataAccessException;
+import com.ymcloud.web.service.file.StorageConfigCatalog;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,23 +26,28 @@ import java.util.List;
  * 上传事务锁定状态，避免定位字段竞态
  */
 @Service
-public class StorageConfigCatalog {
+public class StorageConfigCatalogImpl implements StorageConfigCatalog {
 
-    private final StorageConfigEntityService configs;
-    private final StorageConfigStateEntityService states;
-    private final FileEntityService files;
-    private final StorageCredentialCipher cipher;
-    private final StorageProperties properties;
+    @Autowired
+    private StorageConfigEntityService configs;
 
-    public StorageConfigCatalog(StorageConfigEntityService configs, StorageConfigStateEntityService states,
-                                FileEntityService files, StorageCredentialCipher cipher, StorageProperties properties) {
-        this.configs = configs;
-        this.states = states;
-        this.files = files;
-        this.cipher = cipher;
-        this.properties = properties;
-    }
+    @Autowired
+    private StorageConfigStateEntityService states;
 
+    @Autowired
+    private FileEntityService files;
+
+    @Autowired
+    private StorageCredentialCipher cipher;
+
+    @Autowired
+    private StorageProperties properties;
+
+    /**
+     * 读取当前默认存储配置标识
+     * @return 默认配置标识
+     */
+    @Override
     public String active() {
         StorageConfigState state = readState(TransactionSynchronizationManager.isActualTransactionActive(), true);
         return state == null || state.getActiveKey() == null ? properties.getActive() : state.getActiveKey();
@@ -50,6 +58,7 @@ public class StorageConfigCatalog {
      * @param key 存储配置名
      * @return 动态配置，不存在时返回空
      */
+    @Override
     public StorageConfig find(String key) {
         StorageConfigValidation.validateKey(key);
         boolean transaction = TransactionSynchronizationManager.isActualTransactionActive();
@@ -58,38 +67,30 @@ public class StorageConfigCatalog {
         if (transaction) {
             readState(true, true);
         }
-        try {
-            if (transaction) {
-                return exactKey(configs.getByIdForShare(key), key);
-            }
-            return exactKey(configs.lambdaQuery()
-                    .eq(StorageConfig::getId, key)
-                    .one(), key);
-        } catch (DataAccessException e) {
-            if (missingTable(e)) {
-                return null;
-            }
-            throw new FileException("无法读取存储配置");
+        if (transaction) {
+            return exactKey(configs.getByIdForShare(key), key);
         }
+        return exactKey(configs.lambdaQuery()
+                .eq(StorageConfig::getId, key)
+                .one(), key);
     }
 
+    /**
+     * 列出动态存储配置
+     * @return 动态配置列表
+     */
+    @Override
     public List<StorageConfig> list() {
-        try {
-            return configs.lambdaQuery()
-                    .orderByAsc(StorageConfig::getId)
-                    .list();
-        } catch (DataAccessException e) {
-            if (missingTable(e)) {
-                return List.of();
-            }
-            throw new FileException("无法读取存储配置");
-        }
+        return configs.lambdaQuery()
+                .orderByAsc(StorageConfig::getId)
+                .list();
     }
 
     /**
      * 配置状态锁不依赖密钥，密钥缺失时仍可切回本地并删除无引用的旧配置
      * @return 已锁定的存储配置状态
      */
+    @Override
     public StorageConfigState lockForWrite() {
         return readState(true, false, true);
     }
@@ -99,6 +100,7 @@ public class StorageConfigCatalog {
      * @param key 已校验的配置名
      * @return 是否仍被业务文件引用
      */
+    @Override
     public boolean referenced(String key) {
         return files.lambdaQuery()
                 .eq(File::getStorageProfile, key)
@@ -107,7 +109,10 @@ public class StorageConfigCatalog {
 
     /**
      * 恢复缺失配置前读取全部引用，调用方持有配置状态独占锁
+     * @param key 待恢复的配置标识
+     * @return 按文件编号排序的引用记录，无引用时为空列表
      */
+    @Override
     public List<File> referencedFiles(String key) {
         StorageConfigValidation.validateKey(key);
         return files.lambdaQuery()
@@ -116,9 +121,16 @@ public class StorageConfigCatalog {
                 .list();
     }
 
+    /**
+     * 解密并组装内部客户端配置
+     * @param config 待处理的动态存储配置
+     * @return 仅内部使用的客户端配置
+     */
+    @Override
     public StorageProperties.Profile profile(StorageConfig config) {
         StorageProperties.Profile profile = new StorageProperties.Profile();
-        profile.setType("aliyun".equals(config.getProvider()) ? "oss" : "s3");
+        profile.setDriverType(config.getDriverType());
+        profile.setProvider(config.getProvider());
         profile.setEndpoint(config.getEndpoint());
         profile.setRegion(config.getRegion());
         profile.setPublicBucket(config.getPublicBucket());
@@ -129,6 +141,12 @@ public class StorageConfigCatalog {
         return profile;
     }
 
+    /**
+     * 保存动态存储配置，调用方持有配置状态锁
+     * @param config 待处理的动态存储配置
+     * @param exists 是否更新已有配置
+     */
+    @Override
     public void save(StorageConfig config, boolean exists) {
         if (!exists) {
             if (!configs.save(config)) {
@@ -140,6 +158,7 @@ public class StorageConfigCatalog {
                 .eq(StorageConfig::getId, config.getId())
                 .set(StorageConfig::getName, config.getName())
                 .set(StorageConfig::getProvider, config.getProvider())
+                .set(StorageConfig::getDriverType, config.getDriverType())
                 .set(StorageConfig::getEndpoint, config.getEndpoint())
                 .set(StorageConfig::getRegion, config.getRegion())
                 .set(StorageConfig::getPublicBucket, config.getPublicBucket())
@@ -157,6 +176,11 @@ public class StorageConfigCatalog {
         }
     }
 
+    /**
+     * 删除指定存储配置
+     * @param key 存储配置标识
+     */
+    @Override
     public void remove(String key) {
         if (!configs.lambdaUpdate()
                 .eq(StorageConfig::getId, key)
@@ -165,6 +189,12 @@ public class StorageConfigCatalog {
         }
     }
 
+    /**
+     * 更新默认存储配置及状态版本
+     * @param state 已加写锁的配置状态
+     * @param key 存储配置标识
+     */
+    @Override
     public void activate(StorageConfigState state, String key) {
         if (!states.lambdaUpdate()
                 .eq(StorageConfigState::getId, 1)
@@ -194,39 +224,27 @@ public class StorageConfigCatalog {
      * @return 配置状态，允许缺失时可为空
      */
     private StorageConfigState readState(boolean lock, boolean allowMissing, boolean exclusive) {
-        try {
-            StorageConfigState state;
-            if (lock) {
-                state = states.getForLock(exclusive);
-            } else {
-                state = states.lambdaQuery()
-                        .eq(StorageConfigState::getId, 1)
-                        .one();
-            }
-            if (state == null && !allowMissing) {
-                throw new FileException("请先执行存储配置数据库迁移");
-            }
-            return state;
-        } catch (DataAccessException e) {
-            if (allowMissing && missingTable(e)) {
-                return null;
-            }
-            throw new FileException("无法读取存储配置状态，请检查数据库迁移");
+        StorageConfigState state;
+        if (lock) {
+            state = states.getForLock(exclusive);
+        } else {
+            state = states.lambdaQuery()
+                    .eq(StorageConfigState::getId, 1)
+                    .one();
         }
+        if (state == null && !allowMissing) {
+            throw new FileException("存储配置状态缺失");
+        }
+        return state;
     }
 
-    private boolean missingTable(Throwable error) {
-        Throwable current = error;
-        while (current != null) {
-            if (current instanceof SQLException sql && (sql.getErrorCode() == 1146
-                    || "42S02".equals(sql.getSQLState()))) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
-    }
-
+    /**
+     * 核对数据库查询结果的大小写，避免排序规则将不同配置名视为相同
+     * @param config 查询结果，不存在时可为空
+     * @param key 调用方请求的配置标识
+     * @return 原查询结果
+     * @throws FileException 查询结果与请求标识大小写不一致
+     */
     private StorageConfig exactKey(StorageConfig config, String key) {
         if (config != null && !key.equals(config.getId())) {
             throw new FileException("存储配置名区分大小写，请使用原配置名", HttpStatus.BAD_REQUEST);

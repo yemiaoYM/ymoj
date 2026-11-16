@@ -2,9 +2,9 @@ package com.ymcloud.web;
 
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.ymcloud.common.exception.file.FileException;
-import com.ymcloud.core.storage.StorageCredentialCipher;
-import com.ymcloud.core.storage.StorageMasterKeyStore;
-import com.ymcloud.core.storage.StorageProperties;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.security.StorageCredentialCipher;
+import com.ymcloud.core.storage.security.StorageMasterKeyStore;
 import com.ymcloud.core.web.dao.StorageConfigEntityService;
 import com.ymcloud.pojo.entity.StorageConfig;
 import org.junit.jupiter.api.Test;

@@ -1,16 +1,19 @@
 package com.ymcloud.web;
 
 import com.alibaba.fastjson2.JSON;
-import com.ymcloud.core.storage.FileDigests;
-import com.ymcloud.core.storage.StorageProperties;
-import com.ymcloud.core.storage.StorageRegistry;
-import com.ymcloud.core.storage.StoredFileService;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
+import com.ymcloud.core.storage.util.FileDigests;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.enums.FileBizType;
+import com.ymcloud.pojo.enums.StorageDriverType;
+import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -32,8 +35,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * 实际 SeaweedFS + AWS SDK 测试。文件数据库为 mock；真实事务由 DatabaseIT 单独验证。
- * 显式 YMCLOUD_RUN_S3_TESTS=true 才运行，避免默认构建连接外部服务。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 使用真实 S3 服务验证大文件与并发读写，文件登记使用 Mock
  */
 @EnabledIfEnvironmentVariable(named = "YMCLOUD_RUN_S3_TESTS", matches = "true")
 class StorageS3IntegrationTest {
@@ -41,11 +45,15 @@ class StorageS3IntegrationTest {
     @TempDir
     Path root;
 
+    /**
+     * 在显式启用的独立 S3 服务中验证上限文件及并发上传回读
+     * @throws Exception 文件、SDK 操作或并发任务失败
+     */
     @Test
     void actualSdkRoundtripAtUploadLimitAndConcurrentServicePerformance() throws Exception {
         StorageProperties properties = new StorageProperties();
         StorageProperties.Profile profile = new StorageProperties.Profile();
-        profile.setType("s3");
+        profile.setDriverType(StorageDriverType.S3);
         profile.setEndpoint(System.getenv("YMCLOUD_S3_ENDPOINT"));
         profile.setAccessKey(System.getenv("YMCLOUD_S3_ACCESS_KEY"));
         profile.setSecretKey(System.getenv("YMCLOUD_S3_SECRET_KEY"));
@@ -58,7 +66,9 @@ class StorageS3IntegrationTest {
             return true;
         });
         StorageRegistry registry = new StorageRegistry(properties, root.toString());
-        StoredFileService files = new StoredFileService(entities, registry);
+        StoredFileService files = new StoredFileServiceImpl();
+        ReflectionTestUtils.setField(files, "files", entities);
+        ReflectionTestUtils.setField(files, "storage", registry);
         List<File> created = java.util.Collections.synchronizedList(new ArrayList<>());
         Map<String, Object> report = new LinkedHashMap<>();
         try {

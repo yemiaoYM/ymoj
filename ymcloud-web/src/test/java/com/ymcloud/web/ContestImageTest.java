@@ -7,7 +7,6 @@ import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.service.PermissionService;
 import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
@@ -19,6 +18,7 @@ import com.ymcloud.web.service.admin.AdminContestService;
 import com.ymcloud.web.service.admin.impl.AdminContestServiceImpl;
 import com.ymcloud.web.service.common.PublicImageService;
 import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
+import com.ymcloud.web.service.file.StoredFileService;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.Test;
@@ -66,8 +66,7 @@ class ContestImageTest {
     /** 测试真实方法权限拦截。 */
     @EnableMethodSecurity
     @org.springframework.context.annotation.Configuration
-    static class SecurityConfig {
-    }
+    static class SecurityConfig {}
 
     /**
      * 方形封面重编码后保存，非方形与伪造图片均不能写入存储。

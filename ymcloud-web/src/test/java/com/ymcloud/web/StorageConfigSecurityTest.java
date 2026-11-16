@@ -1,25 +1,29 @@
 package com.ymcloud.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.core.security.service.PermissionService;
-import com.ymcloud.core.storage.ObjectStorageService;
-import com.ymcloud.core.storage.StorageConfigCatalog;
-import com.ymcloud.core.storage.StorageConfigValidation;
-import com.ymcloud.core.storage.StorageConnectionTester;
-import com.ymcloud.core.storage.StorageCredentialCipher;
-import com.ymcloud.core.storage.StorageMasterKeyStore;
-import com.ymcloud.core.storage.StorageProperties;
-import com.ymcloud.core.storage.StorageRegistry;
+import com.ymcloud.core.storage.client.ObjectStorageService;
+import com.ymcloud.core.storage.config.StorageConfigValidation;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
+import com.ymcloud.core.storage.security.StorageCredentialCipher;
+import com.ymcloud.core.storage.security.StorageMasterKeyStore;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
 import com.ymcloud.pojo.entity.StorageConfig;
 import com.ymcloud.pojo.entity.StorageConfigState;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.StorageDriverType;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.web.controller.admin.common.AdminStorageConfigController;
 import com.ymcloud.web.service.admin.AdminStorageConfigService;
 import com.ymcloud.web.service.admin.impl.AdminStorageConfigServiceImpl;
+import com.ymcloud.web.service.file.StorageConfigCatalog;
+import com.ymcloud.web.service.file.StorageConnectionTester;
+import com.ymcloud.web.service.file.impl.StorageConnectionTesterImpl;
+import com.ymcloud.web.service.file.impl.StorageConfigCatalogImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +35,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -43,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -111,6 +117,19 @@ class StorageConfigSecurityTest {
         context.close();
     }
 
+    /**
+     * 无版本认证上下文可解密独立生成的固定样本
+     * 样本使用全零测试主密钥，不包含真实凭据
+     */
+    @Test
+    void fixedAuthenticationContextDecryptsKnownCiphertext() {
+        String encrypted = "AAECAwQFBgcICQoL+65dIWmJ5o+nVSSEkXa7nkM9RtWE3g41VAbKC4dkpg==";
+        assertEquals("sensitive-value", cipher.decrypt("minio", "secretKey", encrypted));
+    }
+
+    /**
+     * 每次加密使用随机 nonce，认证拒绝篡改及跨配置、跨字段替换
+     */
     @Test
     void encryptionIsRandomAuthenticatedAndBoundToConfigurationAndField() {
         String first = cipher.encrypt("minio", "secretKey", "sensitive-value");
@@ -228,7 +247,9 @@ class StorageConfigSecurityTest {
      */
     @Test
     void siloAndLegacyMinioYamlProfilesKeepTheirIdentity() {
-        properties.getProfiles().put("silo", remoteProfile());
+        StorageProperties.Profile silo = remoteProfile();
+        silo.setProvider("silo");
+        properties.getProfiles().put("silo", silo);
         properties.getProfiles().put("minio", remoteProfile());
         var listed = service.list();
         assertEquals("silo", listed.stream().filter(row -> "silo".equals(row.getKey()))
@@ -238,7 +259,7 @@ class StorageConfigSecurityTest {
         service.test("silo");
         ArgumentCaptor<StorageProperties.Profile> tested = ArgumentCaptor.forClass(StorageProperties.Profile.class);
         verify(tester).test(tested.capture());
-        assertEquals("s3", tested.getValue().getType());
+        assertEquals(StorageDriverType.S3, tested.getValue().getDriverType());
         assertTrue(tested.getValue().isPathStyle());
         assertEquals("test-private", tested.getValue().getPrivateBucket());
     }
@@ -252,16 +273,19 @@ class StorageConfigSecurityTest {
         verify(catalog, never()).save(any(), eq(false));
     }
 
+    /**
+     * 已引用配置禁止修改驱动及对象位置，避免历史文件不可读
+     */
     @Test
-    void referencedYamlConfigurationCannotChangeAnyLocationOrProvider() {
+    void referencedYamlConfigurationCannotChangeLocationOrDriver() {
         properties.getProfiles().put("minio", remoteProfile());
         when(catalog.referenced("minio")).thenReturn(true);
         StorageConfigDTO changedEndpoint = dto();
         changedEndpoint.setEndpoint("https://other.example");
         assertThrows(FileException.class, () -> service.update("minio", changedEndpoint));
-        StorageConfigDTO changedProvider = dto();
-        changedProvider.setProvider("seaweedfs");
-        assertThrows(FileException.class, () -> service.update("minio", changedProvider));
+        StorageConfigDTO changedDriver = dto();
+        changedDriver.setDriverType(StorageDriverType.ALIYUN_OSS);
+        assertThrows(FileException.class, () -> service.update("minio", changedDriver));
         StorageConfigDTO changedBucket = dto();
         changedBucket.setPrivateBucket("other-private");
         assertThrows(FileException.class, () -> service.update("minio", changedBucket));
@@ -340,8 +364,7 @@ class StorageConfigSecurityTest {
             public ObjectStorageService createClient(StorageProperties.Profile ignored) {
                 return new ObjectStorageService() {
                     @Override
-                    public void put(String bucket, String key, Path source, String type, String hash) {
-                    }
+                    public void put(String bucket, String key, Path source, String type, String hash) {}
 
                     @Override
                     public InputStream open(String bucket, String key) {
@@ -349,8 +372,7 @@ class StorageConfigSecurityTest {
                     }
 
                     @Override
-                    public void delete(String bucket, String key) {
-                    }
+                    public void delete(String bucket, String key) {}
 
                     @Override
                     public void close() {
@@ -373,20 +395,25 @@ class StorageConfigSecurityTest {
         assertEquals(2, closed.get());
     }
 
+    /**
+     * 验证探测上传失败仍补偿可能已创建的对象，并隐藏远端凭据异常
+     */
     @Test
     void failedUploadProbeCompensatesUnknownSuccessAndSanitizesError() {
         StorageRegistry registry = mock(StorageRegistry.class);
         ObjectStorageService driver = mock(ObjectStorageService.class);
         when(registry.createClient(any())).thenReturn(driver);
-        doThrow(new IllegalStateException("secret-value AWS credential signed URL"))
+        IllegalStateException failure = new IllegalStateException("secret-value AWS credential signed URL");
+        doThrow(failure)
                 .when(driver).put(anyString(), anyString(), any(), anyString(), anyString());
         StorageProperties.Profile profile = remoteProfile();
         profile.setEndpoint("http://127.0.0.1:8333");
-        FileException error = assertThrows(FileException.class,
-                () -> new StorageConnectionTester(registry).test(profile));
+        StorageConnectionTester tester = new StorageConnectionTesterImpl();
+        ReflectionTestUtils.setField(tester, "registry", registry);
+        FileException error = assertThrows(FileException.class, () -> tester.test(profile));
         assertEquals(400, error.getCode());
         assertFalse(error.getMessage().contains("secret-value"));
-        assertEquals(null, error.getCause());
+        assertSame(failure, error.getCause());
         verify(driver).delete(eq("test-public"), anyString());
         verify(driver).close();
     }
@@ -419,9 +446,80 @@ class StorageConfigSecurityTest {
         assertEquals(2, attempts.get());
     }
 
+    /**
+     * 服务商名称仅作描述，同名服务商也可以显式选择不同协议
+     */
+    @Test
+    void providerDoesNotChooseDriver() {
+        StorageConfigDTO request = dto();
+        request.setProvider("aliyun");
+        request.setDriverType(StorageDriverType.S3);
+        service.create(request);
+        ArgumentCaptor<StorageConfig> saved = ArgumentCaptor.forClass(StorageConfig.class);
+        verify(catalog).save(saved.capture(), eq(false));
+        assertEquals(StorageDriverType.S3, saved.getValue().getDriverType());
+
+        var source = new StorageConfigCatalogImpl();
+        ReflectionTestUtils.setField(source, "cipher", cipher);
+        assertEquals(StorageDriverType.S3, source.profile(saved.getValue()).getDriverType());
+        saved.getValue().setProvider("自建对象服务");
+        saved.getValue().setDriverType(StorageDriverType.ALIYUN_OSS);
+        assertEquals(StorageDriverType.ALIYUN_OSS, source.profile(saved.getValue()).getDriverType());
+    }
+
+    /**
+     * 未提供驱动的请求和静态配置均失败，不因服务商存在而选择默认驱动
+     */
+    @Test
+    void missingDriverDoesNotFallBack() {
+        StorageConfigDTO request = dto();
+        request.setDriverType(null);
+        assertThrows(FileException.class, () -> service.create(request));
+        StorageProperties.Profile profile = remoteProfile();
+        profile.setDriverType(null);
+        assertThrows(FileException.class, () -> StorageConfigValidation.validate(profile, false));
+        verify(catalog, never()).save(any(), anyBoolean());
+    }
+
+    /**
+     * 接口只接受明确驱动编码，未知名称和旧模糊标识不能进入服务层
+     * @throws Exception JSON 处理失败
+     */
+    @Test
+    void driverJsonContractRejectsUnknownNames() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        assertEquals("\"ALIYUN_OSS\"", mapper.writeValueAsString(StorageDriverType.ALIYUN_OSS));
+        assertEquals(StorageDriverType.S3, mapper.readValue("\"S3\"", StorageDriverType.class));
+        for (String invalid : List.of("oss", "s3", "aliyun", "unknown")) {
+            assertThrows(InvalidFormatException.class,
+                         () -> mapper.readValue("\"" + invalid + "\"", StorageDriverType.class));
+        }
+    }
+
+    /**
+     * 已引用配置可以修改服务商描述，不改变实际存储位置
+     */
+    @Test
+    void referencedConfigurationCanChangeProviderDescription() {
+        properties.getProfiles().put("minio", remoteProfile());
+        when(catalog.referenced("minio")).thenReturn(true);
+        StorageConfigDTO request = dto();
+        request.setProvider("自建 S3 服务");
+        service.update("minio", request);
+        ArgumentCaptor<StorageConfig> saved = ArgumentCaptor.forClass(StorageConfig.class);
+        verify(catalog).save(saved.capture(), eq(false));
+        assertEquals("自建 S3 服务", saved.getValue().getProvider());
+        assertEquals(StorageDriverType.S3, saved.getValue().getDriverType());
+    }
+
+    /**
+     * 创建带显式协议和测试凭据的远端配置
+     * @return 不连接真实网络的客户端配置
+     */
     private StorageProperties.Profile remoteProfile() {
         StorageProperties.Profile profile = new StorageProperties.Profile();
-        profile.setType("s3");
+        profile.setDriverType(StorageDriverType.S3);
+        profile.setProvider("minio");
         profile.setEndpoint("https://storage.example");
         profile.setAccessKey("access-value");
         profile.setSecretKey("secret-value");
@@ -430,11 +528,16 @@ class StorageConfigSecurityTest {
         return profile;
     }
 
+    /**
+     * 创建使用 S3 协议的合法保存请求
+     * @return 含测试凭据的配置请求
+     */
     private StorageConfigDTO dto() {
         StorageConfigDTO dto = new StorageConfigDTO();
         dto.setKey("minio");
         dto.setName("MinIO");
         dto.setProvider("minio");
+        dto.setDriverType(StorageDriverType.S3);
         dto.setEndpoint("https://storage.example");
         dto.setRegion("us-east-1");
         dto.setPublicBucket("test-public");
@@ -456,6 +559,5 @@ class StorageConfigSecurityTest {
 
     @Configuration
     @EnableMethodSecurity
-    static class MethodSecurityConfig {
-    }
+    static class MethodSecurityConfig {}
 }

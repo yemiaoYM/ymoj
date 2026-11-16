@@ -1,18 +1,21 @@
 package com.ymcloud.web;
 
 import com.ymcloud.common.exception.file.FileException;
-import com.ymcloud.core.storage.FileDigests;
-import com.ymcloud.core.storage.ObjectStorageService;
-import com.ymcloud.core.storage.StoragePaths;
-import com.ymcloud.core.storage.StorageProperties;
-import com.ymcloud.core.storage.StorageRegistry;
-import com.ymcloud.core.storage.StoredFileService;
+import com.ymcloud.core.storage.client.ObjectStorageService;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
+import com.ymcloud.core.storage.util.FileDigests;
+import com.ymcloud.core.storage.util.StoragePaths;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.enums.FileBizType;
+import com.ymcloud.pojo.enums.StorageDriverType;
+import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -26,7 +29,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * 使用真实本地驱动核对字节、哈希、失败补偿与路径边界。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 使用真实本地驱动核对字节、哈希、失败补偿与路径边界
  */
 class StoredFileServiceTest {
 
@@ -38,12 +43,17 @@ class StoredFileServiceTest {
     private StorageRegistry registry;
     private StoredFileService files;
 
+    /**
+     * 装配本地存储及文件元数据桩，使用真实驱动验证文件生命周期
+     */
     @BeforeEach
     void setup() {
         entities = mock(FileEntityService.class);
         properties = new StorageProperties();
         registry = new StorageRegistry(properties, root.toString());
-        files = new StoredFileService(entities, registry);
+        files = new StoredFileServiceImpl();
+        ReflectionTestUtils.setField(files, "files", entities);
+        ReflectionTestUtils.setField(files, "storage", registry);
         when(entities.save(any(File.class))).thenAnswer(invocation -> {
             invocation.<File>getArgument(0).setId(10L);
             return true;
@@ -78,7 +88,9 @@ class StoredFileServiceTest {
         byte[] content = {1, 2, 3};
         File file = files.save(new ByteArrayInputStream(content), content.length, "avatar.png", "image/png",
                 FileBizType.IMAGE, null, true);
-        properties.getProfiles().put("another", new StorageProperties.Profile());
+        StorageProperties.Profile local = new StorageProperties.Profile();
+        local.setDriverType(StorageDriverType.LOCAL);
+        properties.getProfiles().put("another", local);
         properties.setActive("another");
         assertEquals("another", registry.active());
         try (var input = files.open(file)) {
@@ -147,7 +159,7 @@ class StoredFileServiceTest {
     @Test
     void remoteProfilesRequireCredentialsAndDistinctBuckets() {
         StorageProperties.Profile remote = new StorageProperties.Profile();
-        remote.setType("s3");
+        remote.setDriverType(StorageDriverType.S3);
         remote.setEndpoint("http://127.0.0.1:18333");
         properties.getProfiles().put("seaweedfs", remote);
         assertThrows(FileException.class, () -> registry.profile("seaweedfs"));
@@ -157,13 +169,18 @@ class StoredFileServiceTest {
         assertThrows(FileException.class, () -> registry.profile("seaweedfs"));
     }
 
+    /**
+     * 验证回读摘要不一致时先补偿对象且不写入文件登记
+     */
     @Test
     void remoteReadBackHashMismatchIsCompensatedBeforeDatabaseInsert() {
         StorageRegistry routed = spy(registry);
         ObjectStorageService corrupted = mock(ObjectStorageService.class);
         doReturn(corrupted).when(routed).lease("local");
         when(corrupted.open(anyString(), anyString())).thenReturn(new ByteArrayInputStream(new byte[]{9}));
-        StoredFileService service = new StoredFileService(entities, routed);
+        StoredFileService service = new StoredFileServiceImpl();
+        ReflectionTestUtils.setField(service, "files", entities);
+        ReflectionTestUtils.setField(service, "storage", routed);
         assertThrows(FileException.class, () -> service.save(new ByteArrayInputStream(new byte[]{1}), 1,
                 "a.in", "text/plain", FileBizType.TEST_DATA, 1L, false));
         verify(corrupted).delete(eq("private"), anyString());
@@ -174,7 +191,7 @@ class StoredFileServiceTest {
     @Test
     void remoteHttpOutsideLoopbackIsRejectedWithoutLeakingCredentials() {
         StorageProperties.Profile remote = new StorageProperties.Profile();
-        remote.setType("s3");
+        remote.setDriverType(StorageDriverType.S3);
         remote.setEndpoint("http://storage.internal:8333");
         remote.setAccessKey("key-must-not-appear");
         remote.setSecretKey("secret-must-not-appear");

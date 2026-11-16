@@ -1,9 +1,8 @@
 package com.ymcloud.web.controller.admin.common;
 
 import com.ymcloud.common.result.Result;
-import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.pojo.entity.File;
-import lombok.extern.slf4j.Slf4j;
+import com.ymcloud.web.service.file.StoredFileService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +19,6 @@ import java.util.List;
  * @CreateTime: 2026-10-11
  * @Description: 核对和迁移历史文件，默认只核对且不修改源文件字节
  */
-@Slf4j
 @RestController
 @RequestMapping("/admin/storage/migration")
 public class AdminStorageMigrationController {
@@ -35,7 +33,6 @@ public class AdminStorageMigrationController {
     @PreAuthorize("@ss.hasPermi('file:migration:query')")
     @GetMapping("/files")
     public Result<List<File>> inventory() {
-        log.info("查询历史文件迁移清单");
         return Result.ok(files.legacyInventory());
     }
 
@@ -49,7 +46,6 @@ public class AdminStorageMigrationController {
     @PostMapping("/files/{id}")
     public Result<File> migrate(@PathVariable("id") Long id,
                                 @RequestParam(value = "apply", defaultValue = "false") boolean apply) {
-        log.info("处理历史文件迁移，文件编号：{}，执行迁移：{}", id, apply);
         return Result.ok(files.migrateLocal(id, apply));
     }
 }

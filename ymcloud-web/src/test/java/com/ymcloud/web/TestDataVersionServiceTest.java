@@ -6,8 +6,6 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWrapper;
 import com.ymcloud.common.exception.problem.ProblemException;
-import com.ymcloud.core.storage.StoredFileService;
-import com.ymcloud.core.storage.TestDataServiceImpl;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
 import com.ymcloud.core.web.mapper.ProblemMapper;
@@ -18,6 +16,8 @@ import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.enums.FileBizType;
+import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.problem.impl.TestDataServiceImpl;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,7 +47,9 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * 验证版本保留、失败时指针不切换、迁移幂等和私有文件访问边界。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 验证测试数据版本发布、迁移幂等及私有文件读取边界
  */
 @ExtendWith(MockitoExtension.class)
 class TestDataVersionServiceTest {
@@ -249,6 +251,20 @@ class TestDataVersionServiceTest {
                 List.of("/in/a.in", "/out/a.out", "/out/a.out")));
         assertEquals(versionId, problem.getTestDataVersionId());
         assertEquals(1, versionRows.size());
+    }
+
+    /**
+     * 历史清单读取故障保留原因并中止盘点，不伪装成可继续的格式问题
+     * @throws Exception 创建测试数据夹具失败
+     */
+    @Test
+    void unreadableManifestFailsInsteadOfReturningInventoryErrors() throws Exception {
+        legacyPair("a", "input", "output");
+        Files.createDirectory(directory.resolve("private/problem/7/info.json"));
+        ProblemException failure = assertThrows(ProblemException.class, () -> service.migrateLegacy(7L, false));
+        assertInstanceOf(IOException.class, failure.getCause());
+        verify(versions, never()).save(any());
+        verifyNoInteractions(storage);
     }
 
     @Test

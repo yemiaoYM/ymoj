@@ -1,7 +1,7 @@
 package com.ymcloud.web;
 
-import com.ymcloud.core.storage.StorageDirectoryResolver;
-import com.ymcloud.core.storage.StorageProperties;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.util.StorageDirectoryResolver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.context.config.ConfigDataEnvironmentPostProcessor;
@@ -90,6 +90,10 @@ class StorageDirectoryConfigurationTest {
         assertFalse(Files.exists(judgeDirectory));
     }
 
+    /**
+     * 验证外部配置 URI 及环境占位符覆盖，不受路径特殊字符影响
+     * @throws Exception 临时配置读写失败
+     */
     @Test
     void optionalImportedConfigurationAndItsPlaceholdersResolveOverrides() throws Exception {
         Path imported = directory.resolve("application-storage-test.yml");
@@ -98,14 +102,14 @@ class StorageDirectoryConfigurationTest {
                   file:
                     base-dir: ${YMCLOUD_FILE_BASE_DIR:./imported-files}
                 """, StandardCharsets.UTF_8);
-        ConfigurableEnvironment environment = configuration(Map.of("spring.config.import", "optional:file:" + configurationPath(imported)));
+        ConfigurableEnvironment environment = configuration(Map.of("spring.config.import", "optional:" + imported.toUri()));
         assertEquals("./imported-files", environment.getRequiredProperty("ymcloud.file.base-dir"));
         assertNull(environment.getProperty("ymcloud.docker.host-working-dir"));
 
         Path fileDirectory = directory.resolve("import-file-override").toAbsolutePath().normalize();
         Path judgeDirectory = directory.resolve("import-judge-override").toAbsolutePath().normalize();
         ConfigurableEnvironment overridden = configuration(Map.of(
-                "spring.config.import", "optional:file:" + configurationPath(imported),
+                "spring.config.import", "optional:" + imported.toUri(),
                 "YMCLOUD_FILE_BASE_DIR", fileDirectory.toString(),
                 "YMCLOUD_JUDGE_WORK_DIR", judgeDirectory.toString()));
         assertEquals(fileDirectory.toString(), overridden.getRequiredProperty("ymcloud.file.base-dir"));
@@ -152,7 +156,4 @@ class StorageDirectoryConfigurationTest {
         return root.toAbsolutePath().normalize();
     }
 
-    private String configurationPath(Path path) {
-        return path.toAbsolutePath().normalize().toString().replace('\\', '/');
-    }
 }

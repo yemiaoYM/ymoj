@@ -18,7 +18,6 @@ import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.domain.LoginUser;
 import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
@@ -54,6 +53,7 @@ import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
+import com.ymcloud.web.service.problem.TestDataService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -341,8 +341,11 @@ class JudgeWebWorkflowTest {
         verifyNoInteractions(testData, judges, versions);
     }
 
+    /**
+     * 正常提交与结果接收在事务提交前后都不产生流水日志
+     */
     @Test
-    void lifecycleSuccessLogsWaitForCommitAndNeverIncludePrivateBodies() {
+    void normalSubmissionAndResultDoNotProduceLifecycleLogs() {
         doReturn(query(language())).when(languages).lambdaQuery();
         Logger submissions = (Logger) LoggerFactory.getLogger(JudgeServiceImpl.class);
         Logger received = (Logger) LoggerFactory.getLogger(JudgeResultService.class);
@@ -364,18 +367,11 @@ class JudgeWebWorkflowTest {
             result.setErrorMessage("private-error-sentinel");
             result.getTestCaseResults().get(0).setOutput("private-output-sentinel");
             results.receive(result);
-            assertTrue(appender.list.isEmpty(), "提交成功和终态成功只能在数据库提交后记录");
+            assertTrue(appender.list.isEmpty());
             for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
                 synchronization.afterCommit();
             }
-            assertEquals(2, appender.list.size());
-            String diagnostic = appender.list.stream()
-                    .map(ILoggingEvent::getFormattedMessage)
-                    .reduce("", (first, second) -> first + "\n" + second);
-            assertTrue(diagnostic.contains("创建判题任务成功"));
-            assertTrue(diagnostic.contains("保存判题结果成功"));
-            assertTrue(diagnostic.contains(dispatch.getExecutionId()));
-            assertFalse(diagnostic.contains("private-"));
+            assertTrue(appender.list.isEmpty());
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
             submissions.detachAppender(appender);

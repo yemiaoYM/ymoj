@@ -9,7 +9,6 @@ import com.ymcloud.common.constant.CacheConstants;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.config.RedisConfig;
-import com.ymcloud.core.storage.StoredFileService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
@@ -26,6 +25,7 @@ import com.ymcloud.web.controller.common.PublicCarouselController;
 import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.impl.CarouselSettingServiceImpl;
 import com.ymcloud.web.service.common.impl.PublicImageServiceImpl;
+import com.ymcloud.web.service.file.StoredFileService;
 import com.ymcloud.web.service.oj.FileService;
 import com.ymcloud.web.service.oj.impl.FileServiceImpl;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -89,8 +89,7 @@ class CarouselCacheTest {
     /** 启用真实缓存拦截器，不直接调用被缓存的实现对象。 */
     @org.springframework.context.annotation.Configuration
     @EnableCaching
-    static class CacheConfig {
-    }
+    static class CacheConfig {}
 
     /**
      * 装配真实业务和 RedisCacheManager
@@ -390,16 +389,14 @@ class CarouselCacheTest {
          * @param status 待提交的事务状态
          */
         @Override
-        protected void doCommit(DefaultTransactionStatus status) {
-        }
+        protected void doCommit(DefaultTransactionStatus status) {}
 
         /**
          * 模拟回滚；没有数据库操作，由父类完成回滚回调且不执行 afterCommit。
          * @param status 待回滚的事务状态
          */
         @Override
-        protected void doRollback(DefaultTransactionStatus status) {
-        }
+        protected void doRollback(DefaultTransactionStatus status) {}
 
         /**
          * 移除线程事务状态，避免影响下一次测试调用。

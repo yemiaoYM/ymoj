@@ -3,17 +3,18 @@ package com.ymcloud.web.service.admin.impl;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.core.storage.StorageConfigCatalog;
-import com.ymcloud.core.storage.StorageConfigValidation;
-import com.ymcloud.core.storage.StorageConnectionTester;
-import com.ymcloud.core.storage.StorageCredentialCipher;
-import com.ymcloud.core.storage.StorageProperties;
+import com.ymcloud.core.storage.config.StorageConfigValidation;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.security.StorageCredentialCipher;
 import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
 import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.StorageConfig;
 import com.ymcloud.pojo.entity.StorageConfigState;
+import com.ymcloud.pojo.enums.StorageDriverType;
 import com.ymcloud.pojo.vo.common.StorageConfigVO;
 import com.ymcloud.web.service.admin.AdminStorageConfigService;
+import com.ymcloud.web.service.file.StorageConfigCatalog;
+import com.ymcloud.web.service.file.StorageConnectionTester;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -26,12 +27,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-11
- * @Description: 命名配置管理。写入与探测仅向 ID 为 1 的可用超级管理员开放。
+ * @Description: 命名配置管理，写入与探测仅向 ID 为 1 的可用超级管理员开放
  */
 @Service
 public class AdminStorageConfigServiceImpl implements AdminStorageConfigService {
@@ -48,19 +48,25 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
     @Autowired
     private StorageConnectionTester tester;
 
+    /**
+     * 合并静态与动态配置并返回脱敏管理视图，不解密凭据
+     * @return 按配置标识排序的管理视图
+     */
     @Override
     public List<StorageConfigVO> list() {
         String active = catalog.active();
         Map<String, StorageConfigVO> result = new LinkedHashMap<>();
         StorageProperties.Profile local = new StorageProperties.Profile();
+        local.setDriverType(StorageDriverType.LOCAL);
         local.setPublicBucket("public");
         local.setPrivateBucket("private");
         result.put("local", view("local", "本地文件", "local", local, null, "config", active, true));
         properties.getProfiles().forEach((key, profile) -> result.put(key,
-                view(key, key, yamlProvider(key, profile), profile, null, "config", active,
-                        "local".equals(profile.getType()) || credentialsPresent(profile))));
+                view(key, key, profile.getProvider(), profile, null, "config", active,
+                        profile.getDriverType() == StorageDriverType.LOCAL || credentialsPresent(profile))));
         for (StorageConfig config : catalog.list()) {
             StorageProperties.Profile profile = new StorageProperties.Profile();
+            profile.setDriverType(config.getDriverType());
             profile.setEndpoint(config.getEndpoint());
             profile.setRegion(config.getRegion());
             profile.setPublicBucket(config.getPublicBucket());
@@ -75,6 +81,10 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         return list;
     }
 
+    /**
+     * 由超级管理员创建配置，存在历史引用时先只读核验全部对象
+     * @param dto 配置参数与新凭据
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(StorageConfigDTO dto) {
@@ -96,6 +106,11 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         persist(dto, null, null, false);
     }
 
+    /**
+     * 由超级管理员更新配置，禁止改变已被文件引用的物理位置
+     * @param key 原配置标识
+     * @param dto 待更新参数，空凭据表示保留原凭据
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void update(String key, StorageConfigDTO dto) {
@@ -104,12 +119,16 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         validateDto(dto, key);
         StorageConfig existing = catalog.find(key);
         StorageProperties.Profile old = existing == null ? yamlProfile(key) : catalog.profile(existing);
-        if ("local".equals(old.getType())) {
+        if (old.getDriverType() == StorageDriverType.LOCAL) {
             throw new FileException("本地存储配置只读");
         }
         persist(dto, existing, old, Objects.equals(catalog.active(), key));
     }
 
+    /**
+     * 由超级管理员删除非默认且无文件引用的动态配置
+     * @param key 待删除配置标识
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(String key) {
@@ -125,6 +144,10 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         catalog.remove(key);
     }
 
+    /**
+     * 验证双桶读写删除能力，并登记当前配置版本的成功测试状态
+     * @param key 待测试配置标识
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void test(String key) {
@@ -139,7 +162,7 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         StorageConfig config = catalog.find(key);
         StorageProperties.Profile profile = config == null ? yamlProfile(key) : catalog.profile(config);
         tester.test(profile);
-        if ("local".equals(profile.getType())) {
+        if (profile.getDriverType() == StorageDriverType.LOCAL) {
             return;
         }
         if (config == null) {
@@ -156,6 +179,10 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         }
     }
 
+    /**
+     * 由超级管理员启用已通过测试的配置，本地配置即时验证
+     * @param key 将用于新上传的默认配置标识
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void activate(String key) {
@@ -174,14 +201,18 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         catalog.activate(state, key);
     }
 
+    /**
+     * 组装并保存配置，默认配置的修改须先重新通过连接测试
+     * @param dto 已校验的管理请求
+     * @param existing 现有动态记录，新建或静态转动态时为空
+     * @param old 原客户端参数，新建时为空
+     * @param active 本次保存的是否为当前默认配置
+     */
     private void persist(StorageConfigDTO dto, StorageConfig existing, StorageProperties.Profile old, boolean active) {
         StorageProperties.Profile profile = requestProfile(dto, old);
         StorageConfigValidation.validate(profile, false);
-        String oldProvider = existing == null && old != null ? yamlProvider(dto.getKey(), old)
-                : existing == null ? null : existing.getProvider();
-        if (old != null && catalog.referenced(dto.getKey())
-                && (!sameLocation(old, profile) || !Objects.equals(oldProvider, dto.getProvider()))) {
-            throw new FileException("配置已被文件引用，驱动、地址、区域、存储桶及路径风格不能修改；可轮换凭据");
+        if (old != null && catalog.referenced(dto.getKey()) && !sameLocation(old, profile)) {
+            throw new FileException("已引用配置的驱动与存储位置不可修改", HttpStatus.BAD_REQUEST);
         }
         if (active) {
             tester.test(profile);
@@ -197,11 +228,19 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         catalog.save(config, existing != null);
     }
 
+    /**
+     * 加密凭据并构建指定版本的动态配置记录
+     * @param dto 已校验的管理请求
+     * @param profile 已组装的客户端参数
+     * @param revision 新配置版本号
+     * @return 含密文和时间信息的待保存记录
+     */
     private StorageConfig record(StorageConfigDTO dto, StorageProperties.Profile profile, long revision) {
         StorageConfig config = new StorageConfig();
         config.setId(dto.getKey());
         config.setName(dto.getName().trim());
         config.setProvider(dto.getProvider());
+        config.setDriverType(profile.getDriverType());
         config.setEndpoint(profile.getEndpoint());
         config.setRegion(profile.getRegion());
         config.setPublicBucket(profile.getPublicBucket());
@@ -216,9 +255,16 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         return config;
     }
 
+    /**
+     * 组装请求中的连接参数，编辑时复用未重新填写的原凭据
+     * @param dto 已校验的管理请求
+     * @param old 原客户端参数，新建时为空
+     * @return 仅供内部校验和客户端创建的参数
+     */
     private StorageProperties.Profile requestProfile(StorageConfigDTO dto, StorageProperties.Profile old) {
         StorageProperties.Profile profile = new StorageProperties.Profile();
-        profile.setType("aliyun".equals(dto.getProvider()) ? "oss" : "s3");
+        profile.setDriverType(dto.getDriverType());
+        profile.setProvider(dto.getProvider());
         profile.setEndpoint(dto.getEndpoint().trim());
         profile.setRegion(dto.getRegion().trim());
         profile.setPublicBucket(dto.getPublicBucket().trim());
@@ -230,26 +276,35 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
     }
 
     /**
-     * 校验存储配置入口，保留历史 MinIO 配置的维护能力
+     * 校验存储配置入口，驱动必须显式指定且本地配置只读
      * @param dto 待保存的配置及凭据
      * @param key 新建或编辑的配置标识
      */
     private void validateDto(StorageConfigDTO dto, String key) {
         StorageConfigValidation.validateKey(key);
         if (dto == null || (dto.getKey() != null && !key.equals(dto.getKey())) || "local".equals(key)
-                || !Set.of("seaweedfs", "silo", "minio", "aliyun", "s3").contains(String.valueOf(dto.getProvider()))
+                || dto.getDriverType() == null || dto.getDriverType() == StorageDriverType.LOCAL
+                || (dto.getProvider() != null && !bounded(dto.getProvider(), 100))
                 || !bounded(dto.getName(), 100) || !bounded(dto.getEndpoint(), 512)
                 || !bounded(dto.getRegion(), 64) || !bounded(dto.getPublicBucket(), 128)
                 || !bounded(dto.getPrivateBucket(), 128) || dto.getPathStyle() == null
                 || (dto.getRemark() != null && dto.getRemark().length() > 500)) {
-            throw new FileException("存储配置参数不完整或不合法，本地配置只读且配置名不可修改");
+            throw new FileException("存储配置参数不完整或不合法");
         }
         dto.setKey(key);
     }
 
+    /**
+     * 读取静态配置，未显式配置的 local 使用内置本地参数
+     * @param key 配置标识
+     * @return 静态客户端参数
+     * @throws FileException 指定的非默认配置不存在
+     */
     private StorageProperties.Profile yamlProfile(String key) {
         if ("local".equals(key) && !properties.getProfiles().containsKey(key)) {
-            return new StorageProperties.Profile();
+            StorageProperties.Profile profile = new StorageProperties.Profile();
+            profile.setDriverType(StorageDriverType.LOCAL);
+            return profile;
         }
         StorageProperties.Profile profile = properties.getProfiles().get(key);
         if (profile == null) {
@@ -258,71 +313,101 @@ public class AdminStorageConfigServiceImpl implements AdminStorageConfigService 
         return profile;
     }
 
+    /**
+     * 为静态配置首次登记测试状态构建名称与服务商信息
+     * @param key 静态配置标识
+     * @param profile 静态客户端参数
+     * @return 用于构建动态记录的基础管理信息
+     */
     private StorageConfigDTO fromYaml(String key, StorageProperties.Profile profile) {
         StorageConfigDTO dto = new StorageConfigDTO();
         dto.setKey(key);
         dto.setName(key);
-        dto.setProvider(yamlProvider(key, profile));
+        dto.setProvider(profile.getProvider());
+        dto.setDriverType(profile.getDriverType());
         return dto;
     }
 
     /**
-     * 根据驱动及配置标识展示预置服务商，未知 S3 配置保留通用类型
-     * @param key 配置标识，包含历史 MinIO 标识
-     * @param profile 配置文件中的存储连接
-     * @return 页面使用的服务商标识
+     * 构建不含凭据的管理视图，并标记引用及可删除状态
+     * @param key 配置标识
+     * @param name 展示名称
+     * @param provider 服务商标识
+     * @param profile 客户端参数，仅提取非敏感字段
+     * @param remark 备注，可为空
+     * @param source 配置来源标识
+     * @param active 当前默认配置标识
+     * @param credentialConfigured 是否已有完整凭据
+     * @return 可返回管理端的脱敏视图
      */
-    private String yamlProvider(String key, StorageProperties.Profile profile) {
-        if ("local".equals(profile.getType())) {
-            return "local";
-        }
-        if ("oss".equals(profile.getType())) {
-            return "aliyun";
-        }
-        return Set.of("seaweedfs", "silo", "minio").contains(key) ? key : "s3";
-    }
-
     private StorageConfigVO view(String key, String name, String provider, StorageProperties.Profile profile,
                                  String remark, String source, String active, boolean credentialConfigured) {
         StorageConfigVO view = new StorageConfigVO();
         view.setKey(key);
         view.setName(name);
         view.setProvider(provider);
+        view.setDriverType(profile.getDriverType());
         view.setEndpoint(profile.getEndpoint());
         view.setRegion(profile.getRegion());
-        view.setPublicBucket("local".equals(provider) ? "public" : profile.getPublicBucket());
-        view.setPrivateBucket("local".equals(provider) ? "private" : profile.getPrivateBucket());
+        view.setPublicBucket(profile.getDriverType() == StorageDriverType.LOCAL ? "public" : profile.getPublicBucket());
+        view.setPrivateBucket(profile.getDriverType() == StorageDriverType.LOCAL ? "private" : profile.getPrivateBucket());
         view.setPathStyle(profile.isPathStyle());
         view.setRemark(remark);
         view.setSource(source);
         view.setActive(key.equals(active));
         view.setReferenced(catalog.referenced(key));
         view.setCredentialConfigured(credentialConfigured);
-        view.setCanDelete(!"local".equals(provider) && "database".equals(source) && !key.equals(active)
+        view.setCanDelete(profile.getDriverType() != StorageDriverType.LOCAL && "database".equals(source) && !key.equals(active)
                 && !Boolean.TRUE.equals(view.getReferenced()) && !properties.getProfiles().containsKey(key));
         return view;
     }
 
+    /**
+     * 比较影响对象定位的参数，凭据轮换不视为位置变化
+     * @param first 原客户端参数
+     * @param second 新客户端参数
+     * @return 驱动、端点、区域、双桶与寻址方式是否相同
+     */
     private boolean sameLocation(StorageProperties.Profile first, StorageProperties.Profile second) {
-        return Objects.equals(first.getType(), second.getType()) && Objects.equals(first.getEndpoint(), second.getEndpoint())
+        return Objects.equals(first.getDriverType(), second.getDriverType()) && Objects.equals(first.getEndpoint(), second.getEndpoint())
                 && Objects.equals(first.getRegion(), second.getRegion())
                 && Objects.equals(first.getPublicBucket(), second.getPublicBucket())
                 && Objects.equals(first.getPrivateBucket(), second.getPrivateBucket())
                 && first.isPathStyle() == second.isPathStyle();
     }
 
+    /**
+     * 检查配置文本非空、无控制字符且未超过长度限制
+     * @param value 待检查文本，可为空
+     * @param max 最大字符数
+     * @return 是否满足文本约束
+     */
     private boolean bounded(String value, int max) {
         return present(value) && value.length() <= max && value.chars().noneMatch(Character::isISOControl);
     }
 
+    /**
+     * 判断配置文本是否包含非空白内容
+     * @param value 待检查文本，可为空
+     * @return 是否存在有效文本
+     */
     private boolean present(String value) {
         return value != null && !value.isBlank();
     }
 
+    /**
+     * 判断静态配置是否同时提供访问标识和密钥
+     * @param profile 静态客户端参数
+     * @return 两个凭据字段是否均非空白
+     */
     private boolean credentialsPresent(StorageProperties.Profile profile) {
         return present(profile.getAccessKey()) && present(profile.getSecretKey());
     }
 
+    /**
+     * 限制配置写入和探测仅由可用的超级管理员执行
+     * @throws AccessDeniedException 当前用户不是超级管理员
+     */
     private void requireSuperAdmin() {
         if (!SecurityUtils.isSuperAdmin(SecurityUtils.getAuthentication())) {
             throw new AccessDeniedException("仅超级管理员可以修改或测试存储配置");

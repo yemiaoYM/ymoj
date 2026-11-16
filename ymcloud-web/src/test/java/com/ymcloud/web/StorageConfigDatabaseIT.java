@@ -6,13 +6,11 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.core.security.domain.LoginUser;
-import com.ymcloud.core.storage.ObjectStorageService;
-import com.ymcloud.core.storage.StorageConfigCatalog;
-import com.ymcloud.core.storage.StorageConnectionTester;
-import com.ymcloud.core.storage.StorageCredentialCipher;
-import com.ymcloud.core.storage.StorageMasterKeyStore;
-import com.ymcloud.core.storage.StorageProperties;
-import com.ymcloud.core.storage.StorageRegistry;
+import com.ymcloud.core.storage.client.ObjectStorageService;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
+import com.ymcloud.core.storage.security.StorageCredentialCipher;
+import com.ymcloud.core.storage.security.StorageMasterKeyStore;
 import com.ymcloud.core.web.dao.StorageConfigEntityService;
 import com.ymcloud.core.web.dao.impl.FileEntityServiceImpl;
 import com.ymcloud.core.web.dao.impl.StorageConfigEntityServiceImpl;
@@ -23,9 +21,13 @@ import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.StorageConfig;
 import com.ymcloud.pojo.entity.StorageConfigState;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.StorageDriverType;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.web.service.admin.AdminStorageConfigService;
 import com.ymcloud.web.service.admin.impl.AdminStorageConfigServiceImpl;
+import com.ymcloud.web.service.file.StorageConfigCatalog;
+import com.ymcloud.web.service.file.StorageConnectionTester;
+import com.ymcloud.web.service.file.impl.StorageConfigCatalogImpl;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -52,7 +54,6 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.yaml.snakeyaml.Yaml;
 
-import javax.sql.DataSource;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URI;
@@ -71,6 +72,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -157,7 +159,7 @@ class StorageConfigDatabaseIT {
                 + "INDEX idx_profile(storage_profile)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbc.execute("CREATE TABLE `storage_config` ("
                 + "id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,"
-                + "name VARCHAR(100) NOT NULL,provider VARCHAR(16) NOT NULL,endpoint VARCHAR(512) NOT NULL,"
+                + "name VARCHAR(100) NOT NULL,provider VARCHAR(100) NULL,driver_type VARCHAR(16) NOT NULL,endpoint VARCHAR(512) NOT NULL,"
                 + "region VARCHAR(64) NOT NULL,public_bucket VARCHAR(128) NOT NULL,private_bucket VARCHAR(128) NOT NULL,"
                 + "path_style TINYINT NOT NULL DEFAULT 1,encrypted_access_key TEXT NOT NULL,encrypted_secret_key TEXT NOT NULL,"
                 + "remark VARCHAR(500) NULL,revision BIGINT NOT NULL DEFAULT 1,tested_revision BIGINT NULL,tested_at DATETIME NULL,"
@@ -469,6 +471,7 @@ class StorageConfigDatabaseIT {
         dto.setKey(key);
         dto.setName("数据库配置测试");
         dto.setProvider("s3");
+        dto.setDriverType(StorageDriverType.S3);
         dto.setEndpoint(endpoint);
         dto.setRegion("us-east-1");
         dto.setPublicBucket("test-public");
@@ -492,7 +495,7 @@ class StorageConfigDatabaseIT {
     @EnableTransactionManagement
     @MapperScan(basePackageClasses = FileMapper.class)
     @Import({FileEntityServiceImpl.class, StorageConfigEntityServiceImpl.class, StorageConfigStateEntityServiceImpl.class,
-            StorageConfigCatalog.class, StorageCredentialCipher.class, AdminStorageConfigServiceImpl.class})
+            StorageConfigCatalogImpl.class, StorageCredentialCipher.class, AdminStorageConfigServiceImpl.class})
     static class DatabaseConfiguration {
 
         @Bean(destroyMethod = "")
@@ -558,8 +561,7 @@ class StorageConfigDatabaseIT {
             String endpoint = profile.getEndpoint();
             return new ObjectStorageService() {
                 @Override
-                public void put(String bucket, String key, Path source, String contentType, String sha256) {
-                }
+                public void put(String bucket, String key, Path source, String contentType, String sha256) {}
 
                 @Override
                 public InputStream open(String bucket, String key) {
@@ -567,8 +569,7 @@ class StorageConfigDatabaseIT {
                 }
 
                 @Override
-                public void delete(String bucket, String key) {
-                }
+                public void delete(String bucket, String key) {}
 
                 @Override
                 public void close() {

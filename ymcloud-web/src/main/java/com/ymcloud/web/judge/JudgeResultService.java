@@ -21,8 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -183,7 +181,7 @@ public class JudgeResultService {
     }
 
     /**
-     * 在同一事务更新任务、提交和测试点，提交后更新缓存及日志。
+     * 在同一事务更新任务、提交和测试点，提交后更新缓存
      * @param dispatch 已锁定且允许更新的任务
      * @param result 已验证身份和状态的结果
      */
@@ -217,38 +215,6 @@ public class JudgeResultService {
         dispatch.setResultPayload(payload);
         dispatch.setLastResultSequence(result.getSequence());
         cache.putAfterCommit(dispatch.getSubmissionId(), dispatch.getExecutionId(), toView(dispatch, result));
-        logResultAfterCommit(dispatch, result);
-    }
-
-    /**
-     * 终态日志只在提交、测试点和 AC 记录全部提交后输出，不记录源码、输入输出或错误正文。
-     * @param dispatch 更新后的任务记录
-     * @param result 本次结果
-     */
-    private void logResultAfterCommit(JudgeDispatch dispatch, JudgeResult result) {
-        Runnable record = () -> {
-            if (result.isTerminal()) {
-                log.info("保存判题结果成功，提交编号：{}，执行编号：{}，数据版本：{}，状态：{}，耗时：{}ms，内存：{}KiB，得分：{}",
-                        dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId(),
-                        result.getStatus(), result.getTime(), result.getMemory(), result.getScore());
-            } else {
-                log.debug("更新判题进度成功，提交编号：{}，执行编号：{}，状态：{}，消息序号：{}",
-                        dispatch.getSubmissionId(), dispatch.getExecutionId(), result.getStatus(), result.getSequence());
-            }
-        };
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                /**
-                 * 提交成功后执行当前结果日志回调。
-                 */
-                @Override
-                public void afterCommit() {
-                    record.run();
-                }
-            });
-        } else {
-            record.run();
-        }
     }
 
     /**

@@ -1,19 +1,28 @@
-package com.ymcloud.core.storage;
+package com.ymcloud.core.storage.util;
 
 import com.ymcloud.common.exception.file.FileException;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * 本地兼容路径检查，拒绝目录穿越和符号链接逃逸。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 本地对象路径检查，拒绝目录穿越和符号链接逃逸
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class StoragePaths {
 
-    private StoragePaths() {
-    }
-
+    /**
+     * 将对象键解析到指定根目录内，并拒绝目录穿越和符号链接逃逸
+     * @param root 允许访问的存储根目录
+     * @param key 使用正斜杠分隔的相对对象键
+     * @return 通过校验的绝对规范路径，目标可以尚不存在
+     * @throws FileException 对象键非法、路径越界或无法验证真实路径
+     */
     public static Path resolve(Path root, String key) {
         if (key == null || key.isBlank() || key.contains("\\") || key.indexOf('\0') >= 0) {
             throw new FileException("非法文件路径");

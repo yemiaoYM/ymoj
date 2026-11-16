@@ -3,7 +3,7 @@ package com.ymcloud.web;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.model.OSSObject;
 import com.aliyun.oss.model.PutObjectRequest;
-import com.ymcloud.core.storage.OssObjectStorageService;
+import com.ymcloud.core.storage.client.OssObjectStorageService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
@@ -16,7 +16,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * 无云凭据时验证原生 OSS 驱动契约；不冒充阿里云线上联调。
+ * @Author: Yemiao
+ * @CreateTime: 2026-10-11
+ * @Description: 使用 SDK 桩验证原生 OSS 驱动的上传与关闭契约
  */
 class OssObjectStorageServiceTest {
 

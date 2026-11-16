@@ -2,7 +2,6 @@ package com.ymcloud.web;
 
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.service.ResourceAccessService;
-import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
 import com.ymcloud.core.web.dao.ContestUserEntityService;
@@ -25,6 +24,7 @@ import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.web.service.oj.impl.JudgeServiceImpl;
+import com.ymcloud.web.service.problem.TestDataService;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;

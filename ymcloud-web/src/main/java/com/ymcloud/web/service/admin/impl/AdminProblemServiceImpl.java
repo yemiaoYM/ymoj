@@ -10,16 +10,14 @@ import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.core.storage.TestDataService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
 import com.ymcloud.pojo.bo.ProblemCaseInfo;
 import com.ymcloud.pojo.bo.TestDataMigrationReport;
+import com.ymcloud.pojo.contract.judge.SpjCompileResult;
+import com.ymcloud.pojo.contract.judge.SpjProgram;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.dto.admin.SpjCompileDTO;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
-import com.ymcloud.pojo.contract.judge.SpjCompileResult;
-import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
 import com.ymcloud.pojo.entity.User;
@@ -27,9 +25,10 @@ import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ProblemVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
+import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.web.service.admin.AdminProblemService;
 import com.ymcloud.web.service.admin.ResourceDeletionService;
-import lombok.extern.slf4j.Slf4j;
+import com.ymcloud.web.service.problem.TestDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -52,7 +51,6 @@ import java.util.Objects;
  * @CreateTime: 2025-09-21  21:45
  * @Description: 管理端题目服务实现类
  */
-@Slf4j
 @Service
 public class AdminProblemServiceImpl implements AdminProblemService {
 

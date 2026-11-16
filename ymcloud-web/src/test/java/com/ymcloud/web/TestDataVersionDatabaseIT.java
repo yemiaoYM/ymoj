@@ -5,11 +5,8 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.handlers.MybatisEnumTypeHandler;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
-import com.ymcloud.core.storage.StorageProperties;
-import com.ymcloud.core.storage.StorageRegistry;
-import com.ymcloud.core.storage.StoredFileService;
-import com.ymcloud.core.storage.TestDataService;
-import com.ymcloud.core.storage.TestDataServiceImpl;
+import com.ymcloud.core.storage.config.StorageProperties;
+import com.ymcloud.core.storage.factory.StorageRegistry;
 import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.TestDataVersionEntityService;
@@ -23,6 +20,11 @@ import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.enums.FileBizType;
+import com.ymcloud.pojo.enums.StorageDriverType;
+import com.ymcloud.web.service.file.StoredFileService;
+import com.ymcloud.web.service.file.impl.StoredFileServiceImpl;
+import com.ymcloud.web.service.problem.TestDataService;
+import com.ymcloud.web.service.problem.impl.TestDataServiceImpl;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -56,7 +58,6 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 
-import javax.sql.DataSource;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -76,6 +77,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
+import javax.sql.DataSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -435,7 +437,7 @@ class TestDataVersionDatabaseIT {
     void realSeaweedPublicationFailureRollsBackDatabaseAndObjectsTogether() throws Exception {
         StorageProperties properties = context.getBean(StorageProperties.class);
         StorageProperties.Profile profile = new StorageProperties.Profile();
-        profile.setType("s3");
+        profile.setDriverType(StorageDriverType.S3);
         profile.setEndpoint(System.getenv("YMCLOUD_S3_ENDPOINT"));
         profile.setAccessKey(System.getenv("YMCLOUD_S3_ACCESS_KEY"));
         profile.setSecretKey(System.getenv("YMCLOUD_S3_SECRET_KEY"));
@@ -559,7 +561,7 @@ class TestDataVersionDatabaseIT {
     @EnableTransactionManagement
     @MapperScan(basePackageClasses = FileMapper.class)
     @Import({FileEntityServiceImpl.class, ProblemEntityServiceImpl.class, TestDataVersionEntityServiceImpl.class,
-            StorageRegistry.class, StoredFileService.class, TestDataServiceImpl.class})
+            StorageRegistry.class, StoredFileServiceImpl.class, TestDataServiceImpl.class})
     static class DatabaseConfiguration {
 
         @Bean

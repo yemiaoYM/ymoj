@@ -47,37 +47,37 @@
           </el-table-column>
           <el-table-column label="标识" prop="key" min-width="115" />
           <el-table-column label="服务商" min-width="120">
-            <template #default="{ row }">{{ providerLabel(row.provider) }}</template>
+            <template #default="{ row }">{{ row.provider }}</template>
           </el-table-column>
+          <el-table-column label="驱动类型" prop="driverType" min-width="125" />
           <el-table-column label="连接地址" min-width="210" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.provider === 'local' ? '服务器本地目录' : row.endpoint }}</template>
+            <template #default="{ row }">{{ row.driverType === 'LOCAL' ? '服务器本地目录' : row.endpoint }}</template>
           </el-table-column>
           <el-table-column label="存储桶" min-width="185">
             <template #default="{ row }">
-              <div v-if="row.provider !== 'local'">公开文件：{{ row.publicBucket }}</div>
-              <div v-if="row.provider !== 'local'">私有文件：{{ row.privateBucket }}</div>
+              <div v-if="row.driverType !== 'LOCAL'">公开文件：{{ row.publicBucket }}</div>
+              <div v-if="row.driverType !== 'LOCAL'">私有文件：{{ row.privateBucket }}</div>
               <span v-else>本地文件目录</span>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="100" align="center">
             <template #default="{ row }">
-              <el-tag v-if="row.isExample" type="warning">待配置</el-tag>
-              <el-tag v-else :type="row.active ? 'success' : 'info'">{{ row.active ? '当前默认' : '备用' }}</el-tag>
+              <el-tag :type="row.active ? 'success' : 'info'">{{ row.active ? '当前默认' : '备用' }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="330" align="center" fixed="right">
             <template #default="{ row }">
               <x-flex class="storage-actions" align="center" justify="center" :size="4" :wrap="false">
                 <el-button
-                  v-if="canEdit(row)"
+                  v-if="canEdit()"
                   type="success"
                   text
                   size="small"
                   :icon="Edit"
-                  :disabled="row.provider === 'local' || !!busyKey"
+                  :disabled="row.driverType === 'LOCAL' || !!busyKey"
                   @click="handleEdit(row)"
                 >
-                  {{ row.isExample ? '配置' : '修改' }}
+                  修改
                 </el-button>
                 <el-button
                   v-if="canOperate('test')"
@@ -85,7 +85,7 @@
                   text
                   size="small"
                   :loading="busyKey === row.key && busyAction === 'test'"
-                  :disabled="row.isExample || !!busyKey"
+                  :disabled="!!busyKey"
                   @click="handleTest(row)"
                 >
                   测试连接
@@ -93,7 +93,7 @@
                 <el-tooltip
                   v-if="canOperate('activate')"
                   content="请先修改配置，填写访问密钥并测试连接。"
-                  :disabled="row.provider === 'local' || row.credentialConfigured"
+                  :disabled="row.driverType === 'LOCAL' || row.credentialConfigured"
                   placement="top"
                 >
                   <span>
@@ -153,7 +153,7 @@
             <el-scrollbar height="100%" class="config-scrollbar" view-class="config-scrollbar-content">
               <el-alert
                 v-if="editingConfig?.referenced"
-                title="已有文件使用此配置，连接地址、服务商和存储桶不可更改，仍可更新访问密钥。"
+                title="已有文件使用此配置，驱动、连接地址和存储桶不可更改，仍可更新访问密钥。"
                 type="info"
                 :closable="false"
                 show-icon
@@ -167,29 +167,23 @@
                   <el-input
                     v-model="form.key"
                     maxlength="64"
-                    :disabled="!!editingConfig || !!configuringExample"
+                    :disabled="!!editingConfig"
                     placeholder="小写字母、数字、下划线或短横线"
                   />
                 </el-form-item>
                 <el-form-item label="服务商" prop="provider">
-                  <el-select
-                    v-model="form.provider"
-                    :disabled="!!editingConfig || !!configuringExample"
-                    @change="applyProviderPreset"
-                  >
-                    <el-option v-if="form.provider === 'minio'" label="MinIO（历史配置）" value="minio" />
-                    <el-option
-                      v-for="item in providers"
-                      :key="item.value"
-                      :label="item.label"
-                      :value="item.value"
-                    />
+                  <el-input v-model="form.provider" maxlength="100" placeholder="例如 SeaweedFS、MinIO 或阿里云" />
+                </el-form-item>
+                <el-form-item label="驱动类型" prop="driverType">
+                  <el-select v-model="form.driverType" :disabled="locatorReadOnly">
+                    <el-option label="S3 兼容协议" value="S3" />
+                    <el-option label="阿里云原生 OSS" value="ALIYUN_OSS" />
                   </el-select>
                 </el-form-item>
                 <el-form-item label="连接地址" prop="endpoint">
                   <el-input v-model="form.endpoint" :disabled="locatorReadOnly" :placeholder="endpointPlaceholder" />
                 </el-form-item>
-                <div class="form-tip grid-wide">{{ providerTip }} 远程连接使用 HTTPS，HTTP 仅用于本机开发。</div>
+                <div class="form-tip grid-wide">{{ driverTip }} 远程连接使用 HTTPS，HTTP 仅用于本机开发。</div>
                 <el-form-item label="公开文件桶" prop="publicBucket">
                   <el-input v-model="form.publicBucket" :disabled="locatorReadOnly" placeholder="例如 ymcloud-public" />
                 </el-form-item>
@@ -231,7 +225,7 @@
                   <el-input v-model="form.region" :disabled="locatorReadOnly" placeholder="例如 us-east-1 或 cn-hangzhou" />
                   <div class="form-tip">通常使用服务商提供的地域，预设值可以直接使用。</div>
                 </el-form-item>
-                <el-form-item v-if="form.provider !== 'aliyun'" label="路径式访问">
+                <el-form-item v-if="form.driverType === 'S3'" label="路径式访问">
                   <el-switch v-model="form.pathStyle" :disabled="locatorReadOnly" aria-label="S3 路径式访问" />
                   <div class="form-tip">SeaweedFS、Silo 通常启用，AWS S3 通常关闭。</div>
                 </el-form-item>
@@ -265,9 +259,8 @@ import {
   testStorageConfig,
   updateStorageConfig,
 } from '@/api/storage';
-import type { StorageConfigDTO, StorageConfigVO, StorageProvider } from '@/types/storage';
+import type { StorageConfigDTO, StorageConfigVO } from '@/types/storage';
 
-type StorageConfigRow = StorageConfigVO & { isExample?: boolean };
 
 //data
 const userStore = useUserStore();
@@ -277,77 +270,41 @@ const loaded = ref(false);
 const dialogVisible = ref(false);
 const saving = ref(false);
 const editingConfig = ref<StorageConfigVO | null>(null);
-const configuringExample = ref<StorageConfigRow | null>(null);
 const formRef = ref<FormInstance>();
 const settingsTab = ref('basic');
 const busyKey = ref('');
 const busyAction = ref('');
-const providers: { value: Exclude<StorageProvider, 'local' | 'minio'>; label: string }[] = [
-  { value: 'silo', label: 'Silo' },
-  { value: 'seaweedfs', label: 'SeaweedFS' },
-  { value: 'aliyun', label: '阿里云 OSS' },
-  { value: 's3', label: '其他 S3 服务' },
-];
-const providerPresets = {
-  seaweedfs: { endpoint: 'http://127.0.0.1:18333', region: 'us-east-1', pathStyle: true },
-  silo: { endpoint: 'http://127.0.0.1:9000', region: 'us-east-1', pathStyle: true },
-  minio: { endpoint: 'http://127.0.0.1:9000', region: 'us-east-1', pathStyle: true },
-  aliyun: { endpoint: 'https://oss-cn-hangzhou.aliyuncs.com', region: 'cn-hangzhou', pathStyle: false },
-  s3: { endpoint: 'https://s3.us-east-1.amazonaws.com', region: 'us-east-1', pathStyle: false },
-};
-// 服务示例仅供页面引导，同标识的真实配置始终覆盖示例。
-const storageExamples: StorageConfigRow[] = providers.map(item => ({
-  key: item.value,
-  name: item.label,
-  provider: item.value,
-  endpoint: 'xxxx',
-  publicBucket: 'xxxx',
-  privateBucket: 'xxxx',
-  region: providerPresets[item.value].region,
-  pathStyle: providerPresets[item.value].pathStyle,
-  active: false,
-  source: 'config',
-  referenced: false,
-  credentialConfigured: false,
-  canDelete: false,
-  remark: null,
-  isExample: true,
-}));
-const createForm = (provider: Exclude<StorageProvider, 'local'> = 'seaweedfs'): StorageConfigDTO => ({
+const createForm = (): StorageConfigDTO => ({
   key: '',
   name: '',
-  provider,
+  provider: null,
+  driverType: 'S3',
   endpoint: '',
-  region: providerPresets[provider].region,
+  region: 'us-east-1',
   publicBucket: '',
   privateBucket: '',
-  pathStyle: providerPresets[provider].pathStyle,
+  pathStyle: true,
   accessKey: '',
   secretKey: '',
   remark: '',
 });
 const form = ref<StorageConfigDTO>(createForm());
-const orderedConfigs = computed<StorageConfigRow[]>(() => {
+const orderedConfigs = computed<StorageConfigVO[]>(() => {
   if (!loaded.value) {
     return [];
   }
-  const actualKeys = new Set(configs.value.map(row => row.key));
-  const rows = [...configs.value, ...storageExamples.filter(row => !actualKeys.has(row.key))];
-  return rows.sort((first, second) => Number(second.provider === 'local') - Number(first.provider === 'local'));
+  return [...configs.value].sort((first, second) => Number(second.driverType === 'LOCAL') - Number(first.driverType === 'LOCAL'));
 });
 const dialogTitle = computed(() => {
   if (editingConfig.value) {
     return '修改存储配置';
   }
-  if (configuringExample.value) {
-    return `配置 ${configuringExample.value.name}`;
-  }
   return '新增存储配置';
 });
-const endpointPlaceholder = computed(() => form.value.provider === 'local'
-  ? '' : providerPresets[form.value.provider].endpoint);
+const endpointPlaceholder = computed(() => form.value.driverType === 'ALIYUN_OSS'
+  ? 'https://oss-cn-hangzhou.aliyuncs.com' : 'https://s3.example.com');
 const locatorReadOnly = computed(() => !!editingConfig.value?.referenced);
-const providerTip = computed(() => form.value.provider === 'aliyun'
+const driverTip = computed(() => form.value.driverType === 'ALIYUN_OSS'
   ? '使用阿里云原生 OSS 连接。请填写应用账户及对应地域 Endpoint。'
   : '使用 S3 兼容接口连接。请填写实际地址，示例仅供参考。');
 const rules: FormRules<StorageConfigDTO> = {
@@ -356,6 +313,7 @@ const rules: FormRules<StorageConfigDTO> = {
     { required: true, message: '请输入配置标识', trigger: 'blur' },
     { pattern: /^[a-z][a-z0-9_-]{0,63}$/, message: '标识以小写字母开头，仅允许字母、数字、下划线和短横线', trigger: 'blur' },
   ],
+  driverType: [{ required: true, message: '请选择驱动类型', trigger: 'change' }],
   endpoint: [{ required: true, whitespace: true, message: '请输入连接地址', trigger: 'blur' }],
   publicBucket: [{ required: true, whitespace: true, message: '请输入公开文件桶', trigger: 'blur' }],
   privateBucket: [{ required: true, whitespace: true, message: '请输入私有文件桶', trigger: 'blur' }],
@@ -367,19 +325,15 @@ let listRequestId = 0;
 const canOperate = (operation: string) => userStore.isSuperAdmin
   && userStore.hasEveryPermission([`file:storage:${operation}`]);
 
-const providerLabel = (provider: StorageProvider) => provider === 'local'
-  ? '本地存储'
-  : provider === 'minio' ? 'MinIO（历史配置）' : providers.find(item => item.value === provider)?.label || provider;
+const configName = (row: StorageConfigVO) => row.driverType === 'LOCAL' ? '本地存储' : row.name;
 
-const configName = (row: StorageConfigVO) => row.provider === 'local' ? '本地存储' : row.name;
+const canEdit = () => canOperate('edit');
 
-const canEdit = (row: StorageConfigRow) => canOperate(row.isExample ? 'add' : 'edit');
-
-const canDelete = (row: StorageConfigRow) => !row.isExample && row.canDelete && row.provider !== 'local'
+const canDelete = (row: StorageConfigVO) => row.canDelete && row.driverType !== 'LOCAL'
   && row.source === 'database' && !row.active && !row.referenced;
 
-const canSetDefault = (row: StorageConfigRow) => !row.isExample && !row.active
-  && (row.provider === 'local' || row.credentialConfigured);
+const canSetDefault = (row: StorageConfigVO) => !row.active
+  && (row.driverType === 'LOCAL' || row.credentialConfigured);
 
 const loadConfigs = async () => {
   const requestId = ++listRequestId;
@@ -412,34 +366,21 @@ const handleAdd = () => {
     return;
   }
   editingConfig.value = null;
-  configuringExample.value = null;
   form.value = createForm();
   settingsTab.value = 'basic';
   dialogVisible.value = true;
 };
 
-const handleEdit = (row: StorageConfigRow) => {
-  if (!canEdit(row) || row.provider === 'local' || busyKey.value) {
+const handleEdit = (row: StorageConfigVO) => {
+  if (!canEdit() || row.driverType === 'LOCAL' || busyKey.value) {
     return;
   }
-  if (row.isExample) {
-    editingConfig.value = null;
-    configuringExample.value = row;
-    form.value = {
-      ...createForm(row.provider),
-      key: row.key,
-      name: row.name,
-    };
-    settingsTab.value = 'basic';
-    dialogVisible.value = true;
-    return;
-  }
-  configuringExample.value = null;
   editingConfig.value = row;
   form.value = {
     key: row.key,
     name: row.name,
     provider: row.provider,
+    driverType: row.driverType,
     endpoint: row.endpoint,
     region: row.region,
     publicBucket: row.publicBucket,
@@ -453,22 +394,11 @@ const handleEdit = (row: StorageConfigRow) => {
   dialogVisible.value = true;
 };
 
-const applyProviderPreset = (provider: StorageProvider) => {
-  if (editingConfig.value || configuringExample.value) {
-    return;
-  }
-  if (provider !== 'local') {
-    form.value.endpoint = '';
-    form.value.region = providerPresets[provider].region;
-    form.value.pathStyle = providerPresets[provider].pathStyle;
-    clearCredentials();
-  }
-};
-
 const handleSave = async () => {
   if (saving.value || !canOperate(editingConfig.value ? 'edit' : 'add')) {
     return;
   }
+  saving.value = true;
   try {
     const valid = await formRef.value?.validate().catch((fields: unknown) => {
       settingsTab.value = fields && typeof fields === 'object'
@@ -488,11 +418,11 @@ const handleSave = async () => {
       ElMessage.warning('公开文件和私有文件需要使用不同的存储桶');
       return;
     }
-    saving.value = true;
     const data: StorageConfigDTO = {
       ...form.value,
       key: form.value.key.trim(),
       name: form.value.name.trim(),
+      provider: form.value.provider?.trim() || null,
       endpoint: form.value.endpoint.trim(),
       region: form.value.region.trim(),
       publicBucket: form.value.publicBucket.trim(),
@@ -516,8 +446,8 @@ const handleSave = async () => {
   }
 };
 
-const handleTest = async (row: StorageConfigRow) => {
-  if (!canOperate('test') || row.isExample || busyKey.value) {
+const handleTest = async (row: StorageConfigVO) => {
+  if (!canOperate('test') || busyKey.value) {
     return;
   }
   busyKey.value = row.key;
@@ -534,7 +464,7 @@ const handleTest = async (row: StorageConfigRow) => {
   }
 };
 
-const handleActivate = async (row: StorageConfigRow) => {
+const handleActivate = async (row: StorageConfigVO) => {
   if (!canOperate('activate') || !canSetDefault(row) || busyKey.value) {
     return;
   }
@@ -557,7 +487,7 @@ const handleActivate = async (row: StorageConfigRow) => {
   }
 };
 
-const handleDelete = async (row: StorageConfigRow) => {
+const handleDelete = async (row: StorageConfigVO) => {
   if (!canOperate('remove') || !canDelete(row) || busyKey.value) {
     return;
   }
