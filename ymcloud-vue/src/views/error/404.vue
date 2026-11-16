@@ -45,7 +45,7 @@ const handleToHome = () => {
  * 直接打开无历史记录时回到首页
  */
 const handleToBack = () => {
-  if (window.history.state?.back) {
+  if (window.history.state.position > 0) {
     router.back();
   } else {
     handleToHome();
