@@ -502,8 +502,7 @@ export type UserAcRankVO={
  */
 export type EditorCache={
   code:string,
-  language:string,
-  theme:string
+  language:string
 }
 /**
  * 评测结果

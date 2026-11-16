@@ -8,7 +8,7 @@
             v-model="selectedLanguage"
             placeholder="选择语言"
             style="width: 150px; margin-right: 10px;"
-            @change="updateLanguage"
+            @change="saveDraft"
           >
             <el-option
               v-for="item in languages"
@@ -24,25 +24,37 @@
             <el-icon><UploadFilled /></el-icon>
           </el-button>
         </x-flex>
-        <x-flex>
-          <el-tag effect="dark" size="large">主题</el-tag>
-          <el-select
-            id="theme-select"
-            aria-label="代码编辑器配色"
-            v-model="selectedTheme"
-            placeholder="选择当前主题"
-            @change="updateTheme"
-            class="theme-select"
-            style="width: 150px;"
-          >
-            <el-option
-              v-for="item in themes"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </el-select>
-        </x-flex>
+        <el-popover trigger="click" placement="bottom-end" :width="280">
+          <template #reference>
+            <el-button :icon="Setting">设置</el-button>
+          </template>
+          <el-form label-position="top" class="editor-settings">
+            <el-form-item label="主题">
+              <el-select v-model="settings.theme">
+                <el-option
+                  v-for="item in themes"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="字体大小">
+              <el-select v-model="settings.fontSize" @change="updateFontSize">
+                <el-option v-for="size in [14, 16, 18, 20]" :key="size" :label="`${size}px`" :value="size" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Tab 长度">
+              <el-select v-model="settings.tabSize">
+                <el-option v-for="size in [2, 4, 8]" :key="size" :label="`${size} 个空格`" :value="size" />
+              </el-select>
+            </el-form-item>
+            <x-flex align="center" justify="space-between" class="editor-completion">
+              <span>代码自动补全</span>
+              <el-switch v-model="settings.autoComplete" />
+            </x-flex>
+          </el-form>
+        </el-popover>
       </x-flex>
     </div>
 
@@ -56,12 +68,12 @@
         width="100%"
         @ready="onReady"
         @change="onEditorCodeChange"
-        style="font-size: 16px;"
+        :style="{ fontSize: `${settings.fontSize}px` }"
       />
     </div>
 
     <!-- 评测结果 -->
-    <div class="editor-judge" v-show="showFullScreen">
+    <div class="editor-judge" v-show="showJudgePanel">
       <el-tabs type="border-card" v-model="activeTabName" style="height: 100%;">
         <el-tab-pane label="自测输入" name="test" style="height: 100%;">
           <el-scrollbar height="100%">
@@ -87,10 +99,10 @@
                   placeholder="请输入自测输入"
                   type="textarea"
                   resize="none"
-                  size="small"
+                  class="self-test-input"
                   maxlength="1000"
                   v-model="userInput"
-                  :autosize="{ minRows: 1, maxRows: 10}"
+                  :autosize="{ minRows: 3, maxRows: 10}"
                 />
               </x-flex>
               <!-- 预期输出 -->
@@ -101,17 +113,17 @@
                   placeholder="请输入预期输出"
                   type="textarea"
                   resize="none"
-                  size="small"
+                  class="self-test-input"
                   maxlength="1000"
                   v-model="expectedOutput"
-                  :autosize="{ minRows: 1, maxRows: 10}"
+                  :autosize="{ minRows: 3, maxRows: 10}"
                 />
               </x-flex>
             </x-flex>
           </el-scrollbar>
         </el-tab-pane>
         <el-tab-pane label="运行结果" name="result" style="height: 100%;">
-          <el-scrollbar height="100%">
+          <el-scrollbar height="100%" view-class="judge-result-view">
             <div class="result-container" style="padding: 15px;" v-if="judgeResult && Object.keys(judgeResult).length>0">
               <el-alert
                   :title="judgeResult.status"
@@ -133,7 +145,7 @@
                   </x-flex>
               </el-alert>
               <x-flex vertical style="margin-top: 15px;">
-                <x-flex>
+                <x-flex v-if="isSelfTestResult">
                   <span style="flex: 1;text-align: center;">自测输入</span>
                   <el-input
                     style="flex: 10;"
@@ -144,7 +156,7 @@
                     v-model="judgeResult.input"
                   />
                 </x-flex>
-                <x-flex>
+                <x-flex v-if="isSelfTestResult">
                   <span style="flex: 1;text-align: center;">预期输出</span>
                   <el-input
                     style="flex: 10;"
@@ -155,7 +167,7 @@
                     v-model="judgeResult.expectedOutput"
                   />
                 </x-flex>
-                <x-flex>
+                <x-flex v-if="isSelfTestResult">
                   <span style="flex: 1;text-align: center;">实际输出</span>
                   <el-input
                     style="flex: 10;"
@@ -179,7 +191,7 @@
                 </x-flex>
               </x-flex>
             </div>
-            <el-empty v-else class="judge-empty" description="保存并提交之后，这里将会显示运行结果" :image-size="40" />
+            <el-empty v-else class="judge-empty" description="暂无运行结果" :image-size="64" />
           </el-scrollbar>
         </el-tab-pane>
         <el-tab-pane name="test-play" disabled>
@@ -187,7 +199,7 @@
             <el-button
               type="success"
               plain
-              @click="handSelfTestJudge"
+              @click="submitCode(true)"
               :loading="judgeLoading"
               :disabled="isSubmitDisabled"
               style="padding: 0px 10px;"
@@ -240,7 +252,7 @@
         <el-button
           type="success"
           effect="dark"
-          @click="handFullScreen"
+          @click="toggleJudgePanel"
           style="height: 40px;"
           :icon="Bug"
         >
@@ -249,7 +261,7 @@
         <el-button
           type="primary"
           effect="dark"
-          @click="handSubmitJudge"
+          @click="submitCode(false)"
           style="height: 40px;"
           :loading="judgeLoading"
           :disabled="isSubmitDisabled || !submissionAllowed"
@@ -263,7 +275,7 @@
 
 <script lang="ts">
 //import
-import { onMounted, onUnmounted, ref, watch, type PropType } from 'vue';
+import { computed, onUnmounted, nextTick, ref, watch, type PropType } from 'vue';
 import { ElMessage,ElMessageBox } from 'element-plus';
 import { TimeOutline,HardwareChipSharp,Bug } from '@vicons/ionicons5';
 import type { ProblemCaseVO,LanguageVO,EditorCache,JudgeResult } from '@/type/types';
@@ -272,32 +284,36 @@ import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import Storage from '@/utils/storage';
 import { submitJudge,testJudge,getJudgeStatus } from '@/api/api';
-
 import Codemirror from 'codemirror-editor-vue3';
-// 引入css文件
+import type { Editor } from 'codemirror';
+import { Setting } from '@element-plus/icons-vue';
+//codemirror
+//引入css文件
 import 'codemirror/lib/codemirror.css';
-
-// 引入主题 可以从 codemirror/theme/ 下引入多个
+//引入主题 可以从 codemirror/theme/ 下引入多个
 import 'codemirror/theme/idea.css';
 import "codemirror/theme/monokai.css";
 import "codemirror/theme/solarized.css";
-
-// 引入语言模式 可以从 codemirror/mode/ 下引入多个
+//引入语言模式 可以从 codemirror/mode/ 下引入多个
 import 'codemirror/mode/clike/clike.js';    //c,c++,java
 import 'codemirror/mode/python/python.js';  //python
-
-// 代码提示功能 具体语言可以从 codemirror/addon/hint/ 下引入多个
+//代码提示功能 具体语言可以从 codemirror/addon/hint/ 下引入多个
 import 'codemirror/addon/hint/show-hint.css';
 import 'codemirror/addon/hint/show-hint';
-
-// foldGutter
+//foldGutter
 import "codemirror/addon/fold/foldgutter.css";
 import "codemirror/addon/fold/foldgutter.js";
-
 import "codemirror/addon/edit/matchbrackets.js";
 import "codemirror/addon/edit/closebrackets.js";
 import "codemirror/addon/fold/brace-fold.js";
 import "codemirror/addon/fold/indent-fold.js";
+
+type EditorSettings = {
+  theme: string;
+  fontSize: number;
+  tabSize: number;
+  autoComplete: boolean;
+};
 
 export default {
   name: 'CodeMirrorEditor',
@@ -320,10 +336,6 @@ export default {
                         {name:"C++",contentType:"text/x-c++src"},
                         {name:"Java",contentType:"text/x-java"},
                         {name:"Python",contentType:"text/x-python"}]
-      },
-      theme: {
-        type: String,
-        default: "system"
       },
       problemId: {
         //problemId是题目的唯一标识，是展示displayId
@@ -372,54 +384,53 @@ export default {
       },
   },
   //声明事件
-  emits: ['update:codeValue'],
+  emits: ['update:code'],
   setup(props,{emit}) {
       const themeStore = useThemeStore();
-      const cmOptions = ref({
-          //语言及语法模式
-          mode: 'text/x-csrc',
-          theme: themeStore.isDark ? 'monokai' : 'solarized',
-          //显示行号
-          line: true,
+      const userStore = useUserStore();
+      const settings = ref(Storage.get<EditorSettings>('ymoj-editor-settings') || {
+          theme: 'system',
+          fontSize: 16,
+          tabSize: 2,
+          autoComplete: true
+      });
+      const selectedLanguage = ref(props.language);
+      const codeValue = ref(props.code);
+      let editorInstance: Editor;
+      const cmOptions = computed(() => ({
+          mode: props.languages.find(item => item.name === selectedLanguage.value)!.contentType,
+          theme: settings.value.theme === 'system'
+              ? (themeStore.isDark ? 'monokai' : 'solarized')
+              : settings.value.theme,
           lineNumbers: true,
-          //代码折叠
           foldGutter: true,
           gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
           lineWrapping: true,
-          tabSize: 2,
-          matchBrackets: true, //括号匹配
+          tabSize: settings.value.tabSize,
+          indentUnit: settings.value.tabSize,
+          matchBrackets: true,
           autoCloseBrackets: true,
-          //代码提示功能
-          hintOptions: {
-              //避免由于提示列表只有一个提示信息时，自动填充
-              completeSingle: false,
-          },
-      });
-      //获取当前用户信息
-      const userStore=useUserStore();
-      //当前编辑器配置
-      const selectedTheme=ref(props.theme);
-      watch([selectedTheme, () => themeStore.resolvedTheme], ([value]) => {
-          cmOptions.value.theme = value === 'system' ? (themeStore.isDark ? 'monokai' : 'solarized') : value;
-      }, { immediate: true });
-      const selectedLanguage=ref(props.language);
-      const codeValue = ref(props.code);
+          hintOptions: { completeSingle: false }
+      }));
+      watch(settings, value => {
+          Storage.set('ymoj-editor-settings', value);
+      }, { deep: true });
       //自测输入
       const userInput=ref('');
       //预期输出
       const expectedOutput=ref('');
-      //是否全屏
-      const showFullScreen=ref<boolean>(false);
+      //是否展示评测面板
+      const showJudgePanel=ref<boolean>(false);
       //当前tab
       const activeTabName=ref("test");
+      //区分自测与正式评测的结果展示
+      const isSelfTestResult = ref(false);
       //运行结果
       const judgeResult=ref<JudgeResult>({} as JudgeResult);
       //评测加载
       const judgeLoading=ref<boolean>(false);
       //提交禁用
       const isSubmitDisabled=ref<boolean>(true);
-      //提交id
-      const submissionId=ref<number|null>(null);
       //评测定时器
       const refreshStatus=ref<number|null>(null);
       //轮询计数器
@@ -435,85 +446,47 @@ export default {
           { label: "monokai", value: "monokai" },
       ]
 
-      //挂载组件
-      onMounted(()=>{
-        
-      })
-
       onUnmounted(()=>{
         //清除评测定时器，防止切换页面时，评测定时器还在运行
         clearTimeoutTask();
       })
 
-      const updateEditor=()=>{
-        let param:EditorCache={
-            code:codeValue.value,
-            language:selectedLanguage.value,
-            theme:selectedTheme.value,
-        }
-        //根据是否是比赛，设置缓存key
-        let key=null;
-        if(props.isContest&&props.contestId>0&&props.problemId){
-          key="Problem_"+props.contestId+"_"+props.problemId;
-        }else if(props.problemId){
-          key="Problem_"+props.problemId;
-        }
-        //设置缓存
-        if(key){
-          Storage.set<EditorCache>(key,param);
-        }
-      }
-
-      const onReady = (editor:any) => {
-        editor.on('inputRead', function (cm: any, location: any) {
-            if (/[a-zA-Z]/.test(location.text[0])) {
-                cm.showHint();
-            }
-        });
-        //根据父组件传入的参数，设置编辑器配置
-        codeValue.value=props.code;
-        const theme = themes.find(e => e.value === props.theme);
-        if(theme){
-          cmOptions.value.theme = theme.value === 'system' ? (themeStore.isDark ? 'monokai' : 'solarized') : theme.value;
-          selectedTheme.value = theme.value;
-        }
-        const lang = props.languages.find(e => e.name === props.language);
-        if(lang){
-          cmOptions.value.mode = lang.contentType;
-          selectedLanguage.value = lang.name;
-        }
-        isSubmitDisabled.value=false;
+      //按题目保存代码与语言，比赛题目使用独立缓存
+      const saveDraft = () => {
+          const key = props.isContest
+              ? `Problem_${props.contestId}_${props.problemId}`
+              : `Problem_${props.problemId}`;
+          Storage.set<EditorCache>(key, {
+              code: codeValue.value,
+              language: selectedLanguage.value
+          });
       };
 
-      const onEditorCodeChange=(newCode:string)=>{
-          emit('update:codeValue',newCode);
-          updateEditor();
-      }
+      const onReady = (editor: Editor) => {
+          editorInstance = editor;
+          editor.on('inputRead', (cm, change) => {
+              if (settings.value.autoComplete && /[a-zA-Z]/.test(change.text[0])) {
+                  cm.showHint();
+              }
+          });
+          isSubmitDisabled.value = false;
+      };
 
-      //更新主题
-      const updateTheme=(value:string)=>{
-          cmOptions.value.theme=value === 'system' ? (themeStore.isDark ? 'monokai' : 'solarized') : value;
-          updateEditor();
-      }
-      
-      //更新语言
-      const updateLanguage=(language:string)=>{
-        const lang = props.languages.find(e => e.name === language);
-        if(lang){
-          cmOptions.value.mode = lang.contentType;
-          updateEditor();
-        }
-      }
+      const onEditorCodeChange = (newCode: string) => {
+          codeValue.value = newCode;
+          emit('update:code', newCode);
+          saveDraft();
+      };
 
-      //展开/折叠状态面板
-      const handFullScreen=()=>{
-        console.log("fullscreen");
-        if(showFullScreen.value){
-          showFullScreen.value=false;
-        }else{
-          showFullScreen.value=true;
-        }
-      }
+      //字号变化后重新计算光标和行高
+      const updateFontSize = async () => {
+          await nextTick();
+          editorInstance.refresh();
+      };
+
+      const toggleJudgePanel = () => {
+          showJudgePanel.value = !showJudgePanel.value;
+      };
 
       const refreshCode=()=>{
           ElMessageBox.confirm(
@@ -556,96 +529,51 @@ export default {
           fileInput.click();
       };
 
-      //自测运行
-      const handSelfTestJudge=()=>{
-        if(!userStore.isLogin){
-          ElMessage.error("请先登录");
-          return;
-        }
-        if(codeValue.value.trim() === ""){
-          ElMessage.error("代码不能为空");
-          return;
-        }
-        if(codeValue.value.length > 65535){
-          ElMessage.error("代码长度不能超过65535");
-          return;
-        }
-        judgeLoading.value=true;
-        judgeResult.value={ status:"Submitting" } as JudgeResult;
-        //测试评测
-        let data = {
-          language: selectedLanguage.value,
-          code: codeValue.value,
-          input: userInput.value,
-          expectedOutput: expectedOutput.value
-        }
-        testJudge(data).then((res) => {
-          submissionId.value=res.data.data;
-          if(submissionId.value){
-            ElMessage({
-              type: 'success',
-              message: '提交成功',
-              plain: true
-            })
-            //开启定时获取评测结果
-            checkJudgeStatus({submissionId:submissionId.value,isTest:true});
+      //自测与正式提交共用入口校验和状态更新
+      const submitCode = async (isTest: boolean) => {
+          if (!isTest && !props.submissionAllowed) {
+              ElMessage.warning("比赛当前不可提交，请在比赛时段内提交");
+              return;
           }
-        }).catch((err) => {
-          judgeResult.value={ status:"Judging Failed" } as JudgeResult;
-          judgeLoading.value=false;
-          console.log(err);
-        })
-      }
-
-      //正式提交
-      const handSubmitJudge=()=>{
-        if (!props.submissionAllowed) {
-          ElMessage.warning("比赛当前不可提交，请在比赛时段内提交");
-          return;
-        }
-        if(!userStore.isLogin){
-          ElMessage.error("请先登录");
-          return;
-        }
-        if(codeValue.value.trim() === ""){
-          ElMessage.error("代码不能为空");
-          return;
-        }
-        if(codeValue.value.length > 65535){
-          ElMessage.error("代码长度不能超过65535");
-          return;
-        }
-        judgeLoading.value=true;
-        judgeResult.value={ status:"Submitting" } as JudgeResult;
-        //提交信息
-        let data = {
-          problemId: props.problemId,
-          language: selectedLanguage.value,
-          code: codeValue.value,
-          isContest:props.isContest,
-          contestId:props.contestId
-        };
-        //获取提交id
-        submitJudge(data).then((res) => {
-          submissionId.value=res.data.data;
-          if(submissionId.value){
-            ElMessage({
-              type: 'success',
-              message: '提交成功',
-              plain: true
-            })
-            //开启定时获取评测结果
-            checkJudgeStatus({submissionId:submissionId.value,isTest:false});
+          if (!userStore.isLogin) {
+              ElMessage.error("请先登录");
+              return;
           }
-        }).catch((err) => {
-          judgeResult.value={ status:"Submitted Failed" } as JudgeResult;
-          judgeLoading.value=false;
-          console.log(err);
-        })
-      }
+          if (codeValue.value.trim() === "") {
+              ElMessage.error("代码不能为空");
+              return;
+          }
+          if (codeValue.value.length > 65535) {
+              ElMessage.error("代码长度不能超过65535");
+              return;
+          }
+          isSelfTestResult.value = isTest;
+          activeTabName.value = "result";
+          judgeLoading.value = true;
+          judgeResult.value = { status: "Submitting" } as JudgeResult;
+          const code = {
+              language: selectedLanguage.value,
+              code: codeValue.value
+          };
+          try {
+              const response = isTest
+                  ? await testJudge({ ...code, input: userInput.value, expectedOutput: expectedOutput.value })
+                  : await submitJudge({
+                      ...code,
+                      problemId: props.problemId,
+                      isContest: props.isContest,
+                      contestId: props.contestId
+                  });
+              ElMessage.success("提交成功");
+              checkJudgeStatus({ submissionId: response.data.data, isTest });
+          } catch {
+              judgeResult.value = { status: "Submitted Failed" } as JudgeResult;
+              judgeLoading.value = false;
+          }
+      };
 
       //获取评测结果
-      const checkJudgeStatus=(params:any)=>{
+      const checkJudgeStatus=(params: { submissionId: number; isTest: boolean })=>{
         //先清理之前的定时器，防止多次轮询
         clearTimeoutTask();
         //重置轮询计数器
@@ -672,7 +600,7 @@ export default {
             }else{
               //status不为判题和排队中才表示此次判题结束
               judgeLoading.value=false;
-              showFullScreen.value=true;
+              showJudgePanel.value=true;
               activeTabName.value="result";
               clearTimeoutTask();
             }
@@ -696,25 +624,26 @@ export default {
       }
 
       return {
+          settings,
+          updateFontSize,
+          Setting,
           codeValue,
           cmOptions,
           onReady,
           activeTabName,
           onEditorCodeChange,
-          selectedTheme,
           themes,
-          updateTheme,
           selectedLanguage,
-          updateLanguage,
+          saveDraft,
           refreshCode,
           uploadCode,
-          handSelfTestJudge,
-          handSubmitJudge,
+          submitCode,
           userInput,
           expectedOutput,
-          showFullScreen,
-          handFullScreen,
+          showJudgePanel,
+          toggleJudgePanel,
           judgeResult,
+          isSelfTestResult,
           judgeLoading,
           isSubmitDisabled,
           getStatusType,
@@ -748,11 +677,31 @@ export default {
   background: var(--ym-editor-panel);
   overflow: hidden;
 }
-.editor-judge{
-  height: 40%;
+.editor-settings {
+  padding: 4px;
+}
+.editor-completion {
+  padding-top: 12px;
+  border-top: 1px solid var(--ym-editor-border);
+}
+.editor-judge {
+  height: 36%;
+  min-height: 0;
+}
+.self-test-input :deep(.el-textarea__inner) {
+  padding: 8px 12px;
+  font-family: Consolas, "PingFang SC", "Microsoft YaHei", monospace;
+  font-size: 16px;
+  line-height: 1.6;
+}
+:deep(.judge-result-view) {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 .judge-empty {
-  --el-empty-padding: 0;
+  flex: 1;
+  --el-empty-padding: 16px 0;
   --el-empty-description-margin-top: 8px;
 }
 .judge-loading{

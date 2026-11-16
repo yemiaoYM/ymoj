@@ -3,115 +3,74 @@
         <el-splitter :layout="layout" style="height: 100%;width: 100%;">
             <el-splitter-panel collapsible min="25%">
                 <!-- 题目详细 -->
-                <el-tabs v-model="activeTabName" type="border-card" @tab-click="handleTabClick" style="height: 100%;width: 100%;">
-                    <el-tab-pane label="题目详细" name="problemDetail" style="height: 100%;font-family: Consolas;">
-                        <el-scrollbar style="height: 100%;">
-                            <x-flex vertical>
-                                <el-card class="problem-card" shadow="never">
-                                    <template #header>{{ problem.title }}</template>
-                                    <div class="content-head-detail">
-                                        <x-flex vertical>
-                                            <p>题目 ID: {{ problem.problemId }}</p>
-                                            <p v-if="problem.source">来源：{{ problem.source }}</p>
-                                            <p>出题人: 
-                                            <el-link @click="handToUserInfo(problem.authorUsername)" underline="never" style="font-size: 16px;">
+                <el-tabs class="problem-tabs" v-model="activeTabName" type="border-card" @tab-click="handleTabClick" style="height: 100%;width: 100%;">
+                    <el-tab-pane label="题目详细" name="problemDetail" style="height: 100%;">
+                        <el-scrollbar always style="height: 100%;">
+                            <article class="problem-statement">
+                                <header class="problem-heading">
+                                    <h1>{{ problem.title }}</h1>
+                                    <x-flex vertical :size="12" class="problem-meta">
+                                        <p>题目 ID：{{ problem.problemId }}</p>
+                                        <p>
+                                            出题人：
+                                            <el-link @click="handToUserInfo(problem.authorUsername)" underline="never">
                                                 {{ problem.authorUsername }}
                                             </el-link>
-                                            </p>
-                                            <p>
-                                                <el-tag type="warning" style="font-size: 14px;">
-                                                    时间限制
-                                                </el-tag>
-                                                C/C++ {{ formatSubmissionTime(problem.timeLimit)}}, 其他语言 {{ formatSubmissionTime(2*problem.timeLimit) }}
-                                            </p>
-                                            <p>
-                                                <el-tag style="font-size: 14px;">空间限制</el-tag> 
-                                                C/C++ {{ formatSubmissionMemory(problem.memoryLimit)}}, 其他语言 {{ formatSubmissionMemory(2*problem.memoryLimit) }}
-                                            </p>
+                                        </p>
+                                        <p>
+                                            <el-tag type="warning">时间限制</el-tag>
+                                            C/C++ {{ formatSubmissionTime(problem.timeLimit) }}，其他语言 {{ formatSubmissionTime(2 * problem.timeLimit) }}
+                                        </p>
+                                        <p>
+                                            <el-tag>空间限制</el-tag>
+                                            C/C++ {{ formatSubmissionMemory(problem.memoryLimit) }}，其他语言 {{ formatSubmissionMemory(2 * problem.memoryLimit) }}
+                                        </p>
+                                    </x-flex>
+                                </header>
+                                <section class="statement-section">
+                                    <h2>题目描述</h2>
+                                    <MarkdownPreview :content="problem.content" />
+                                </section>
+                                <section class="statement-section">
+                                    <h2>输入描述</h2>
+                                    <MarkdownPreview :content="problem.input" />
+                                </section>
+                                <section class="statement-section">
+                                    <h2>输出描述</h2>
+                                    <MarkdownPreview :content="problem.output" />
+                                </section>
+                                <section class="statement-section">
+                                    <h2>测试用例</h2>
+                                    <section v-for="(test, index) in problem.problemCaseList" :key="index" class="sample-case">
+                                        <h3>样例 {{ index + 1 }}</h3>
+                                        <x-flex vertical :size="16">
+                                            <div class="sample-block">
+                                                <x-flex align="center" justify="space-between" class="sample-label">
+                                                    <h4>输入</h4>
+                                                    <el-button text :icon="DocumentCopy" @click="copyText(test.input)">复制</el-button>
+                                                </x-flex>
+                                                <el-scrollbar max-height="360px">
+                                                    <pre class="sample-data" v-text="test.input" />
+                                                </el-scrollbar>
+                                            </div>
+                                            <div class="sample-block">
+                                                <x-flex align="center" justify="space-between" class="sample-label">
+                                                    <h4>输出</h4>
+                                                    <el-button text :icon="DocumentCopy" @click="copyText(test.output)">复制</el-button>
+                                                </x-flex>
+                                                <el-scrollbar max-height="360px">
+                                                    <pre class="sample-data" v-text="test.output" />
+                                                </el-scrollbar>
+                                            </div>
+                                            <div v-if="test.note" class="sample-note">
+                                                <h4>说明</h4>
+                                                <p v-text="test.note" />
+                                            </div>
                                         </x-flex>
-                                    </div>
-                                </el-card>
-                                <el-card class="problem-card" shadow="never">
-                                    <template #header>题目描述</template>
-                                    <MarkdownPreview :content="problem.content"/>
-                                </el-card>
-                                <el-card class="problem-card" shadow="never">
-                                    <template #header>输入描述</template>
-                                    <MarkdownPreview :content="problem.input"/>
-                                </el-card>
-                                <el-card class="problem-card" shadow="never">
-                                    <template #header>输出描述</template>
-                                    <MarkdownPreview :content="problem.output"/>
-                                </el-card>
-                                <el-card class="problem-card" shadow="never">
-                                    <template #header>测试用例</template>
-                                    <el-collapse class="problem-cases" expand-icon-position="left">
-                                        <el-collapse-item
-                                            v-for="(test, index) in problem.problemCaseList"
-                                            :key="index"
-                                            :name="index"
-                                            :title="`测试用例${index+1}`"
-                                        >
-                                            <x-flex vertical>
-                                                <x-flex>
-                                                    <h4>
-                                                        用例输入
-                                                        <el-button 
-                                                            class="copy-btn"
-                                                            plain 
-                                                            @click="copyText(test.input)"
-                                                        >
-                                                            <el-icon size="16"><DocumentCopy /></el-icon>
-                                                        </el-button>
-                                                    </h4>
-                                                    <el-input
-                                                        placeholder="用例输入"
-                                                        type="textarea"
-                                                        size="small"
-                                                        autosize
-                                                        readonly
-                                                        resize="none"
-                                                        :model-value="test.input"
-                                                    />
-                                                </x-flex>
-                                                <x-flex>
-                                                    <h4>
-                                                        用例输出
-                                                        <el-button 
-                                                            class="copy-btn" 
-                                                            plain 
-                                                            @click="copyText(test.output)"
-                                                        >
-                                                            <el-icon size="16"><DocumentCopy /></el-icon>
-                                                        </el-button>
-                                                    </h4>
-                                                    <el-input
-                                                        placeholder="用例输出"
-                                                        type="textarea"
-                                                        size="small"
-                                                        autosize
-                                                        readonly
-                                                        resize="none"
-                                                        :model-value="test.output"
-                                                    />
-                                                </x-flex>
-                                                <x-flex>
-                                                    <h4>备注</h4>
-                                                    <el-input
-                                                        placeholder="备注"
-                                                        type="textarea"
-                                                        size="small"
-                                                        autosize
-                                                        readonly
-                                                        resize="none"
-                                                        :model-value="test.note"
-                                                    />
-                                                </x-flex>
-                                            </x-flex>
-                                        </el-collapse-item>
-                                    </el-collapse>
-                                </el-card>
-                            </x-flex>
+                                    </section>
+                                </section>
+                                <footer v-if="problem.source" class="problem-source">来源：{{ problem.source }}</footer>
+                            </article>
                         </el-scrollbar> 
                     </el-tab-pane>
                     <!-- 用户当前题目提交记录 -->
@@ -122,7 +81,7 @@
                             empty-text="暂无提交记录"
                             highlight-current-row
                             highlight-hover-row
-                            style="font-family: Consolas;"
+                            class="submission-table"
                         >
                             <el-table-column prop="createdTime" label="提交时间" width="200" align="center">
                                 <template #default="{ row }">
@@ -177,7 +136,6 @@
                     v-if="!problemLoading && Object.keys(problem).length>0"
                     v-model:code="code"
                     :language="language"
-                    :theme="theme"
                     :is-contest="isContest"
                     :submission-allowed="submissionAllowed"
                     :contest-id="contestId"
@@ -204,8 +162,6 @@ import { getStatusType,formatSubmissionMemory,formatSubmissionTime,formatRelativ
 import useClipboard from 'vue-clipboard3';
 const MarkdownPreview = defineAsyncComponent(() => import('@/components/common/markdown/MarkdownPreview.vue'));
 const CodeMirror = defineAsyncComponent(() => import('@/components/common/Codemirror.vue'));
-
-
 
 //data
 const route=useRoute();
@@ -263,7 +219,6 @@ const pageSize=ref<number>(10);
 const total=ref<number>(0);
 const problemLoading=ref<boolean>(true);
 const language=ref<string>('C++');
-const theme=ref<string>('system');
 
 //methods
 //监听屏幕变化
@@ -372,7 +327,6 @@ const handleGetCache=()=>{
     if(param){
         code.value=param.code;
         language.value=param.language;
-        theme.value=param.theme;
     }
 }
 const handleCurrentChange=(val:number)=>{
@@ -410,48 +364,107 @@ const copyText = async (text: string) => {
     width: 100%;
     height: calc(100vh - 60px);
 }
-.content-head-detail{
-    border: 1px solid var(--ym-sample-border);
-    background-color: var(--ym-code-surface);
-    border-radius: 8px;
-    border-left: 3px solid var(--ym-sample-accent);
+.problem-tabs :deep(.el-tabs__content) {
+    padding: 10px 0 0 15px;
+}
+.problem-statement {
     padding: 20px;
-}
-.problem-card {
-    border-color: var(--ym-problem-border);
-    border-radius: 3px;
     color: var(--ym-problem-text);
-    line-height: 1.6;
+    font-size: 16px;
+    line-height: 1.8;
 }
-:deep(.problem-card > .el-card__header) {
-    padding: 19px 24px 20px;
-    border-bottom: 0;
+.problem-statement,
+.sample-data,
+.submission-table {
+    font-family: Consolas, "PingFang SC", "Microsoft YaHei", monospace;
+}
+.problem-heading h1 {
+    margin-bottom: 20px;
     color: var(--ym-problem-link-hover);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+.problem-meta {
+    padding: 16px;
+    border: 1px solid var(--ym-sample-border);
+    border-left: 3px solid var(--ym-sample-accent);
+    border-radius: 8px;
+    background: var(--ym-code-surface);
+    color: var(--ym-problem-text);
+}
+.problem-meta :deep(.el-tag) {
+    margin-right: 8px;
+    font-size: 14px;
+}
+.problem-meta :deep(.el-link) {
+    font-size: inherit;
+}
+.statement-section {
+    margin-top: 32px;
+}
+.statement-section h2 {
+    margin-bottom: 16px;
+    color: var(--ym-problem-link-hover);
+    font-size: 20px;
+    font-weight: 600;
+}
+.statement-section :deep(.md-editor-preview) {
+    padding: 0;
+    font-size: 16px;
+    line-height: 1.8;
+}
+.statement-section :deep(.md-editor-preview img) {
+    max-width: 100%;
+    height: auto;
+}
+.sample-case + .sample-case {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--ym-problem-border);
+}
+.sample-case h3 {
+    margin-bottom: 12px;
     font-size: 18px;
     font-weight: 500;
 }
-:deep(.problem-card > .el-card__body) {
-    padding: 0 24px 20px;
+.sample-block {
+    min-width: 0;
+    background: var(--ym-code-surface);
+}
+.sample-label {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--ym-sample-border);
+}
+.sample-label h4,
+.sample-note h4 {
     font-size: 16px;
+    font-weight: 500;
 }
-.problem-cases {
-    border: 0;
-    --el-collapse-header-height: 24px;
+.sample-data {
+    width: max-content;
+    min-width: 100%;
+    padding: 12px 16px;
+    font-size: 16px;
+    line-height: 1.7;
+    white-space: pre;
+    tab-size: 4;
 }
-:deep(.problem-cases .el-collapse-item__header),
-:deep(.problem-cases .el-collapse-item__wrap) {
-    border-bottom: 0;
+.sample-note p {
+    margin-top: 8px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
-:deep(.problem-cases .el-collapse-item + .el-collapse-item) {
-    margin-top: 16px;
+.problem-source {
+    margin-top: 24px;
     padding-top: 16px;
     border-top: 1px solid var(--ym-problem-border);
+    color: var(--el-text-color-secondary);
+    font-size: 14px;
 }
-:deep(.problem-cases .el-collapse-item__content) {
-    padding: 16px 0 0;
-}
-/* 隐藏 el-scrollbar 的滚动条（但内容仍可滚动） */
-:deep(.el-scrollbar__bar) {
-  display: none !important;
+@media (max-width: 640px) {
+    .problem-statement {
+        padding: 20px 16px;
+    }
 }
 </style>
