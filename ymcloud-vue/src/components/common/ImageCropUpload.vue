@@ -3,6 +3,7 @@
     ref="uploadRef"
     accept="image/jpeg,image/png,image/webp"
     :auto-upload="false"
+    :drag="drag"
     :show-file-list="false"
     :disabled="disabled || reading || visible"
     :on-change="onSelectImage"
@@ -79,11 +80,13 @@ import 'cropperjs/dist/cropper.css';
 // 只处理本地选图和裁剪，emit PNG Blob；调用方负责上传、重试和业务保存。
 const props = withDefaults(defineProps<{
   disabled?: boolean;
+  drag?: boolean;
   aspectRatio?: [number, number] | null;
   outputWidth?: number;
   maxSizeMb?: number;
 }>(), {
   disabled: false,
+  drag: false,
   aspectRatio: () => [16, 9],
   outputWidth: 1600,
   maxSizeMb: 5,
@@ -170,7 +173,7 @@ function handleInitCropper() {
   }
   cropper = new Cropper(imageRef.value, {
     aspectRatio: ratio.value,
-    viewMode: 0,
+    viewMode: 1,
     dragMode: 'move',
     autoCropArea: props.aspectRatio ? 0.8 : 1,
     preview: previewRef.value,

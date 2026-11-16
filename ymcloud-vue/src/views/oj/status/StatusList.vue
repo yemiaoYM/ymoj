@@ -161,7 +161,7 @@
           <el-pagination
             background
             layout="total, sizes, prev, pager, next"
-            :page-sizes="[10, 15, 20]"
+            :page-sizes="[20, 25, 30]"
             :total="total"
             :disabled="loading"
             :page-size="pageSize"
@@ -206,7 +206,7 @@ const contestId = ref<number>(0);
 const loading = ref<boolean>(false);
 const tableData = ref<SubmissionTableVO[]>([]);
 const pageNo = ref<number>(1);
-const pageSize = ref<number>(15);
+const pageSize = ref<number>(20);
 const total = ref<number>(0);
 
 const isMine = ref<boolean>(false);
@@ -333,7 +333,7 @@ const pushRouter = async (changes: Partial<SubmissionQuery> = {}) => {
   await getData(params, target.fullPath);
 };
 const reset = () => {
-  void pushRouter({ isMine: false, status: null, problemKey: null, username: null, pageNo: 1, pageSize: 15 });
+  void pushRouter({ isMine: false, status: null, problemKey: null, username: null, pageNo: 1, pageSize: 20 });
 };
 //刷新、前进后退及比赛路由复用都通过同一查询入口
 watch(
@@ -351,7 +351,7 @@ watch(
       problemKey: (query.problemKey as string) || null,
       username: (query.username as string) || null,
       pageNo: Number(query.pageNo) || 1,
-      pageSize: Number(query.pageSize) || 15,
+      pageSize: Number(query.pageSize) || 20,
     }, path);
   },
   { immediate: true }

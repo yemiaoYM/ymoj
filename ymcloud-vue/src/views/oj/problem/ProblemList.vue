@@ -122,7 +122,7 @@
         <!-- 分页条 -->
         <div class="page">
           <el-pagination :page-size="query.pageSize" :current-page="query.pageNo" :total="totalPage"
-            :page-sizes="[15, 20, 25]" background layout="total, sizes, prev, pager, next"
+            :page-sizes="[20, 25, 30]" background layout="total, sizes, prev, pager, next"
             @update:current-page="handlePageChange" @update:page-size="handlePageSizeChange"
             style="margin-top: 10px;" />
         </div>
@@ -189,7 +189,7 @@ const tagsList = ref<Tag[]>([] as Tag[]);
 
 const query = ref<ProblemListQuery>({
   pageNo: 1,
-  pageSize: 15,
+  pageSize: 20,
   keyword: '',
   difficulty: -1,
   tagIds: [],
@@ -208,7 +208,7 @@ const init = () => {
   //获取query参数
   const queryParams = route.query;
   query.value.pageNo = Number(queryParams.pageNo) || 1;
-  query.value.pageSize = Number(queryParams.pageSize) || 15;
+  query.value.pageSize = Number(queryParams.pageSize) || 20;
   query.value.keyword = queryParams.keyword as string || '';
   query.value.difficulty = Number(queryParams.difficulty) || -1;
   const tagIds = [queryParams.tagIds].flat().join(',').split(',').map(Number);
@@ -301,7 +301,7 @@ const pushRouter = () => {
 //重置查询值
 const reset = () => {
   query.value.pageNo = 1;
-  query.value.pageSize = 15;
+  query.value.pageSize = 20;
   query.value.keyword = '';
   query.value.difficulty = -1;
   query.value.tagIds = [];

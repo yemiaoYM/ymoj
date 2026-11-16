@@ -8,23 +8,19 @@
                 :size="150" 
             />
         </div>
-        <el-upload
-            class="upload-demo"
-            drag
-            :action="uploadUrl" 
-            :headers="headers"
-            :disabled="loadingAvatar"
-            method="post"
-            :on-success="handleSuccess" 
-            :on-error="handleError"    
-            :before-upload="handleSelectFile"
-            :show-file-list="false"
+        <div class="upload-demo">
+            <ImageCropUpload
+                drag
+                :aspect-ratio="[1, 1]"
+                :output-width="300"
+                :max-size-mb="2"
+                :disabled="loadingAvatar"
+                @cropped="handleUploadAvatar"
             >
-            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-            <div class="el-upload__text">
-            将头像拖放到此处，或单击此处
-            </div>
-        </el-upload>
+                <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                <div class="el-upload__text">将头像拖放到此处，或单击此处</div>
+            </ImageCropUpload>
+        </div>
         <div class="section-title">资料设置</div>
         <el-form :model="formProfile" :disabled="loadingSaveBtn" label-position="top">
             <el-row :gutter="30" justify="space-around">
@@ -75,11 +71,14 @@
 
 <script setup lang="ts">
 //import
-import { computed, onMounted, ref, defineAsyncComponent } from 'vue';
+import { onMounted, ref, defineAsyncComponent } from 'vue';
 import { useUserStore } from '@/stores/user';
 import { updateUserProfile } from '@/api/api';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
-import { ElMessage, ElNotification } from 'element-plus';
+import { ElMessage } from 'element-plus';
+import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
+import { uploadAvatar } from '@/api/user';
+
 const Avatar=defineAsyncComponent(() => import('@/components/common/Avatar.vue'));
 const MarkdownEidt=defineAsyncComponent(() => import('@/components/common/markdown/MarkdownEidt.vue'));
 
@@ -104,15 +103,8 @@ const formProfile=ref<FormProfile>({
     avatar: '',
 });
 const { pending: loadingSaveBtn, beforeChange: saveProfile } = useAsyncChange();
-const { pending: loadingAvatar, beforeChange: refreshAvatar } = useAsyncChange();
+const { pending: loadingAvatar, beforeChange: saveAvatar } = useAsyncChange();
 const signatureEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
-//后端接口地址
-const uploadUrl = '/api/user/upload-avatar';  
-const headers=computed(() => ({
-    Authorization : userStore.token
-}));
-
-
 //methods
 onMounted(()=>{
     const userInfo=userStore.user;
@@ -122,49 +114,19 @@ onMounted(()=>{
 })
 
 
-const checkFileType=(file: File)=> {
-  if (!/\.(gif|jpg|jpeg|png|bmp|webp|GIF|JPG|PNG|WEBP)$/.test(file.name)) {
-    ElNotification({
-      title: "文件类型不支持",
-      message: file.name + "不是正确格式的文件",
-      type: 'warning',
-    });
-    return false;
-  }
-  return true;
-}
-const checkFileSize=(file: File)=>{
-  // max size is 2MB
-  if (file.size > 2 * 1024 * 1024) {
-    ElNotification({
-      title: "文件大小超过限制2Mb",
-      message: file.name + "大小超过2Mb",
-      type: 'warning',
-    });
-    return false;
-  }
-  return true;
-}
-const handleSelectFile=(file: File)=>{
-  return checkFileType(file) && checkFileSize(file);
-}
-//上传成功回调
-const handleSuccess = async (response: { code: number; msg: string }) => {
-    if (response.code !== 200) {
-        ElMessage.error(response.msg);
-        return;
-    }
-    await refreshAvatar(async () => {
+/**
+ * 确认裁剪后上传头像，成功后刷新用户资料
+ * @param file 正方形裁剪后的 PNG 图片
+ */
+const handleUploadAvatar = async (file: Blob) => {
+    await saveAvatar(async () => {
+        const response = await uploadAvatar(file);
         await userStore.getUserInfo(true);
         if (userStore.user) {
             formProfile.value.avatar = userStore.user.avatar;
-            ElMessage.success(response.msg);
+            ElMessage.success(response.data.msg);
         }
     });
-};
-//上传失败回调
-const handleError = () => {
-  ElMessage.error("上传失败");
 };
 //更新用户信息
 const handUpdateUserInfo=async ()=>{
@@ -189,6 +151,7 @@ const handUpdateUserInfo=async ()=>{
 .user-info-box{
     .upload-demo{
         width: 320px;
+        max-width: 100%;
         margin: 0 auto;
         .el-icon--upload{
             color: var(--ym-link);
