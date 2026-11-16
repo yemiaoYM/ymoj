@@ -1,242 +1,154 @@
 <template>
-  <div class="wscn-http404-container">
-    <div class="wscn-http404">
-      <div class="pic-404">
-        <img class="pic-404__parent" src="@/assets/404_images/404.png" alt="404">
-        <img class="pic-404__child left" src="@/assets/404_images/404_cloud.png" alt="404">
-        <img class="pic-404__child mid" src="@/assets/404_images/404_cloud.png" alt="404">
-        <img class="pic-404__child right" src="@/assets/404_images/404_cloud.png" alt="404">
-      </div>
-      <div class="bullshit">
-        <div class="bullshit__oops">
-          404错误!
-        </div>
-        <div class="bullshit__headline">
-          找不到网页！
-        </div>
-        <div class="bullshit__info">
-          对不起，您正在寻找的页面不存在。尝试检查URL的错误，然后按浏览器上的刷新按钮或尝试在我们的应用程序中找到其他内容。
-        </div>
-        <x-flex class="bullshit__return-home">
-          <el-button style="width: 120px;" size="large" @click="handleToHome">
-            <el-icon size="15" style="margin-right: 5px;"><HomeFilled /></el-icon>
-            回到主页
-          </el-button>
-          <el-button style="width: 120px;" type="primary" size="large" @click="handleToBack">
-            <el-icon size="15" style="margin-right: 5px;"><Back /></el-icon>
-            返回
-          </el-button>
-        </x-flex>
-      </div>
-    </div>
-  </div>
+  <main class="not-found-page">
+    <svg class="error-art" viewBox="0 0 480 280" fill="none" aria-hidden="true">
+      <path d="M78 244C157 237 317 237 402 244" class="art-ground" />
+      <g class="art-numbers">
+        <path d="M116 87L69 164H132M119 126V210" />
+        <path d="M372 87L325 164H388M375 126V210" />
+      </g>
+      <path d="M189 238C167 223 174 205 154 199M291 238C317 222 306 205 326 199" class="art-trail" />
+      <g transform="rotate(-8 233 159)">
+        <path d="M242 75C210 75 207 88 209 110L211 124C212 137 206 143 191 147C208 150 214 157 213 170L211 188C209 210 221 218 248 216" class="art-character" />
+        <path d="M223 115L225 123M245 113L247 121" class="art-face" />
+        <path d="M237 136L245 134" class="art-detail" />
+        <path d="M211 211L202 235L187 235M239 217L249 235L263 235" class="art-detail" />
+        <path d="M220 169L244 179M258 162L277 150" class="art-detail" />
+        <path d="M244 154L263 160L282 152L278 193L259 201L240 194Z" class="art-paper" />
+        <path d="M263 160L259 201M250 170L254 172M267 180L274 175" class="art-map" />
+      </g>
+      <path d="M275 64C282 57 293 61 292 69C292 75 283 76 285 84M286 94V95" class="art-question" />
+      <path d="M145 61L152 69M157 51L159 62" class="art-detail art-small" />
+    </svg>
+    <h1>页面走丢了</h1>
+    <x-flex class="error-actions" justify="center" :size="12">
+      <el-button type="primary" size="large" :icon="HomeFilled" @click="handleToHome">回到首页</el-button>
+      <el-button size="large" :icon="Back" @click="handleToBack">返回上一页</el-button>
+    </x-flex>
+  </main>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router';
+import { HomeFilled, Back } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const route = useRoute();
 
-//回到首页
+/**
+ * 返回当前端对应的首页
+ */
 const handleToHome = () => {
-  if (route.path.startsWith('/admin')) {
-    //管理端返回管理首页
-    router.push('/admin');
-  } else {
-    //客户端返回客户端首页
-    router.push('/');
-  }
-}
-//返回上一页
+  router.push(route.path.startsWith('/admin') ? '/admin' : '/');
+};
+
+/**
+ * 直接打开无历史记录时回到首页
+ */
 const handleToBack = () => {
-  router.back();
-}
+  if (window.history.state?.back) {
+    router.back();
+  } else {
+    handleToHome();
+  }
+};
 </script>
 
 <style scoped>
-.wscn-http404-container{
-  transform: translate(-50%,-50%);
-  position: absolute;
-  top: 40%;
-  left: 50%;
+.not-found-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  padding: 48px 24px;
+  text-align: center;
+  background: var(--el-bg-color-page);
 }
-.wscn-http404 {
-  position: relative;
-  width: 1200px;
-  padding: 0 50px;
-  overflow: hidden;
-}
-.pic-404 {
-  position: relative;
-  float: left;
-  width: 600px;
-  overflow: hidden;
-}
-.pic-404__parent {
+
+.error-art {
+  display: block;
   width: 100%;
+  max-width: 480px;
+  margin: 0 auto 28px;
+  flex-shrink: 0;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.pic-404__child {
-  position: absolute;
+
+.art-ground {
+  stroke: var(--el-border-color);
+  stroke-width: 1.5;
 }
-.pic-404__child.left {
-  width: 80px;
-  top: 17px;
-  left: 220px;
-  opacity: 0;
-  animation-name: cloudLeft;
-  animation-duration: 2s;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-  animation-delay: 1s;
+
+.art-numbers {
+  stroke: var(--el-color-primary-light-7);
+  stroke-width: 17;
 }
-.pic-404__child.mid {
-  width: 46px;
-  top: 10px;
-  left: 420px;
-  opacity: 0;
-  animation-name: cloudMid;
-  animation-duration: 2s;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-  animation-delay: 1.2s;
+
+.art-character {
+  stroke: var(--el-color-primary);
+  stroke-width: 15;
 }
-.pic-404__child.right {
-  width: 62px;
-  top: 100px;
-  left: 500px;
-  opacity: 0;
-  animation-name: cloudRight;
-  animation-duration: 2s;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-  animation-delay: 1s;
+
+.art-face {
+  stroke: var(--el-text-color-primary);
+  stroke-width: 3;
 }
-@keyframes cloudLeft {
-  0% {
-    top: 17px;
-    left: 220px;
-    opacity: 0;
-  }
-  20% {
-    top: 33px;
-    left: 188px;
-    opacity: 1;
-  }
-  80% {
-    top: 81px;
-    left: 92px;
-    opacity: 1;
-  }
-  100% {
-    top: 97px;
-    left: 60px;
-    opacity: 0;
-  }
+
+.art-detail {
+  stroke: var(--el-text-color-primary);
+  stroke-width: 2.5;
 }
-@keyframes cloudMid {
-  0% {
-    top: 10px;
-    left: 420px;
-    opacity: 0;
-  }
-  20% {
-    top: 40px;
-    left: 360px;
-    opacity: 1;
-  }
-  70% {
-    top: 130px;
-    left: 180px;
-    opacity: 1;
-  }
-  100% {
-    top: 160px;
-    left: 120px;
-    opacity: 0;
-  }
+
+.art-paper {
+  fill: var(--el-bg-color);
+  stroke: var(--el-text-color-primary);
+  stroke-width: 2;
 }
-@keyframes cloudRight {
-  0% {
-    top: 100px;
-    left: 500px;
-    opacity: 0;
+
+.art-map {
+  stroke: var(--el-color-primary);
+  stroke-width: 1.5;
+}
+
+.art-question {
+  stroke: var(--el-color-primary);
+  stroke-width: 2.5;
+}
+
+.art-trail {
+  stroke: var(--el-text-color-placeholder);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 7;
+}
+
+.art-small {
+  opacity: 0.35;
+}
+
+h1 {
+  color: var(--el-text-color-primary);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.error-actions {
+  margin-top: 28px;
+}
+
+.error-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+@media (max-width: 480px) {
+  .error-art {
+    margin-bottom: 20px;
   }
-  20% {
-    top: 120px;
-    left: 460px;
-    opacity: 1;
-  }
-  80% {
-    top: 180px;
-    left: 340px;
-    opacity: 1;
-  }
-  100% {
-    top: 200px;
-    left: 300px;
-    opacity: 0;
-  }
-}
-.bullshit {
-  position: relative;
-  float: left;
-  width: 300px;
-  padding: 30px 0;
-  overflow: hidden;
-}
-.bullshit__oops {
-  font-size: 32px;
-  font-weight: bold;
-  line-height: 40px;
-  color: var(--ym-error-link);
-  opacity: 0;
-  margin-bottom: 20px;
-  animation-name: slideUp;
-  animation-duration: 0.5s;
-  animation-fill-mode: forwards;
-}
-.bullshit__headline {
-  font-size: 20px;
-  line-height: 24px;
-  color: var(--ym-error-heading);
-  font-weight: bold;
-  opacity: 0;
-  margin-bottom: 10px;
-  animation-name: slideUp;
-  animation-duration: 0.5s;
-  animation-delay: 0.1s;
-  animation-fill-mode: forwards;
-}
-.bullshit__info {
-  font-size: 13px;
-  line-height: 21px;
-  color: var(--ym-error-description);
-  opacity: 0;
-  margin-bottom: 30px;
-  animation-name: slideUp;
-  animation-duration: 0.5s;
-  animation-delay: 0.2s;
-  animation-fill-mode: forwards;
-}
-.bullshit__return-home {
-  /* display: block; */
-  /* float: left; */
-  width: 350px;
-  opacity: 0;
-  animation-name: slideUp;
-  animation-duration: 0.5s;
-  animation-delay: 0.3s;
-  animation-fill-mode: forwards;
-}
-@keyframes slideUp {
-  0% {
-    transform: translateY(60px);
-    opacity: 0;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
+
+  h1 {
+    font-size: 20px;
   }
 }
 </style>

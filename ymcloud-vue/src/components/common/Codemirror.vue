@@ -735,7 +735,6 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 8px;
   padding: 10px;
   box-sizing: border-box;
   border: 1px solid var(--ym-editor-border);
@@ -747,7 +746,6 @@ export default {
   display: flex;
   flex-direction: column;
   background: var(--ym-editor-panel);
-  border-radius: 8px;
   overflow: hidden;
 }
 .editor-judge{

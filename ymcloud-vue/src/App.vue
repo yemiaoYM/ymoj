@@ -2,26 +2,7 @@
   <div>
     <el-config-provider :message="messageConfig" :locale="zhCn">
       <router-view />
-      <div v-if="appStore.initialLoadError" class="page-state">
-        <el-card class="page-state-card" shadow="never">
-          <el-result
-            icon="warning"
-            title="页面加载失败"
-            sub-title="暂时无法连接服务，请稍后重试。"
-          >
-            <template #extra>
-              <el-button
-                type="primary"
-                :icon="Refresh"
-                :loading="appStore.initialLoading"
-                @click="handleRetry"
-              >
-                重新加载
-              </el-button>
-            </template>
-          </el-result>
-        </el-card>
-      </div>
+      <LoadError v-if="appStore.initialLoadError" />
     </el-config-provider>
   </div>
 </template>
@@ -30,7 +11,7 @@
 import { onMounted, nextTick, reactive, watch } from "vue";
 import { LOGO, MOTTO } from "@/constants/logo";
 import zhCn from "element-plus/dist/locale/zh-cn.mjs";
-import { Refresh } from "@element-plus/icons-vue";
+import LoadError from "@/views/error/LoadError.vue";
 import { useRouter } from "vue-router";
 import { useAppStore } from "@/stores/app";
 import { useThemeStore } from "@/stores/theme";
@@ -41,7 +22,7 @@ const appStore = useAppStore();
 const userStore = useUserStore();
 useThemeStore();
 
-// 会话失效后由页面导航回登录页，Store 只清理身份
+//会话失效后由页面导航回登录页，Store 只清理身份
 watch(() => userStore.sessionExpired, async expired => {
   const route = router.currentRoute.value;
   if (expired && route.meta.requireLogin) {
@@ -56,20 +37,6 @@ const messageConfig = reactive({
   plain: true,
   placement: "top",
 });
-
-//methods
-const handleRetry = async () => {
-  if (appStore.initialLoading) {
-    return;
-  }
-  try {
-    const path = appStore.retryPath
-      || window.location.pathname + window.location.search + window.location.hash;
-    await router.replace(path);
-  } catch (e) {
-    console.error(e);
-  }
-};
 
 const removeLoader = () => {
   document.getElementById("app-loader")?.remove();
@@ -94,22 +61,6 @@ onMounted(async () => {
 <style src="@/assets/styles/content-theme.css"></style>
 
 <style>
-.page-state {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: var(--el-fill-color-light);
-}
-
-.page-state-card {
-  width: 100%;
-  max-width: 520px;
-}
-
 *,
 *::before,
 *::after {
