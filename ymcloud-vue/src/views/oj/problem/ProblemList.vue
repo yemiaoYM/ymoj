@@ -168,9 +168,10 @@ import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
 import { useRouter, useRoute } from 'vue-router';
 import { computed, onMounted, ref, watch } from 'vue';
 import { MagicStick, Check, Close, Refresh, Search } from '@element-plus/icons-vue';
-import type { Tag, ProblemTableVO } from '@/type/types';
-import { getTagsList, getProblemTableList, getRandomProblem } from '@/api/api';
-import type { ProblemListQuery } from '@/api/api';
+import type { Tag } from '@/types/problem/tag';
+import type { ProblemTableVO, ProblemListQuery } from '@/types/problem';
+import { getTagsList } from '@/api/problem/tag';
+import { getProblemTableList, getRandomProblem } from '@/api/problem';
 
 //data
 const route = useRoute();

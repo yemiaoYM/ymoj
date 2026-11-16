@@ -140,7 +140,7 @@
                     :submission-allowed="submissionAllowed"
                     :contest-id="contestId"
                     :problem-id="problem.problemId"
-                    :problem-case-list="problem.problemCaseList"
+                    :problem-case-list="problem.problemCaseList ?? []"
                     :languages="problem.languageList"
                     :accepted="problem.accepted"
                 />
@@ -155,9 +155,12 @@ import { onMounted, ref, onBeforeUnmount, defineAsyncComponent, computed } from 
 import { useRoute, useRouter } from 'vue-router';
 import { DocumentCopy } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
-import type { ProblemVO, SubmissionTableVO,EditorCache } from '@/type/types';
+import type { ProblemVO, EditorCache } from '@/types/problem';
+import type { SubmissionTableVO } from '@/types/submission';
+import { getProblemDetail } from '@/api/problem';
+import { getProblemSubmissionList } from '@/api/submission';
+import { getContestProblemInfo, getContestProblemSubmissionList } from '@/api/contest';
 import Storage from '@/utils/storage';
-import { getProblemDetail,getProblemSubmissionList,getContestProblemInfo,getContestProblemSubmissionList } from '@/api/api';
 import { getStatusType,formatSubmissionMemory,formatSubmissionTime,formatRelativeTime } from '@/utils/utils';
 import useClipboard from 'vue-clipboard3';
 const MarkdownPreview = defineAsyncComponent(() => import('@/components/common/markdown/MarkdownPreview.vue'));

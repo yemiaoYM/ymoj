@@ -245,9 +245,9 @@ import {
   getRoleAuthOptions,
   getRoleAuthIds,
   updateRoleAuths,
-} from '@/api/rbac';
+} from '@/api/system/rbac';
+import type { RoleVO, RoleDTO, RolePageQuery, AuthTreeNode } from '@/types/system/rbac';
 import { buildAuthTree } from '@/utils/rbac';
-import type { RoleVO, RoleDTO, RolePageQuery, AuthTreeNode } from '@/type/rbac';
 
 //data
 const userStore = useUserStore();

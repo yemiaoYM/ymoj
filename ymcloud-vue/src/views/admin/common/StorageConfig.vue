@@ -265,7 +265,7 @@ import {
   testStorageConfig,
   updateStorageConfig,
 } from '@/api/storage';
-import type { StorageConfigDTO, StorageConfigVO, StorageProvider } from '@/type/storage';
+import type { StorageConfigDTO, StorageConfigVO, StorageProvider } from '@/types/storage';
 
 type StorageConfigRow = StorageConfigVO & { isExample?: boolean };
 
@@ -310,6 +310,7 @@ const storageExamples: StorageConfigRow[] = providers.map(item => ({
   referenced: false,
   credentialConfigured: false,
   canDelete: false,
+  remark: null,
   isExample: true,
 }));
 const createForm = (provider: Exclude<StorageProvider, 'local'> = 'seaweedfs'): StorageConfigDTO => ({

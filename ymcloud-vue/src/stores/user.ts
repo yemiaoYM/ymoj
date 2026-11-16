@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
-import { getUserProfile, login, logout, register } from '@/api/api';
-import type { UserProfile } from '@/type/types';
+import { getUserProfile } from '@/api/user';
+import { login, logout, register } from '@/api/user/auth';
+import type { UserProfile } from '@/types/user';
 import Storage from '@/utils/storage';
 
 /**

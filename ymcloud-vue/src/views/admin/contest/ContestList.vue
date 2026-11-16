@@ -161,11 +161,7 @@ import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, CopyDocument, List } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
-import {
-  getAdminContestList,
-  deleteContestByIds,
-  updateContestVisibility
-} from '@/api/api';
+import { getAdminContestList, deleteContestByIds, updateContestVisibility } from '@/api/contest';
 
 //data
 const userStore = useUserStore();

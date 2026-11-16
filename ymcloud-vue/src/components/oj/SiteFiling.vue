@@ -31,8 +31,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { getPublicSystemSetting } from '@/api/api';
-import type { SystemSettingVO } from '@/type/types';
+import { getPublicSystemSetting } from '@/api/system';
+import type { SystemSettingVO } from '@/types/system';
 
 const settings = ref<SystemSettingVO | null>(null);
 let disposed = false;

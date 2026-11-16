@@ -191,17 +191,11 @@ import { useUserStore } from '@/stores/user';
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import { fetchRemoteProblem } from '@/api/remoteProblem';
+import { fetchRemoteProblem, getAdminProblemList, deleteProblemByIds, updateProblemVisibility } from '@/api/problem';
+import type { RemoteProblemRequest, AdminProblemVO } from '@/types/problem';
 import { useRemoteProblemStore } from '@/stores/remoteProblem';
-import type { RemoteProblemRequest } from '@/type/remoteProblem';
 import { Search, Refresh, Plus, Edit, Delete, DocumentCopy } from '@element-plus/icons-vue';
 import { useRouter, useRoute } from 'vue-router';
-import type { AdminProblemVO } from '@/type/types';
-import {
-  getAdminProblemList,
-  deleteProblemByIds,
-  updateProblemVisibility
-} from '@/api/api';
 
 //data
 const userStore = useUserStore();
@@ -299,7 +293,6 @@ const useUrlSync = () => {
 const { defaults, parseFromUrl, syncToUrl } = useUrlSync();
 //查询参数
 const queryParams = ref(parseFromUrl());
-
 
 //生命周期
 onMounted(() => {

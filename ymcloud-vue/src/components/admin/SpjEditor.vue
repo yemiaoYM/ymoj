@@ -39,7 +39,7 @@ import 'codemirror/addon/fold/foldgutter.js';
 import 'codemirror/addon/fold/brace-fold.js';
 import 'codemirror/addon/edit/matchbrackets.js';
 import 'codemirror/addon/edit/closebrackets.js';
-import { compileSpj } from '@/api/api';
+import { compileSpj } from '@/api/problem';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { useThemeStore } from '@/stores/theme';
 import { ElNotification } from 'element-plus';

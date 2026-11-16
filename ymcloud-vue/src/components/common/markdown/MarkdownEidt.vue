@@ -100,7 +100,7 @@ import {
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 import MarkdownToolbarMenu from '@/components/common/markdown/MarkdownToolbarMenu.vue';
 import { createMarkdownSanitizer } from '@/utils/markdown';
-import { uploadMarkdownImage } from '@/api/markdown';
+import { uploadMarkdownImage } from '@/api/storage';
 import { ElMessage } from 'element-plus';
 import 'md-editor-v3/lib/style.css';
 

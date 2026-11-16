@@ -296,12 +296,8 @@ import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import type { AdminContestProblemVO, ContestProblemPageQuery } from '@/type/contest';
-import type { AdminProblemVO } from '@/type/types';
-import { Plus, Edit, Delete, Sort, ArrowUp, ArrowDown, Search } from '@element-plus/icons-vue';
-import { useRoute } from 'vue-router';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
-import { Balloon } from '@vicons/ionicons5';
+import type { AdminContestProblemVO, ContestProblemPageQuery } from '@/types/contest';
+import type { AdminProblemVO } from '@/types/problem';
 import {
   getAdminContestProblems,
   getAdminContestById,
@@ -309,8 +305,12 @@ import {
   addProblemsToContest,
   updateContestProblem,
   removeContestProblems,
-  reorderContestProblems
-} from '@/api/api';
+  reorderContestProblems,
+} from '@/api/contest';
+import { Plus, Edit, Delete, Sort, ArrowUp, ArrowDown, Search } from '@element-plus/icons-vue';
+import { useRoute } from 'vue-router';
+import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { Balloon } from '@vicons/ionicons5';
 
 //data
 const route = useRoute();
@@ -338,7 +338,7 @@ const problemSearchLoading = ref<boolean>(false);
 const problemSearchTotal = ref<number>(0);
 //编辑题目相关
 const editProblemDialogVisible = ref<boolean>(false);
-const editingProblem = ref<Pick<AdminContestProblemVO, 'id' | 'displayTitle' | 'color'>>({
+const editingProblem = ref<Pick<AdminContestProblemVO, 'id' | 'displayTitle'> & { color: string }>({
   id: 0,
   displayTitle: '',
   color: '',
@@ -461,7 +461,7 @@ const handleEditProblem = (row: AdminContestProblemVO) => {
   editingProblem.value = {
     id: row.id,
     displayTitle: row.displayTitle,
-    color: row.color,
+    color: row.color ?? '',
   };
   editProblemDialogVisible.value = true;
 };

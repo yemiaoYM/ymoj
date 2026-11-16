@@ -79,9 +79,9 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
-import { getAdminSystemSetting, updateSystemSetting } from "@/api/api";
+import { getAdminSystemSetting, updateSystemSetting } from '@/api/system';
+import type { SystemSettingDTO } from '@/types/system';
 import { useUserStore } from "@/stores/user";
-import type { SystemSettingDTO } from "@/type/types";
 import CarouselSetting from "@/components/admin/CarouselSetting.vue";
 import { useAsyncChange } from "@/hooks/useAsyncChange";
 

@@ -169,10 +169,10 @@ import { useRoute, useRouter } from "vue-router";
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 import defaultContest from '@/assets/image/defaultContest.jpg';
 import defaultContestDark from '@/assets/image/defaultContest-dark.webp';
-import { uploadContestImage } from '@/api/contest';
+import type { ContestDTO } from '@/types/contest';
+import { uploadContestImage, addAdminContest, updateAdminContest, getAdminContestById } from '@/api/contest';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
-import { addAdminContest, updateAdminContest, getAdminContestById } from "@/api/api";
 
 //异步导入markdown
 const MarkdownEidt = defineAsyncComponent(
@@ -347,7 +347,13 @@ const handleSubmitContest = async () => {
     if (current !== revision) return false;
     if (await editor.uploadImages() === false || current !== revision) return false;
     const { id, ...fields } = contest.value;
-    const submitData = { ...fields, password: fields.visibility === CONTEST_VISIBILITY.PASSWORD ? fields.password : null };
+    // 表单已校验起止时间，在请求边界收窄日期组件的可空状态
+    const submitData: ContestDTO = {
+      ...fields,
+      startTime: fields.startTime as string,
+      endTime: fields.endTime as string,
+      password: fields.visibility === CONTEST_VISIBILITY.PASSWORD ? fields.password : null,
+    };
     const res = mode.value === 'edit' && id
       ? await updateAdminContest(id, submitData)
       : await addAdminContest(submitData);

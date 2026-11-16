@@ -54,8 +54,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
-import { getAdminCarousel, saveCarousel, uploadCarousel } from '@/api/carousel';
-import type { CarouselImage } from '@/type/carousel';
+import { getAdminCarousel, saveCarousel, uploadCarousel } from '@/api/system';
+import type { CarouselImage } from '@/types/system';
 import { useUserStore } from '@/stores/user';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
 

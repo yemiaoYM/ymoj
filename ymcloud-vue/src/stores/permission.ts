@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref, markRaw, watch, type Component } from 'vue';
 import type { RouteRecordRaw } from 'vue-router';
-import { getMenus } from '@/api/api';
-import type { MenuRoute } from '@/type/menu';
+import { getMenus } from '@/api/system/rbac';
+import type { MenuRoute } from '@/types/system/rbac';
 import Layout from '@/components/admin/AdminLayout.vue';
 import router from '@/router';
 import { dynamicRoutes } from '@/router/modules/admin';

@@ -193,7 +193,8 @@ import {
   ShareSocialSharp,
   Clipboard,
 } from "@vicons/ionicons5";
-import { getSubmissionDetail, updateShareCode } from "@/api/api";
+import { getSubmissionDetail, updateShareCode } from '@/api/submission';
+import type { SubmissionVO } from '@/types/submission';
 import {
   getStatusType,
   getScoreType,
@@ -201,7 +202,6 @@ import {
   formatSubmissionTime,
   formatSubmissionLength,
 } from "@/utils/utils";
-import type { SubmissionVO } from "@/type/types";
 import { ElMessage } from "element-plus";
 import { useUserStore } from "@/stores/user";
 import useClipboard from "vue-clipboard3";

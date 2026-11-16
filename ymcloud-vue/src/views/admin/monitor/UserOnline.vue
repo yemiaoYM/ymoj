@@ -49,8 +49,8 @@
 import { ref, onMounted } from 'vue';
 import { Delete } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import type { UserOnlineVO } from '@/type/types';
-import { getUserOnlineList, forceOffline } from '@/api/api';
+import type { UserOnlineVO } from '@/types/system';
+import { getUserOnlineList, forceOffline } from '@/api/system';
 
 //data
 const loading = ref<boolean>(false);

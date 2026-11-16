@@ -31,66 +31,9 @@
             <span style="font-size: 20px;color: var(--ym-link);">结果说明</span>
           </template>
           <ul class="result">
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Pending').tag">Pending</el-tag>
-              ：您的解答正在排队等待评测中，请等待结果...
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Submitted Failed').tag">Submitted Failed</el-tag>
-              ：您的提交由于编译错误等原因导致评测失败，请检查代码后重新提交。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Compiling').tag">Compiling</el-tag>
-              ：您的提交正在编译中，请等待结果...
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Judging').tag">Judging</el-tag>
-              ：您的提交正在评测中，请等待结果...
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Compile Error').tag">Compile Error</el-tag> :
-              您的提交由于编译错误等原因导致评测失败，请检查代码后重新提交。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Presentation Error').tag">Presentation
-                Error</el-tag> :
-              您的提交由于输出格式错误等原因导致评测失败，请检查代码后重新提交。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Partial Accepted').tag">Partial Accepted</el-tag>
-              :
-              您的提交部分通过评测，部分未通过评测。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Accepted').tag">Accepted</el-tag> :
-              您的提交通过评测，恭喜您！
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Wrong Answer').tag">Wrong Answer</el-tag> :
-              您的提交由于输出错误等原因导致评测失败，请检查代码后重新提交。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Runtime Error').tag">Runtime Error</el-tag> :
-              您的提交由于运行时错误等原因导致评测失败，请检查代码后重新提交。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Time Limit Exceeded').tag">Time Limit
-                Exceeded</el-tag>
-              :
-              您的提交由于超时等原因导致评测失败，请检查代码后重新提交。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Memory Limit Exceeded').tag">Memory Limit
-                Exceeded</el-tag> :
-              您的提交由于内存使用超限等原因导致评测失败，请检查代码后重新提交。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('System Error').tag">System Error</el-tag> :
-              您的提交由于系统错误等原因导致评测失败，请检查代码后重新提交。
-            </li>
-            <li>
-              <el-tag effect="dark" size="large" :type="getStatusType('Cancelled').tag">Cancelled</el-tag> :
-              您的提交由于取消等原因导致评测失败，请检查代码后重新提交。
+            <li v-for="item in results" :key="item.status">
+              <el-tag effect="dark" size="large" :type="getStatusType(item.status).tag">{{ item.status }}</el-tag>
+              <span>{{ item.description }}</span>
             </li>
           </ul>
         </el-card>
@@ -98,11 +41,16 @@
           <template #header>
             <span style="font-size: 20px;color: var(--ym-link);">帮助</span>
           </template>
-          <ul class="result">
-            <li>1. __int64不是ANSI标准定义，只能在VC使用，在 GNU C++ 中应写成 long long 类型， scanf和printf 请使用%lld作为格式</li>
-            <li>2. main() 返回值必须定义为 int ，而不是 void</li>
-            <li>3. i 在循环外失去定义 "for(int i=0...){...}"</li>
-            <li>4. itoa 不是ansi标准函数（标准 C/C++ 中无此函数）</li>
+          <ul class="help-list">
+            <li><strong>输入与输出</strong>从标准输入读取数据，将答案写入标准输出。不要输出“请输入”等提示或调试信息。</li>
+            <li><strong>多组数据</strong>按题面区分组数 T、读到文件结束（EOF）和结束标记；每组数据处理前重置相应变量。</li>
+            <li><strong>空格与换行</strong>按要求保留输出格式。读取含空格的字符串时使用整行读取，混用逐项读取和整行读取时留意残留换行。</li>
+            <li><strong>整数范围</strong>C / C++ 注意整数溢出，必要时使用 long long；乘法要在运算前转换类型，不能只在赋值时转换。</li>
+            <li><strong>浮点精度</strong>按题面要求设置小数位数。浮点运算存在舍入误差，不直接用相等比较判断近似结果。</li>
+            <li><strong>编译与入口</strong>提交时选择对应语言。C / C++ 使用 int main；Java 主类名为 Main，不添加 package 声明。编译命令见“编译器 & 例题”。</li>
+            <li><strong>样例与边界</strong>样例通过不代表全部通过。检查最小和最大规模、重复值、负数以及题目允许的空数据。</li>
+            <li><strong>超时与运行异常</strong>超时先检查算法复杂度、死循环和输入效率；运行异常检查数组越界、除零与递归深度，并查看错误信息。</li>
+            <li><strong>内存限制</strong>注意大数组、容器和递归栈的占用。大数组放在局部栈上可能导致运行异常。</li>
           </ul>
         </el-card>
       </el-col>
@@ -113,10 +61,28 @@
 <script setup lang="ts">
 //import
 import { ref, defineAsyncComponent, onMounted } from 'vue';
-import type { LanguageTableVO } from '@/type/types';
+import type { LanguageTableVO } from '@/types/problem';
+import { getLanguageTableList } from '@/api/problem';
 import { getStatusType } from '@/utils/utils';
-import { getLanguageTableList } from '@/api/api';
+
 const Highlight = defineAsyncComponent(() => import('@/components/common/CodeHighLight.vue'));
+
+const results = [
+  { status: 'Pending', description: '提交已进入队列，等待评测。' },
+  { status: 'Compiling', description: '正在编译代码。' },
+  { status: 'Judging', description: '正在运行测试数据。' },
+  { status: 'Accepted', description: '通过全部测试。' },
+  { status: 'Partial Accepted', description: '部分测试通过，得分以评测结果为准。' },
+  { status: 'Wrong Answer', description: '输出与预期结果不符。' },
+  { status: 'Presentation Error', description: '输出格式不符合要求。' },
+  { status: 'Compile Error', description: '编译未通过，请查看编译错误信息。' },
+  { status: 'Runtime Error', description: '程序运行异常，请查看错误信息。' },
+  { status: 'Time Limit Exceeded', description: '运行时间超过题目限制。' },
+  { status: 'Memory Limit Exceeded', description: '内存使用超过题目限制。' },
+  { status: 'Submitted Failed', description: '提交未成功，请稍后重试。' },
+  { status: 'System Error', description: '评测服务异常，可联系管理员检查。' },
+  { status: 'Cancelled', description: '本次评测已取消。' }
+];
 
 const languages = ref<LanguageTableVO[]>([] as LanguageTableVO[]);
 
@@ -131,7 +97,6 @@ const initLanguages = () => {
     console.log(e);
   })
 }
-
 
 </script>
 
@@ -175,14 +140,71 @@ li .title {
   font-size: 1rem;
 }
 
-.result li {
-  font-size: 13px;
-  list-style-type: none;
-  margin-top: 8px;
+.container {
+  width: 100%;
+  padding: 16px;
 }
 
-:deep(.result .el-tag__content) {
+.about-title {
+  margin: 4px 0 20px;
+  padding-left: 12px;
+  border-left: 3px solid var(--ym-link);
+  color: var(--el-text-color-primary);
+  font-size: 22px;
   font-weight: 600;
+}
+
+.result li {
+  display: grid;
+  grid-template-columns: 185px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 14px;
+  line-height: 1.7;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.result li:first-child {
+  padding-top: 0;
+}
+
+.result li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.result .el-tag {
+  justify-self: start;
+}
+
+.help-list {
+  padding-left: 18px;
+  font-size: 14px;
+}
+
+.result :deep(.el-tag__content) {
+  font-weight: 600;
+}
+
+.help-list strong {
+  margin-right: 10px;
+  color: var(--el-text-color-primary);
+  font-weight: 600;
+}
+
+.help-list li + li {
+  margin-top: 10px;
+}
+
+@media (max-width: 600px) {
+  .compiler .content {
+    margin: 0 12px 12px;
+  }
+  .result li {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
 }
 
 @media screen and (min-width: 1024px) {

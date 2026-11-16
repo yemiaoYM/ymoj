@@ -93,7 +93,7 @@
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { ref } from 'vue';
 import { useUserStore } from '@/stores/user';
-import { updateUserPassword,updateUserEmail } from '@/api/api';
+import { updateUserPassword, updateUserEmail } from '@/api/user';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
 
 //data

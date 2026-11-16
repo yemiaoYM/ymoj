@@ -36,8 +36,8 @@
 import { useRouter,useRoute } from 'vue-router';
 import { ref,onMounted } from 'vue';
 import { Balloon } from '@vicons/ionicons5';
-import type { ContestProblemTableVO } from '@/type/types';
-import { getContestProblemList } from '@/api/api';
+import type { ContestProblemTableVO } from '@/types/contest';
+import { getContestProblemList } from '@/api/contest';
 
 //data
 const router=useRouter();

@@ -192,9 +192,9 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
-import { getAuthList, addAuth, updateAuth, deleteAuth } from '@/api/rbac';
+import { getAuthList, addAuth, updateAuth, deleteAuth } from '@/api/system/rbac';
+import type { AuthVO, AuthDTO, AuthTreeNode } from '@/types/system/rbac';
 import { buildAuthTree } from '@/utils/rbac';
-import type { AuthVO, AuthDTO, AuthTreeNode } from '@/type/rbac';
 
 //data
 const userStore = useUserStore();

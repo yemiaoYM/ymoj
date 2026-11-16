@@ -244,12 +244,11 @@ import {
 import { People, ReorderFour, Trophy } from "@vicons/ionicons5";
 import { useUserStore } from "@/stores/user";
 import { useRouter } from "vue-router";
-import type { Announcement } from "@/type/types";
-import {
-  getAdminAnnouncementList,
-  getAdminDashboardStats,
-  getAdminSubmissionChart,
-} from "@/api/api";
+import type { Announcement } from '@/types/announcement';
+import { getAdminAnnouncementList } from '@/api/announcement';
+import type { SubmissionChartVO } from '@/types/system';
+import { getAdminDashboardStats, getAdminSubmissionChart } from '@/api/system';
+
 const SubmissionChart = defineAsyncComponent(
   () => import("@/components/admin/SubmissionChart.vue")
 );
@@ -273,7 +272,7 @@ const statsData = ref({
 });
 const statsLoading = ref(false);
 //折线图数据
-const chartData = ref({
+const chartData = ref<SubmissionChartVO>({
   dates: [],
   totalSubmissions: [],
   acceptedSubmissions: [],

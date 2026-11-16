@@ -107,8 +107,8 @@ import { CONTEST_VISIBILITY, ORIGINAL_CONTEST_SOURCE } from '@/constants/contest
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { Search, Clock, Lock, AlarmClock, CollectionTag, User } from '@element-plus/icons-vue';
-import type { ContestTableVO } from '@/type/types';
-import { getContestTableList } from '@/api/api';
+import type { ContestTableVO } from '@/types/contest';
+import { getContestTableList } from '@/api/contest';
 import { formatContestMode, formatContestStyle, formatContestDuration } from '@/utils/utils';
 import defaultContest from '@/assets/image/defaultContest.jpg';
 import defaultContestDark from '@/assets/image/defaultContest-dark.webp';

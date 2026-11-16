@@ -12,7 +12,7 @@
     </x-flex>
     <x-flex class="home-side" vertical :size="20">
       <!-- 最近一周AC排名 -->
-      <el-card>
+      <el-card class="rank-card">
         <template #header>
           <x-flex align="center" :size="16">
             <el-icon color="#ffc107" :size="24">
@@ -118,18 +118,11 @@
         </template>
         <el-skeleton v-if="contestLoading" :rows="10" animated />
         <div v-else>
-          <x-flex vertical :size="16">
-            <el-card
+          <x-flex vertical :size="0">
+            <article
               v-for="contest in competitions"
               :key="contest.id"
-              class="contest-card"
-              shadow="hover"
-              :style="{
-                borderLeft:
-                  contest.status === '已结束'
-                    ? '4px solid #aab4bf'
-                    : '4px solid #25bb9b',
-              }"
+              class="contest-item"
             >
               <!-- 比赛名称和进行状态 -->
               <x-flex justify="space-between" align="center" :size="8">
@@ -142,11 +135,12 @@
                 </el-link>
                 <x-flex align="center" :size="8">
                   <el-tooltip
+                    v-if="contest.visibility !== 0"
                     effect="light"
-                    content="需要密码才能加入比赛"
+                    :content="contest.visibility === 1 ? '需要密码才能加入比赛' : '私有比赛'"
                     placement="top"
                   >
-                    <el-icon v-if="contest.visibility" aria-label="需要密码才能加入比赛" tabindex="0" :size="18">
+                    <el-icon :size="16">
                       <Lock />
                     </el-icon>
                   </el-tooltip>
@@ -162,21 +156,20 @@
               </x-flex>
 
               <x-flex class="contest-tags" :size="8">
-                <el-tag disable-transitions effect="dark" color="#ffc171">
+                <el-tag disable-transitions type="warning" effect="dark">
                   {{ formatContestMode(contest.mode) }}
                 </el-tag>
-                <el-tag disable-transitions effect="dark" color="#409eff">
+                <el-tag disable-transitions type="primary" effect="dark">
                   {{ formatContestStyle(contest.style) }}
                 </el-tag>
-                <el-tag disable-transitions effect="dark" color="#25bb9b">
+                <el-tag disable-transitions type="success" effect="dark">
                   {{ contest.sourceId === 0 ? "原创" : "重建赛" }}
                 </el-tag>
-                <el-tag v-if="contest.rated" disable-transitions effect="dark" color="#fe8053">
+                <el-tag v-if="contest.rated" disable-transitions type="danger" effect="dark">
                   Rated
                 </el-tag>
               </x-flex>
-              <el-divider />
-              <x-flex justify="space-between" align="center">
+              <x-flex class="contest-meta" justify="space-between" align="center">
                 <x-flex align="center" :size="6">
                   <el-icon><Clock /></el-icon>
                   <el-text size="small">{{ formatContestDuration(contest.duration) }}</el-text>
@@ -186,7 +179,7 @@
                   <el-text size="small">{{ contest.participantCount }} 人</el-text>
                 </x-flex>
               </x-flex>
-            </el-card>
+            </article>
             <el-empty
               v-if="!competitions.length"
               description="暂无比赛"
@@ -207,23 +200,18 @@ import { useRouter } from "vue-router";
 import { Ribbon } from "@vicons/ionicons5";
 import SiteFiling from "@/components/oj/SiteFiling.vue";
 import AnnouncementFeed from "@/components/oj/AnnouncementFeed.vue";
-import {
-  getContestTableList,
-  getUserAcRank,
-} from "@/api/api";
-import type {
-  UserAcRankVO,
-  ContestTableVO,
-} from "@/type/types";
+import { getContestTableList } from '@/api/contest';
+import { getUserAcRank } from '@/api/user';
+import type { UserAcRankVO } from '@/types/user';
+import type { ContestTableVO } from '@/types/contest';
+import { getPublicCarousel } from '@/api/system';
 import {
   formatContestMode,
   formatContestStyle,
   formatContestDuration,
   getContestStatusType,
 } from "@/utils/utils";
-import { getPublicCarousel } from "@/api/carousel";
 import banner from "@/assets/image/banner.webp";
-
 
 const Avatar = defineAsyncComponent(
   () => import("@/components/common/Avatar.vue")
@@ -357,14 +345,27 @@ const handleGetUserAcRank = () => {
   font-size: 16px;
   font-weight: 600;
 }
-.contest-card {
-  border-radius: 8px;
+.rank-card :deep(.el-card__body) {
+  padding-top: 0;
+}
+.contest-item {
+  padding: 16px 0;
+}
+.contest-item:first-child {
+  padding-top: 0;
+}
+.contest-item:last-child {
+  padding-bottom: 0;
+}
+.contest-item + .contest-item {
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 .contest-tags {
   margin-top: 12px;
 }
-.contest-card :deep(.el-divider) {
-  margin: 16px 0;
+.contest-meta {
+  margin-top: 12px;
+  color: var(--el-text-color-secondary);
 }
 
 /* 小屏幕布局 */
@@ -387,6 +388,9 @@ const handleGetUserAcRank = () => {
   .home-side :deep(.el-card__header),
   .home-side :deep(.el-card__body) {
     padding: 16px;
+  }
+  .rank-card :deep(.el-card__body) {
+    padding-top: 0;
   }
 }
 </style>

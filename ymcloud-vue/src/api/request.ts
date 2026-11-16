@@ -109,8 +109,13 @@ export function setupRequestInterceptors(session: { token: string; clearSession:
   );
 }
 
-function request(options: AxiosRequestConfig) {
-  return service(options);
+/**
+ * 发起请求并保留完整 HTTP 响应
+ * @param options Axios 请求配置
+ * @returns 指定响应体类型的完整响应
+ */
+function request<T>(options: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  return service<T>(options);
 }
 
 export default request;

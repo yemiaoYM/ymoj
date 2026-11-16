@@ -68,8 +68,8 @@ import { Edit, Refresh } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { rejudgeSubmission, updateSubmissionStatus } from '@/api/submission';
+import type { SubmissionTableVO } from '@/types/submission';
 import { getStatusType } from '@/utils/utils';
-import type { SubmissionTableVO } from '@/type/types';
 import { JUDGE_STATUS, FINAL_JUDGE_STATUS_OPTIONS, type FinalJudgeStatusCode } from '@/constants/judge';
 
 const props = defineProps<{ submission: SubmissionTableVO }>();

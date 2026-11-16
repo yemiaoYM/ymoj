@@ -230,9 +230,10 @@ import {
   InfiniteSharp,
   People,
 } from "@vicons/ionicons5";
-import type { ContestVO } from "@/type/types";
+import type { ContestVO } from '@/types/contest';
+import { getContestInfo, registerContest } from '@/api/contest';
 import { formatContestMode, formatContestStyle } from "@/utils/utils";
-import { getContestInfo, registerContest } from "@/api/api";
+
 const MarkdownPreview = defineAsyncComponent(
   () => import("@/components/common/markdown/MarkdownPreview.vue")
 );

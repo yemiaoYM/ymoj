@@ -18,7 +18,7 @@
               <el-tag type="success" class="last-login-time" effect="plain" round>
                 <div style="display: flex; align-items: center;">
                   <span class="online-indicator"></span>
-                  <span style="margin-left: 5px;">最近上线时间: {{ formatRelativeTime(userForm.loginDate) }}</span>
+                  <span style="margin-left: 5px;">最近上线时间: {{ userForm.loginDate ? formatRelativeTime(userForm.loginDate) : '暂无记录' }}</span>
                 </div>
               </el-tag>
             </template>
@@ -121,18 +121,18 @@ import { ref, watch, defineAsyncComponent } from 'vue';
 const Avatar = defineAsyncComponent(() => import('@/components/common/Avatar.vue'));
 const MarkdownPreview = defineAsyncComponent(() => import('@/components/common/markdown/MarkdownPreview.vue'));
 const CalendarHeatMap = defineAsyncComponent(() => import('@/components/common/CalendarHeatMap.vue'));
-import type { UserInfoVO } from '@/type/types';
+import type { UserInfoVO, UserCalendarHeatmapVO } from '@/types/user';
+import { getUserInfoByUsername, getUserCalendarHeatmap } from '@/api/user';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { School, PersonCircleOutline, Female, Male, Refresh, AtCircle } from '@vicons/ionicons5';
-import { getUserInfoByUsername, getUserCalendarHeatmap } from '@/api/api';
 import { formatRelativeTime } from '@/utils/utils';
 
 //data
 const router = useRouter();
 const route = useRoute();
 const userForm = ref<UserInfoVO>({} as UserInfoVO);
-const heatmapData = ref([]);
+const heatmapData = ref<UserCalendarHeatmapVO['dataList']>([]);
 const endDate = ref(new Date().toString());
 const activeTab = ref('1');
 

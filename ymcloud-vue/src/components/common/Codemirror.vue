@@ -278,12 +278,13 @@
 import { computed, onUnmounted, nextTick, ref, watch, type PropType } from 'vue';
 import { ElMessage,ElMessageBox } from 'element-plus';
 import { TimeOutline,HardwareChipSharp,Bug } from '@vicons/ionicons5';
-import type { ProblemCaseVO,LanguageVO,EditorCache,JudgeResult } from '@/type/types';
+import type { ProblemCaseVO, LanguageVO, EditorCache } from '@/types/problem';
+import type { JudgeResult } from '@/types/submission';
+import { submitJudge, testJudge, getJudgeStatus } from '@/api/submission';
 import { getStatusType,formatSubmissionTime,formatSubmissionMemory } from '@/utils/utils';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import Storage from '@/utils/storage';
-import { submitJudge,testJudge,getJudgeStatus } from '@/api/api';
 import Codemirror from 'codemirror-editor-vue3';
 import type { Editor } from 'codemirror';
 import { Setting } from '@element-plus/icons-vue';

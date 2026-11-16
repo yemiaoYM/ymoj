@@ -136,13 +136,22 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Plus, Edit, Delete, Folder, FolderAdd, Refresh, Search } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
-import type { Tag } from '@/type/types';
-import type { TagDTO, TagClassification, TagClassificationDTO, TagsWithClassification } from '@/type/tag';
+import type {
+  Tag,
+  TagDTO,
+  TagClassification,
+  TagClassificationDTO,
+  TagsWithClassification,
+} from '@/types/problem/tag';
 import {
   getAdminTagsAndClassifications,
-  addAdminTag, updateAdminTag, deleteAdminTag,
-  addAdminTagClassification, updateAdminTagClassification, deleteAdminTagClassification
-} from '@/api/api';
+  addAdminTag,
+  updateAdminTag,
+  deleteAdminTag,
+  addAdminTagClassification,
+  updateAdminTagClassification,
+  deleteAdminTagClassification,
+} from '@/api/problem/tag';
 
 const userStore = useUserStore();
 const canEdit = computed(() => userStore.hasEveryPermission(['problem:tag:edit']));

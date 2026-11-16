@@ -135,9 +135,9 @@ import {
   formatSubmissionLength,
 } from "@/utils/utils";
 import useClipboard from "vue-clipboard3";
-import type { SubmissionVO } from '@/type/types';
+import type { SubmissionVO } from '@/types/submission';
+import { getSubmissionDetail } from '@/api/submission';
 import { ElMessage } from 'element-plus';
-import { getSubmissionDetail } from '@/api/api';
 import { useRoute } from 'vue-router';
 const CodeHighLight = defineAsyncComponent(
   () => import("@/components/common/CodeHighLight.vue")

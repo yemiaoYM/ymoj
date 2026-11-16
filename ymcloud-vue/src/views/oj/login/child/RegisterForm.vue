@@ -111,8 +111,8 @@ import { onMounted, ref } from 'vue';
 import { User, Lock, Key, Message } from '@element-plus/icons-vue';
 import { ElMessage, ElNotification, type FormInstance, type FormItemRule, type FormRules } from 'element-plus';
 import { useUserStore } from '@/stores/user';
-import { getCaptcha } from '@/api/api';
-import type { RegisterDTO } from '@/type/types';
+import { getCaptcha } from '@/api/user/auth';
+import type { RegisterDTO } from '@/types/user/auth';
 import LegalAgreement from '@/components/common/LegalAgreement.vue';
 
 //定义事件

@@ -318,7 +318,7 @@
 <script setup lang="ts">
 //import
 import { ref,onMounted } from 'vue';
-import { getServerConfig } from '@/api/api';
+import { getServerConfig } from '@/api/system';
 
 //data
 const loading = ref<boolean>(true);

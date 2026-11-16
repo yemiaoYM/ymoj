@@ -193,13 +193,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowLeft, Upload, Delete, Refresh, Download, View, CircleCloseFilled } from '@element-plus/icons-vue';
 import PlainTextViewer from '@/components/common/PlainTextViewer.vue';
-import type { ProblemCaseInfoVO } from '@/type/types';
-import {
-  getProblemTestCases,
-  uploadTestCaseFiles,
-  downloadTestCaseFile,
-  deleteTestCaseFiles
-} from '@/api/api';
+import type { ProblemCaseInfoVO } from '@/types/problem';
+import { getProblemTestCases, uploadTestCaseFiles, downloadTestCaseFile, deleteTestCaseFiles } from '@/api/problem';
 
 // data
 const route = useRoute();
@@ -251,7 +246,6 @@ const previewFiles = ref<PreviewFileState[]>([
   createPreviewFile('input'),
   createPreviewFile('output')
 ]);
-
 
 //生命周期
 onMounted(() => {

@@ -254,8 +254,10 @@ import { computed, ref, defineAsyncComponent, watch, nextTick, onMounted, onBefo
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { useRoute, useRouter } from "vue-router";
-import { addProblem, updateProblem, getAdminProblemById, getTagsList } from "@/api/api";
-import type { Tag, ProblemDTO } from "@/type/types";
+import { addProblem, updateProblem, getAdminProblemById } from '@/api/problem';
+import { getTagsList } from '@/api/problem/tag';
+import type { Tag } from '@/types/problem/tag';
+import type { ProblemDTO } from '@/types/problem';
 import { PROBLEM_DIFFICULTIES, PROBLEM_VISIBILITY } from "@/constants/problem";
 import { isDraftRecord, useLocalDraft } from "@/hooks/useLocalDraft";
 import { useAsyncChange } from "@/hooks/useAsyncChange";
@@ -265,7 +267,10 @@ const MarkdownEidt = defineAsyncComponent(
 );
 const SpjEditor = defineAsyncComponent(() => import('@/components/admin/SpjEditor.vue'));
 
-type ProblemForm = Omit<ProblemDTO, "examples" | "source" | "timeLimit" | "memoryLimit"> & {
+type ProblemForm = Omit<ProblemDTO, "source" | "timeLimit" | "memoryLimit" | "spjLanguage" | "spjCode"> & {
+  id: number | null;
+  spjLanguage: string;
+  spjCode: string;
   source: string;
   tagList: number[];
   timeLimit: number | null | undefined;
@@ -452,7 +457,13 @@ const onSubmitProblem = async () => {
       if (await editor.uploadImages() === false || current !== revision) return false;
     }
     const { id, ...values } = problem.value;
-    const submitData = { ...values, source: values.source.trim() || null };
+    // 表单已校验数值必填及范围，在请求边界收窄输入组件的可空状态
+    const submitData: ProblemDTO = {
+      ...values,
+      source: values.source.trim() || null,
+      timeLimit: values.timeLimit as number,
+      memoryLimit: values.memoryLimit as number,
+    };
     const res = mode.value === 'edit' && id
       ? await updateProblem(id, submitData)
       : await addProblem(submitData);

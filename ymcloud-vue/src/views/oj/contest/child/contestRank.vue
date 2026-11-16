@@ -111,8 +111,8 @@
 import { computed,ref,onMounted,watch,onBeforeUnmount } from 'vue';
 import { useRouter,useRoute } from 'vue-router';
 import { Balloon,Search } from '@vicons/ionicons5';
-import type { ContestRankTableVO } from '@/type/types';
-import { getContestRankList } from '@/api/api';
+import type { ContestRankTableVO } from '@/types/contest';
+import { getContestRankList } from '@/api/contest';
 
 //data
 const router=useRouter();

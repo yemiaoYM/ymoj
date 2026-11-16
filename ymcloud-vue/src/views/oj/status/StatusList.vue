@@ -78,6 +78,7 @@
             v-else
             empty-text="暂无相关评测列表"
             :data="tableData"
+            :row-class-name="tableRowClassName"
             stripe
             style="width: 100%"
             label-width="auto"
@@ -184,14 +185,15 @@ import { Search, Refresh } from "@element-plus/icons-vue";
 import { onBeforeUnmount, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRouter, useRoute } from "vue-router";
-import type { SubmissionTableVO } from "@/type/types";
+import type { SubmissionTableVO } from '@/types/submission';
+import { getSubmissionTableList } from '@/api/submission';
+import { getContestSubmissionList } from '@/api/contest';
 import {
   getScoreType,
   formatSubmissionMemory,
   formatSubmissionTime,
   formatSubmissionLength,
 } from "@/utils/utils";
-import { getSubmissionTableList, getContestSubmissionList } from "@/api/api";
 import { useUserStore } from "@/stores/user";
 import { JUDGE_STATUS_FILTER_OPTIONS } from '@/constants/judge';
 
@@ -224,6 +226,10 @@ type SubmissionQuery = {
 };
 let requestGeneration = 0;
 let confirmedPath = '';
+
+const tableRowClassName = ({ row }: { row: SubmissionTableVO }) => {
+  return row.username === userStore.user?.username ? 'own-submission' : '';
+};
 
 //列表、筛选状态和路由在同一次请求成功后一起生效
 const getData = async (params: SubmissionQuery, targetPath: string) => {
@@ -387,6 +393,10 @@ onBeforeUnmount(() => { requestGeneration++; });
   color: var(--ym-table-link);
   font-family: Consolas,serif;
   text-align: center;
+}
+
+:deep(.el-table .el-table__body tr.own-submission > td.el-table__cell) {
+  background-color: var(--el-color-success-light-9);
 }
 
 @media screen and (min-width: 1024px) {

@@ -53,13 +53,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { Bell } from '@element-plus/icons-vue';
-import { getAnnouncementTableList } from '@/api/api';
-import type { Announcement } from '@/type/announcement';
+import { getAnnouncementTableList } from '@/api/announcement';
+import type { PublicAnnouncement } from '@/types/announcement';
 import AnnouncementItem from './AnnouncementItem.vue';
 
 const pageSize = 5;
 const sectionRef = ref<HTMLElement>();
-const announcements = ref<Announcement[]>([]);
+const announcements = ref<PublicAnnouncement[]>([]);
 const pageNo = ref(1);
 const total = ref(0);
 const loading = ref(false);

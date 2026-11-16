@@ -201,7 +201,7 @@ import useClipboard from 'vue-clipboard3';
 import { useUserStore } from '@/stores/user';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { deleteAdminFile, downloadAdminFile, getAdminFiles, uploadAdminFile } from '@/api/storage';
-import type { FilePageQuery, StorageFileVO } from '@/type/storage';
+import type { FilePageQuery, StorageFileVO } from '@/types/storage';
 
 //data
 const userStore = useUserStore();

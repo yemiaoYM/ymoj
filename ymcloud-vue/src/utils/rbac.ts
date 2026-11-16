@@ -1,4 +1,4 @@
-import type { AuthVO, AuthTreeNode } from '@/type/rbac';
+import type { AuthVO, AuthTreeNode } from '@/types/system/rbac';
 
 /**
  * 构建权限树，目录、页面和操作使用同一份权限数据

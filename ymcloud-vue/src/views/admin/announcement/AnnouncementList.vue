@@ -267,7 +267,7 @@ import { useUserStore } from "@/stores/user";
 import { ref, onMounted, reactive, nextTick, defineAsyncComponent } from "vue";
 import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";
 import { Search, Refresh, Plus, Edit, Delete } from "@element-plus/icons-vue";
-import type { Announcement, AnnouncementDTO } from "@/type/types";
+import type { Announcement, AnnouncementDTO } from '@/types/announcement';
 import {
   getAdminAnnouncementList,
   getAdminAnnouncementById,
@@ -276,7 +276,8 @@ import {
   deleteAnnouncementByIds,
   updateAnnouncementStatus,
   updateAnnouncementPinned,
-} from "@/api/api";
+} from '@/api/announcement';
+
 //异步导入markdown
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/markdown/MarkdownEidt.vue")

@@ -73,11 +73,10 @@
 //import
 import { onMounted, ref, defineAsyncComponent } from 'vue';
 import { useUserStore } from '@/stores/user';
-import { updateUserProfile } from '@/api/api';
+import { updateUserProfile, uploadAvatar } from '@/api/user';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
 import { ElMessage } from 'element-plus';
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
-import { uploadAvatar } from '@/api/user';
 
 const Avatar=defineAsyncComponent(() => import('@/components/common/Avatar.vue'));
 const MarkdownEidt=defineAsyncComponent(() => import('@/components/common/markdown/MarkdownEidt.vue'));
@@ -113,7 +112,6 @@ onMounted(()=>{
     }
 })
 
-
 /**
  * 确认裁剪后上传头像，成功后刷新用户资料
  * @param file 正方形裁剪后的 PNG 图片
@@ -123,7 +121,7 @@ const handleUploadAvatar = async (file: Blob) => {
         const response = await uploadAvatar(file);
         await userStore.getUserInfo(true);
         if (userStore.user) {
-            formProfile.value.avatar = userStore.user.avatar;
+            formProfile.value.avatar = userStore.user.avatar ?? '';
             ElMessage.success(response.data.msg);
         }
     });

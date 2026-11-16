@@ -42,8 +42,8 @@ import { CONTEST_VISIBILITY } from '@/constants/contest';
 import { ref, watch, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
-import type { CloneContestRequest } from '@/type/contest';
-import { cloneAdminContest } from '@/api/api';
+import type { CloneContestRequest } from '@/types/contest';
+import { cloneAdminContest } from '@/api/contest';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
 
 const props = defineProps<{ modelValue: boolean; sourceId: number; title: string }>();

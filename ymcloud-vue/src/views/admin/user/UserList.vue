@@ -267,10 +267,9 @@ import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, Setting } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { useAsyncChange } from '@/hooks/useAsyncChange';
-import { getUserRoleOptions, getUserRoleIds, updateUserRoles } from '@/api/rbac';
-import type { RoleVO } from '@/type/rbac';
-import type { User, UserDTO } from '@/type/types';
-import { copyProperties } from '@/utils/common';
+import { getUserRoleOptions, getUserRoleIds, updateUserRoles } from '@/api/system/rbac';
+import type { RoleVO } from '@/types/system/rbac';
+import type { User, UserDTO } from '@/types/user';
 import {
   getUserTableList,
   getUserById,
@@ -278,8 +277,9 @@ import {
   changeUserStatus,
   resetUserPassword,
   addUser,
-  updateUser
-} from '@/api/api';
+  updateUser,
+} from '@/api/user';
+import { copyProperties } from '@/utils/common';
 
 //异步导入头像组件
 const Avatar = defineAsyncComponent(() => import('@/components/common/Avatar.vue'));

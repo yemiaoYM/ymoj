@@ -93,8 +93,8 @@ import { User, Lock, Key } from '@element-plus/icons-vue';
 import { ElMessage, ElNotification, type FormInstance, type FormRules } from 'element-plus';
 import { useUserStore } from '@/stores/user';
 import { resolveLoginRedirect } from '@/router/loginRedirect';
-import { getCaptcha } from '@/api/api';
-import type { LoginDTO } from '@/type/types';
+import { getCaptcha } from '@/api/user/auth';
+import type { LoginDTO } from '@/types/user/auth';
 import LegalAgreement from '@/components/common/LegalAgreement.vue';
 
 defineProps<{

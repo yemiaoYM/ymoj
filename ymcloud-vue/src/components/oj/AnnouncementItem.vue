@@ -40,10 +40,10 @@ import { useThemeStore } from '@/stores/theme';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { MdPreview } from 'md-editor-v3';
 import { sanitizeMarkdown } from '@/utils/markdown';
-import type { Announcement } from '@/type/announcement';
+import type { PublicAnnouncement } from '@/types/announcement';
 import 'md-editor-v3/lib/preview.css';
 
-defineProps<{ announcement: Announcement }>();
+defineProps<{ announcement: PublicAnnouncement }>();
 
 const theme = useThemeStore();
 const articleRef = ref<HTMLElement>();

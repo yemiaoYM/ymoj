@@ -86,7 +86,7 @@ import { ref, defineAsyncComponent, onMounted } from 'vue';
 import { ArrowRight, Back, Reading, Trophy } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { getPublicSystemSetting } from '@/api/api';
+import { getPublicSystemSetting } from '@/api/system';
 import BrandLogo from '@/components/common/BrandLogo.vue';
 import authIllustration from '@/assets/image/auth-programming.webp';
 //login组件不使用异步加载，防止加载慢导致留空
