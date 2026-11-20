@@ -44,7 +44,7 @@ import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import type { CloneContestRequest } from '@/types/contest';
 import { cloneAdminContest } from '@/api/contest';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 
 const props = defineProps<{ modelValue: boolean; sourceId: number; title: string }>();
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; created: [] }>();

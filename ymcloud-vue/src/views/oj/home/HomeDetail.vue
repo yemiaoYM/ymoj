@@ -211,7 +211,6 @@ import {
   formatContestDuration,
   getContestStatusType,
 } from "@/utils/utils";
-import banner from "@/assets/image/banner.webp";
 
 const Avatar = defineAsyncComponent(
   () => import("@/components/common/Avatar.vue")
@@ -242,8 +241,7 @@ async function handleLoadCarousel() {
   try {
     const response = await getPublicCarousel();
     if (!disposed) {
-      const config = response.data.data;
-      bannerList.value = config.configured ? config.images.map(image => image.url) : [banner];
+      bannerList.value = response.data.data;
     }
   } catch(e) {
     console.log(e);

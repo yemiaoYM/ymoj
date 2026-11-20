@@ -105,6 +105,9 @@
             style="width: 100%"
           >
             <MarkdownEidt
+              @image-uploaded="onImageUploaded"
+              image-purpose="problem"
+              :biz-id="problemId || undefined"
               ref="contentEditorRef"
               :key="`content-${mode}-${problemId}`"
               v-model:content="problem.content"
@@ -119,6 +122,9 @@
             style="width: 100%"
           >
             <MarkdownEidt
+              @image-uploaded="onImageUploaded"
+              image-purpose="problem"
+              :biz-id="problemId || undefined"
               ref="inputEditorRef"
               :key="`input-${mode}-${problemId}`"
               v-model:content="problem.input"
@@ -133,6 +139,9 @@
             style="width: 100%"
           >
             <MarkdownEidt
+              @image-uploaded="onImageUploaded"
+              image-purpose="problem"
+              :biz-id="problemId || undefined"
               ref="outputEditorRef"
               :key="`output-${mode}-${problemId}`"
               v-model:content="problem.output"
@@ -250,6 +259,7 @@
 </template>
 
 <script setup lang="ts">
+import { referencedImageIds } from '@/hooks/useFileImages';
 import { computed, ref, defineAsyncComponent, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
@@ -260,7 +270,7 @@ import type { Tag } from '@/types/problem/tag';
 import type { ProblemDTO } from '@/types/problem';
 import { PROBLEM_DIFFICULTIES, PROBLEM_VISIBILITY } from "@/constants/problem";
 import { isDraftRecord, useLocalDraft } from "@/hooks/useLocalDraft";
-import { useAsyncChange } from "@/hooks/useAsyncChange";
+import { useAsyncChange } from "@/hooks/async/useAsyncChange";
 import { useRemoteProblemStore } from "@/stores/remoteProblem";
 const MarkdownEidt = defineAsyncComponent(
   () => import("@/components/common/markdown/MarkdownEidt.vue")
@@ -295,6 +305,10 @@ const mode = ref('add');
 const problemId = ref<number | null>(null);
 const tagList = ref<Tag[]>([]);
 const problem = ref<ProblemForm>(handleCreateForm());
+function onImageUploaded(id: string) {
+  (problem.value.fileIds ??= []).push(id);
+}
+
 let revision = 0;
 const draftActive = ref(false);
 type ProblemDraft = ProblemForm & { importNotice?: string };
@@ -454,12 +468,13 @@ const onSubmitProblem = async () => {
     await form.validate();
     if (current !== revision) return false;
     for (const editor of [contentEditor, inputEditor, outputEditor]) {
-      if (await editor.uploadImages() === false || current !== revision) return false;
+      if (!editor.canSaveContent() || current !== revision) return false;
     }
     const { id, ...values } = problem.value;
     // 表单已校验数值必填及范围，在请求边界收窄输入组件的可空状态
     const submitData: ProblemDTO = {
       ...values,
+      fileIds: id ? undefined : referencedImageIds(values.fileIds, values.content, values.input, values.output),
       source: values.source.trim() || null,
       timeLimit: values.timeLimit as number,
       memoryLimit: values.memoryLimit as number,

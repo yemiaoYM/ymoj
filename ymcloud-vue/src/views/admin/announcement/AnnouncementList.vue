@@ -59,8 +59,8 @@
             plain
             type="success"
             :icon="Edit"
-            :disabled="announcementIds.length !== 1"
-            @click="handleUpdate"
+            :disabled="single"
+            @click="handleUpdate()"
             >修改</el-button
           >
           <el-button
@@ -68,8 +68,8 @@
             plain
             type="danger"
             :icon="Delete"
-            :disabled="announcementIds.length === 0"
-            @click="handleDelete"
+            :disabled="multiple"
+            @click="handleDelete()"
             >删除</el-button
           >
         </x-flex>
@@ -186,16 +186,16 @@
 
     <!-- 新增/编辑对话框 -->
     <el-dialog
-      v-model="dialogVisible"
+      v-model="dialog.visible"
       destroy-on-close
-      :title="dialogTitle"
+      :title="dialog.title"
       width="1300px"
       :before-close="handleClose"
       style="padding: 20px"
     >
       <el-form
         ref="announcementFormRef"
-        :disabled="submitLoading"
+        :disabled="buttonLoading"
         :model="announcementForm"
         :rules="announcementRules"
         label-width="100px"
@@ -234,22 +234,25 @@
         <el-form-item label="公告内容" prop="content">
           <div style="width: 100%">
             <MarkdownEidt
+              @image-uploaded="onImageUploaded"
+              image-purpose="announcement"
+              :biz-id="currentAnnouncementId || undefined"
               ref="contentEditorRef"
               :key="`content-${currentAnnouncementId}`"
               v-model:content="announcementForm.content"
-              :disabled="submitLoading"
+              :disabled="buttonLoading"
             />
           </div>
         </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button :disabled="submitLoading" @click="handleClose">取消</el-button>
+          <el-button :disabled="buttonLoading" @click="handleClose">取消</el-button>
           <el-button
             v-permission="currentAnnouncementId === null ? ['announcement:announcement:add'] : ['announcement:announcement:edit']"
             type="primary"
             @click="submitForm"
-            :loading="submitLoading"
+            :loading="buttonLoading"
           >
             确定
           </el-button>
@@ -261,11 +264,17 @@
 
 <script lang="ts" setup>
 //import
+import modal from '@/plugins/modal';
+import { useDialogState } from '@/hooks/dialog/useDialogState';
+import { useSearchReset } from '@/hooks/form/useSearchReset';
+import { useTableSelection } from '@/hooks/table/useTableSelection';
+import { useLoading } from '@/hooks/async/useLoading';
+import { referencedImageIds } from '@/hooks/useFileImages';
 import AsyncSwitch from '@/components/common/AsyncSwitch.vue';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 import { useUserStore } from "@/stores/user";
 import { ref, onMounted, reactive, nextTick, defineAsyncComponent } from "vue";
-import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";
+import { ElMessage, type FormInstance } from "element-plus";
 import { Search, Refresh, Plus, Edit, Delete } from "@element-plus/icons-vue";
 import type { Announcement, AnnouncementDTO } from '@/types/announcement';
 import {
@@ -286,13 +295,12 @@ const MarkdownEidt = defineAsyncComponent(
 //data
 const userStore = useUserStore();
 const announcementList = ref<Announcement[]>([]);
-const announcementIds = ref<number[]>([]);
+const { ids: announcementIds, single, multiple, handleSelectionChange } = useTableSelection((row: Announcement) => row.id);
 const total = ref<number>(0);
-const loading = ref<boolean>(false);
-const { pending: submitLoading, beforeChange: saveAnnouncement } = useAsyncChange();
-const dialogVisible = ref<boolean>(false);
-const dialogTitle = ref<string>("");
-const queryFormRef = ref();
+const { loading, withLoading } = useLoading();
+const { pending: buttonLoading, beforeChange: runAction } = useAsyncChange();
+const { dialog, openDialog, closeDialog } = useDialogState();
+const queryFormRef = ref<FormInstance>();
 const announcementFormRef = ref<FormInstance>();
 const contentEditorRef = ref<InstanceType<typeof MarkdownEidt>>();
 const currentAnnouncementId = ref<number | null>(null);
@@ -312,6 +320,10 @@ const announcementForm = reactive<AnnouncementDTO>({
   pinned: false,
   status: true,
 });
+function onImageUploaded(id: string) {
+  (announcementForm.fileIds ??= []).push(id);
+}
+
 //表单验证规则
 const announcementRules = {
   title: [
@@ -335,57 +347,43 @@ const announcementRules = {
 };
 
 onMounted(() => {
-  handleQuery();
+  getList();
 });
 
 //methods
 //查询公告列表
-const handleQuery = () => {
-  loading.value = true;
-  getAdminAnnouncementList(queryParams.value)
-    .then((res) => {
-      announcementList.value = res.data.data.records;
-      total.value = res.data.data.total;
-    })
-    .catch((e) => {
-      console.log(e);
-    })
-    .finally(() => {
-      loading.value = false;
-    });
-};
+const getList = () => withLoading(async () => {
+  try {
+    const { data } = await getAdminAnnouncementList(queryParams.value);
+    announcementList.value = data.data.records;
+    total.value = data.data.total;
+  } catch {
+    // 请求层已提示查询失败，保留当前列表
+    return;
+  }
+});
 //重置查询
-const resetQuery = () => {
-  queryParams.value = {
-    title: null,
-    pinned: null,
-    status: null,
-    pageNo: 1,
-    pageSize: 15,
-  };
-  handleQuery();
+const handleQuery = () => {
+  queryParams.value.pageNo = 1;
+  return getList();
 };
+
+const { resetQuery } = useSearchReset(queryFormRef, queryParams, 15, getList);
 //改变页大小
 const handleSizeChange = (val: number) => {
   queryParams.value.pageSize = val;
-  handleQuery();
+  getList();
 };
 //改变当前页
 const handleCurrentChange = (val: number) => {
   queryParams.value.pageNo = val;
-  handleQuery();
-};
-//选择公告
-const handleSelectionChange = (selection: Announcement[]) => {
-  announcementIds.value = selection.map((item) => item.id);
+  getList();
 };
 //公告的即时状态在确认和请求成功后才交给开关更新
 const handleAnnouncementChange = async (row: Announcement, field: 'status' | 'pinned') => {
   const nextValue = !row[field];
   const action = field === 'status' ? (nextValue ? '显示' : '隐藏') : (nextValue ? '置顶' : '取消置顶');
-  await ElMessageBox.confirm(`确定要${action}公告 "${row.title}" 吗？`, '状态修改确认', {
-    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning',
-  });
+  await modal.confirm(`确定要${action}公告 "${row.title}" 吗？`, '状态修改确认');
   const response = field === 'status'
     ? await updateAnnouncementStatus(row.id, nextValue)
     : await updateAnnouncementPinned(row.id, nextValue);
@@ -394,12 +392,11 @@ const handleAnnouncementChange = async (row: Announcement, field: 'status' | 'pi
 //新增公告
 const handleAdd = () => {
   reset();
-  dialogTitle.value = "新增公告";
-  dialogVisible.value = true;
+  openDialog("新增公告");
 };
 //编辑公告
-const handleUpdate = (row: Announcement) => {
-  const id = row.id || announcementIds.value[0];
+const handleUpdate = (row?: Announcement) => {
+  const id = row?.id ?? announcementIds.value[0];
   if (!id) {
     ElMessage.warning("请选择要编辑的公告");
     return;
@@ -416,57 +413,47 @@ const handleUpdate = (row: Announcement) => {
         status: data.status,
       });
       currentAnnouncementId.value = id;
-      dialogTitle.value = "编辑公告";
-      dialogVisible.value = true;
+      openDialog("编辑公告");
     })
     .catch((err) => {
       console.log(err);
     });
 };
 //删除公告
-const handleDelete = (row: Announcement) => {
-  const ids = row.id || announcementIds.value;
-  if (!ids) {
-    ElMessage.warning("请选择要删除的公告");
-    return;
-  }
-  ElMessageBox.confirm(`确定要删除公告 "${ids}" 吗？`, "删除确认", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    type: "warning",
-  })
-    .then(() => {
-      deleteAnnouncementByIds(ids)
-        .then((res) => {
-          ElMessage.success(res.data.msg);
-          handleQuery();
-        })
-        .catch((err) => {
-          console.log(err);
-        });
-    })
-    .catch(() => {});
-};
+const handleDelete = (row?: Announcement) => runAction(async () => {
+  const ids = row ? [row.id] : announcementIds.value;
+  if (!ids.length) return false;
+  await modal.confirm(`是否确认删除公告编号为 "${ids.join(', ')}" 的数据项？`, '删除确认');
+  const response = await deleteAnnouncementByIds(ids);
+  ElMessage.success(response.data.msg);
+  await getList();
+});
 //校验和保存期间保持弹窗，只有成功后才关闭
 const submitForm = async () => {
   const form = announcementFormRef.value;
   const editor = contentEditorRef.value;
-  if (submitLoading.value || !form || !editor) return;
-  await saveAnnouncement(async () => {
+  if (buttonLoading.value || !form || !editor) return;
+  await runAction(async () => {
     await form.validate();
-    if (await editor.uploadImages() === false) return false;
-    const data = { ...announcementForm };
+    if (!editor.canSaveContent()) return false;
+    const data = {
+      ...announcementForm,
+      fileIds: currentAnnouncementId.value === null
+        ? referencedImageIds(announcementForm.fileIds, announcementForm.content)
+        : undefined,
+    };
     const response = currentAnnouncementId.value === null
       ? await addAnnouncement(data)
       : await updateAnnouncement(currentAnnouncementId.value, data);
     ElMessage.success(response.data.msg);
-    dialogVisible.value = false;
-    handleQuery();
+    closeDialog();
+    getList();
   });
 };
 //重置表单
 const reset = () => {
   Object.assign(announcementForm, {
+    fileIds: [],
     title: "",
     content: "",
     priority: 0,
@@ -482,9 +469,9 @@ const reset = () => {
 };
 //关闭对话框
 const handleClose = () => {
-  if (submitLoading.value) return;
+  if (buttonLoading.value) return;
   reset();
-  dialogVisible.value = false;
+  closeDialog();
 };
 </script>
 

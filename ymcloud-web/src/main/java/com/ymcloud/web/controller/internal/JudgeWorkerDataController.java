@@ -1,8 +1,9 @@
 package com.ymcloud.web.controller.internal;
 
-import com.ymcloud.pojo.entity.TestDataVersion;
-import com.ymcloud.web.service.internal.JudgeWorkerDataService;
-import lombok.extern.slf4j.Slf4j;
+import com.ymcloud.pojo.entity.ProblemCase;
+import com.ymcloud.web.service.file.ProblemCaseService;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
@@ -11,88 +12,61 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-12
- * @Description: 供 Worker 读取已发布版本，文件必须属于指定题目与版本清单
+ * @Description: 供 Worker 读取当前清单及属于指定题目的不可变文件
  */
-@Slf4j
 @RestController
-@RequestMapping("/internal/judge-worker/problems/{problemId}/versions/{versionId}")
+@RequestMapping("/internal/judge-worker/problems/{problemId}")
 @PreAuthorize("hasAuthority('ROLE_JUDGE_WORKER')")
 public class JudgeWorkerDataController {
 
     @Autowired
-    private JudgeWorkerDataService judgeWorkerDataService;
+    private ProblemCaseService problemCases;
 
     /**
-     * 返回已校验版本的原始清单，避免重新序列化改变哈希。
-     * @param problemId 题目编号，必须为正数
-     * @param versionId 属于该题目的已发布版本编号
-     * @return 原始 UTF-8 清单字节及内容哈希
+     * 从同一条发布记录读取版本和清单。
+     * @param problemId 题目主键
+     * @param cachedTag Worker 持有的完整清单版本
+     * @return 当前清单、未修改或尚未发布
      */
     @GetMapping("/manifest")
     public ResponseEntity<byte[]> manifest(@PathVariable("problemId") Long problemId,
-                                          @PathVariable("versionId") Long versionId) {
-        log.debug("Worker 读取测试清单，题目编号：{}，版本编号：{}", problemId, versionId);
-        TestDataVersion version = judgeWorkerDataService.getVerifiedVersion(problemId, versionId);
-        byte[] body = version.getManifest().getBytes(StandardCharsets.UTF_8);
+                                           @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String cachedTag) {
+        ProblemCase row = problemCases.current(problemId);
+        if (row == null) {
+            return ResponseEntity.notFound().build();
+        }
+        String tag = '"' + row.getVersion().toString() + '"';
+        if (tag.equals(cachedTag)) {
+            return ResponseEntity.status(304).eTag(tag).build();
+        }
         return ResponseEntity.ok()
+                .eTag(tag)
                 .cacheControl(CacheControl.noStore())
                 .contentType(MediaType.APPLICATION_JSON)
-                .contentLength(body.length)
-                .header("X-Content-Type-Options", "nosniff")
-                .header("X-Content-SHA256", version.getManifestSha256())
-                .body(body);
+                .body(row.getManifest().getBytes(StandardCharsets.UTF_8));
     }
 
     /**
-     * 下载指定版本清单中的文件，并验证实际传输长度。
-     * @param problemId 题目编号，必须为正数
-     * @param versionId 属于该题目的已发布版本编号
-     * @param fileId 必须属于该版本清单的文件编号
-     * @return 文件流、内容长度及哈希；不公开内部存储路径
+     * 传输本题不可变测试文件，不受后续清单发布影响。
+     * @param problemId 题目主键
+     * @param fileId 执行清单中的文件主键
+     * @return 从登记的存储服务读取的原始字节
      */
     @GetMapping("/files/{fileId}")
-    public ResponseEntity<StreamingResponseBody> file(@PathVariable("problemId") Long problemId,
-                                                     @PathVariable("versionId") Long versionId,
-                                                     @PathVariable("fileId") Long fileId) {
-        log.debug("Worker 读取测试文件，题目编号：{}，版本编号：{}，文件编号：{}", problemId, versionId, fileId);
-        JudgeWorkerDataService.FileReference file = judgeWorkerDataService.resolveFile(problemId, versionId, fileId);
-        long expectedSize = file.size();
-        StreamingResponseBody body = output -> {
-            try (InputStream input = judgeWorkerDataService.openFile(problemId, versionId, file)) {
-                byte[] buffer = new byte[8192];
-                long copied = 0;
-                int count;
-                while ((count = input.read(buffer)) != -1) {
-                    copied += count;
-                    if (copied > expectedSize) {
-                        throw new IOException("Test data size mismatch");
-                    }
-                    output.write(buffer, 0, count);
-                }
-                if (copied != expectedSize) {
-                    throw new IOException("Test data size mismatch");
-                }
-            }
-        };
+    public ResponseEntity<Resource> file(@PathVariable("problemId") Long problemId,
+                                         @PathVariable("fileId") Long fileId) {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .contentLength(expectedSize)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileId + ".dat\"")
-                .header("X-Content-Type-Options", "nosniff")
-                .header("X-Content-SHA256", file.sha256())
-                .body(body);
+                .body(new InputStreamResource(problemCases.openFile(problemId, fileId)));
     }
-
 }

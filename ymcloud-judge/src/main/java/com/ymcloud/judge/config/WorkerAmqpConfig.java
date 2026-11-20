@@ -7,9 +7,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.ymcloud.judge.constant.JudgeConstants;
 import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Declarables;
@@ -39,8 +38,8 @@ public class WorkerAmqpConfig {
      */
     @Bean
     public Queue spjCompileQueue() {
-        return QueueBuilder.durable(SpjProgram.COMPILE_QUEUE)
-                .ttl((int) SpjProgram.COMPILE_TIMEOUT_MILLIS)
+        return QueueBuilder.durable(JudgeConstants.SPJ_COMPILE_QUEUE)
+                .ttl((int) JudgeConstants.SPJ_COMPILE_TIMEOUT_MILLIS)
                 .maxLength(32)
                 .overflow(QueueBuilder.Overflow.rejectPublish)
                 .build();
@@ -99,15 +98,16 @@ public class WorkerAmqpConfig {
      */
     @Bean
     public Declarables workerTopology(
-            @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}") String exchangeName,
-            @Value("${ymcloud.judge.task-queue:" + JudgeProtocol.TASK_QUEUE + "}") String taskName,
-            @Value("${ymcloud.judge.result-queue:" + JudgeProtocol.RESULT_QUEUE + "}") String resultName,
-            @Value("${ymcloud.judge.task-routing-key:judge}") String taskRoute,
-            @Value("${ymcloud.judge.result-routing-key:judge.result}") String resultRoute) {
+            @Value("${ymcloud.judge.exchange:" + JudgeConstants.JUDGE_EXCHANGE + "}") String exchangeName,
+            @Value("${ymcloud.judge.task-queue:" + JudgeConstants.JUDGE_QUEUE + "}") String taskName,
+            @Value("${ymcloud.judge.result-queue:" + JudgeConstants.JUDGE_RESULT_QUEUE + "}") String resultName,
+            @Value("${ymcloud.judge.task-routing-key:" + JudgeConstants.JUDGE_ROUTING_KEY + "}") String taskRoute,
+            @Value("${ymcloud.judge.result-routing-key:" + JudgeConstants.JUDGE_RESULT_ROUTING_KEY + "}")
+            String resultRoute) {
         TopicExchange exchange = new TopicExchange(exchangeName, true, false);
         Queue task = QueueBuilder.durable(taskName)
                 .deadLetterExchange(exchangeName)
-                .deadLetterRoutingKey(JudgeProtocol.DEAD_ROUTE)
+                .deadLetterRoutingKey(JudgeConstants.JUDGE_DEAD_ROUTING_KEY)
                 .build();
         Queue result = QueueBuilder.durable(resultName).build();
         Queue retry = QueueBuilder.durable(taskName + ".retry")
@@ -119,8 +119,8 @@ public class WorkerAmqpConfig {
         return new Declarables(exchange, task, result, retry, dead,
                 BindingBuilder.bind(task).to(exchange).with(taskRoute),
                 BindingBuilder.bind(result).to(exchange).with(resultRoute),
-                BindingBuilder.bind(retry).to(exchange).with(JudgeProtocol.RETRY_ROUTE),
-                BindingBuilder.bind(dead).to(exchange).with(JudgeProtocol.DEAD_ROUTE));
+                BindingBuilder.bind(retry).to(exchange).with(JudgeConstants.JUDGE_RETRY_ROUTING_KEY),
+                BindingBuilder.bind(dead).to(exchange).with(JudgeConstants.JUDGE_DEAD_ROUTING_KEY));
     }
 
     /**
@@ -168,7 +168,7 @@ public class WorkerAmqpConfig {
      */
     private long shutdownTimeout(WorkerProperties properties) {
         // 终态首次确认失败后，过期恢复最多还会再次发布一次终态
-        return JudgeProtocol.MAX_TASK_DURATION_MILLIS + JudgeProtocol.MAX_CLOCK_SKEW_MILLIS
+        return JudgeConstants.MAX_TASK_DURATION_MILLIS + JudgeConstants.MAX_CLOCK_SKEW_MILLIS
                 + GoJudgeTaskSession.CLEANUP_TIMEOUT_MILLIS + 2 * properties.getConfirmTimeoutMillis();
     }
 }

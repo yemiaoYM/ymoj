@@ -41,16 +41,6 @@ ymcloud 的发布版本统一读取根 `pom.xml` 的 `<revision>`，从 `4.0.0` 
 
 网络受限时可把同一固定快照的 `.deb` 放入忽略目录 `target/phase3-verification/packages/`，再次执行相同构建脚本。构建将此目录作为只读可选缓存，仅在 Debian 签名验证后的索引中找到相同包版本、SHA-256 校验完全一致时复用；缺失包仍从固定快照下载，缓存为空也可正常构建。软件包不加入 Git，也不把本地缓存作为新的受信任仓库。
 
-## 公开镜像发布验收
-
-本节仅供维护者使用。完整网站的七个镜像按[公开发布步骤](https://gitee.com/yemiaoo/ymoj-deploy#维护者发布公开镜像)推送到两个仓库后，在源码根目录执行：
-
-```shell
-python -B ymcloud-web/src/test/scripts/deployment/verify_registry.py --local-lock target/phase3-verification/full-stack-deployment/images.lock.json --repository docker.io/yemiao1/ymoj --repository ccr.ccs.tencentyun.com/ymoj/ymcloud --report target/phase3-verification/registry-4.0.0.json --pull
-```
-
-`--local-lock` 必须指向本次最新构建输出；使用过 `--output` 时替换为对应目录。脚本检查两个仓库的七个版本标签，确认平台为 `linux/amd64`、config image ID 与本次构建一致，并通过 `--pull` 实际匿名拉取。验证报告和内部构建记录保存在忽略的 `target/phase3-verification` 中，不需要部署用户生成或维护。全部校验和部署回归通过后，再发布对应源码版本。
-
 ## Linux 部署
 
 Compose 仅启动 Worker、go-judge，连接已有 Web、Redis、RabbitMQ。MySQL 仍由 Web 使用。Web 服务令牌和 go-judge 令牌必须分别生成，均至少 32 个字符；不复用 JWT、数据库密码或存储密钥。
@@ -99,40 +89,11 @@ Worker 运行日志使用独立的 `/data/logs`，包含 `application.log` 和�
 
 ## 回归与公平性
 
-测试源码位于模块 `src/test`；所有临时配置、样本产物和报告均写入忽略的 `target/phase3-verification`。使用专属测试实例与独立队列/Redis database，不对生产服务执行故障注入。Docker Desktop 结果只能作为开发验证，不能替代目标 2 核 4GB Linux 机器的公平性验收。
-
-真实运行前设置 `YMCLOUD_RUN_GO_JUDGE_TESTS=true`、`YMCLOUD_GO_JUDGE_URL` 与 `YMCLOUD_GO_JUDGE_TOKEN`。Java 集成测试和业务验证入口：
-
-```bash
-mvn -pl ymcloud-judge -am test
-python3 -B ymcloud-web/src/test/scripts/judge/verify_worker.py
-python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_runtime.py --container <go-judge容器名>
-```
-
-`verify_worker.py` 还需其专用 `YMCLOUD_WORKER_E2E=true` 及空的非开发 Redis database，详见[源码开发与维护](https://gitee.com/yemiaoo/ymoj-deploy#源码开发与维护)。`verify_runtime.py` 使用固定可信 Python 程序产生父进程及三个 `setsid` 子进程，主动关闭 HTTP 连接后检查进程消失、`pids.current` 回到基线并复用执行槽；仅出现客户端取消异常不算回收通过。脚本还从活动进程的实际 cgroup 祖先检查内存/进程限额继承，验证服务总 CPU、内存、swap、进程上限及鉴权。
-
-在专属实例没有其他验收任务时，可给 `verify_runtime.py` 增加 `--restart`，验证服务重启后旧文件 ID 返回 404、异常退出遗留的临时文件被清理，以及新执行请求恢复；不要与业务回归或公平性采集并行重启服务。
-
-`GoJudgeSandboxIntegrationTest` 覆盖四语言与真实 HTTP 中断后的资源回收；在专属单槽实例上设置 `YMCLOUD_GO_JUDGE_TEST_PARALLELISM=1` 执行排队和中断回归。
-
 各入口验收应分别记录编译成功/失败、死循环、休眠、内存超限、崩溃、输出超限、多点、空输入、Unicode/空白、Java 多类、子进程、文件污染及隔离限制。业务层还需普通提交、比赛、自测、固定数据版本、ACM/OI、状态轮询、AC 统计、服务中断、文件丢失、租约丢失、Worker 重启、重复消息及结果恢复。未执行的项目不得填写 PASS。
 
-公平性每个入口使用固定源代码，每档预热 5 次、测量至少 30 次。在目标机器依次采集两批空闲、实际常规业务负载、满载：
-
-当前公平性脚本校验表中的默认预算，运行前导出与部署 `.env` 相同的预算环境变量；高配参数会被明确拒绝，应先扩展采样配置并记录实际任务参数，再进行该部署的验收。
-
-```bash
-python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_fairness.py --container <容器名> --tier idle-a
-python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_fairness.py --container <容器名> --tier idle-b
-# 先从真实业务压测端施加可重复的常规或满载流量，保持相同样本和题目时限。
-python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_fairness.py --container <容器名> --tier normal --load-description '记录请求率、并发和业务样本集'
-python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_fairness.py --container <容器名> --tier full --load-description '记录饱和负载、请求率和并发'
-python3 -B ymcloud-judge/src/test/scripts/gojudge/verify_fairness.py --compare
-```
+公平性每个入口使用固定源代码，每档预热 5 次、测量至少 30 次。在目标机器采集两批空闲样本，再分别采集常规业务负载和满载样本。
 
 报告保留每次 CPU/墙钟、内存、请求总时间及 `请求总时间 - runTime`，最后一项包含等待及传输，不能冒充纯 RabbitMQ 等待时间；队列等待以 Worker 的队列指标补充。记录 CPU/墙钟 p50/p95、宿主 `/proc/stat` 的 CPU steal 和 cgroup `cpu.stat` 限流差值。虚拟机内 steal 只反映该层可观测信息。
-
-开发环境可用模块同目录的 `load_service.py` 产生固定 200 毫秒 CPU 请求，单流加 200 毫秒间隔作为模拟常规执行负载、双流无间隔作为执行槽饱和负载。负载进程应运行在独立非特权限额容器，设置持续时间并在采集后停止；其输出记录成功/失败数和实际持续时间。这仅验证模拟执行流量，不代替目标机器上真实 Web、数据库、队列负载的常规业务验收。
 
 默认门槛：两批空闲墙钟 p95 漂移不超过 10%，常规负载相对第一批空闲不超过 20%，空闲样本至少保留 20% 限时余量，空闲/常规负载下所有 AC 样本无误判 TLE。满载用于容量边界，不作为隐藏 TLE 的加时依据。失败时降低承诺的业务负载或增加服务预算，重新完整采集各档。
 

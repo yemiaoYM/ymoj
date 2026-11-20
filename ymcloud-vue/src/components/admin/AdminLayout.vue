@@ -24,7 +24,7 @@
         <AdminHeader :mobile="isMobile" :menu-open="menuOpen" @toggle-menu="onToggleMenu" />
       </el-header>
       <el-main class="admin-main">
-        <el-scrollbar class="admin-content">
+        <el-scrollbar class="admin-content" view-class="admin-content-view">
           <router-view />
           <el-backtop target=".admin-content .el-scrollbar__wrap" :right="24" :bottom="32" />
         </el-scrollbar>
@@ -108,6 +108,11 @@ onBeforeUnmount(() => media.removeEventListener('change', onViewportChange));
   padding: 0;
   background: var(--ym-page);
 }
+
+.admin-content :deep(.admin-content-view:has(> .admin-list-page)) {
+  height: 100%;
+}
+
 /* 后台列表沿用用户、题目列表的表头；列对齐仍由 el-table-column 决定。 */
 .admin-main :deep(.el-table) {
   --el-table-header-bg-color: var(--ym-table-header);

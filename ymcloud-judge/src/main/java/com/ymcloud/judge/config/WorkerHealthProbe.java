@@ -1,7 +1,7 @@
 package com.ymcloud.judge.config;
 
+import com.ymcloud.judge.constant.JudgeConstants;
 import com.ymcloud.judge.io.WorkerPaths;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -72,7 +72,7 @@ public class WorkerHealthProbe {
                 if (!(container instanceof SimpleMessageListenerContainer simple) || !simple.isRunning()) {
                     return false;
                 }
-                int concurrency = Arrays.asList(simple.getQueueNames()).contains(SpjProgram.COMPILE_QUEUE)
+                int concurrency = Arrays.asList(simple.getQueueNames()).contains(JudgeConstants.SPJ_COMPILE_QUEUE)
                         ? 1 : properties.getConcurrency();
                 return simple.getActiveConsumerCount() >= concurrency;
             });

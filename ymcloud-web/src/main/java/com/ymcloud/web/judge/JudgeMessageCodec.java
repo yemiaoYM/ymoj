@@ -5,10 +5,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ymcloud.pojo.contract.judge.JudgeResult;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
-import com.ymcloud.pojo.contract.judge.SpjCompileRequest;
-import com.ymcloud.pojo.contract.judge.SpjCompileResult;
+import com.ymcloud.pojo.bo.judge.JudgeResult;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
+import com.ymcloud.pojo.bo.judge.SpjCompileRequest;
+import com.ymcloud.pojo.bo.judge.SpjCompileResult;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;

@@ -1,12 +1,14 @@
 package com.ymcloud.web.judge;
 
 import com.ymcloud.common.constant.HttpStatus;
+import com.ymcloud.common.constant.JudgeConstants;
+import com.ymcloud.common.constant.RabbitMQConstants;
 import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.utils.RedisCache;
 import com.ymcloud.core.security.utils.SecurityUtils;
-import com.ymcloud.pojo.contract.judge.SpjCompileRequest;
-import com.ymcloud.pojo.contract.judge.SpjCompileResult;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.pojo.bo.judge.SpjCompileRequest;
+import com.ymcloud.pojo.bo.judge.SpjCompileResult;
+import com.ymcloud.pojo.bo.judge.SpjProgram;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
@@ -45,13 +47,13 @@ public class SpjCompilation {
     public SpjCompileResult compile(SpjProgram program) {
         String requestId = UUID.randomUUID().toString();
         SpjCompileRequest request = new SpjCompileRequest(requestId,
-                System.currentTimeMillis() + SpjProgram.COMPILE_TIMEOUT_MILLIS, program);
+                System.currentTimeMillis() + JudgeConstants.SPJ_COMPILE_TIMEOUT_MILLIS, program);
         MessageProperties properties = new MessageProperties();
         properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-        properties.setExpiration(Long.toString(SpjProgram.COMPILE_TIMEOUT_MILLIS));
+        properties.setExpiration(Long.toString(JudgeConstants.SPJ_COMPILE_TIMEOUT_MILLIS));
         Message response;
         try {
-            response = rabbitTemplate.sendAndReceive("", SpjProgram.COMPILE_QUEUE,
+            response = rabbitTemplate.sendAndReceive("", RabbitMQConstants.SPJ_COMPILE_QUEUE,
                     new Message(codec.write(request).getBytes(StandardCharsets.UTF_8), properties));
         } catch (AmqpException e) {
             throw new ProblemException("SPJ 编译服务暂不可用，请稍后重试", HttpStatus.SERVICE_UNAVAILABLE);
@@ -65,11 +67,11 @@ public class SpjCompilation {
         } catch (IllegalArgumentException e) {
             throw new ProblemException("SPJ 编译响应无效", HttpStatus.SERVICE_UNAVAILABLE);
         }
-        if (!requestId.equals(result.requestId()) || !program.getDigest().equals(result.digest())
-                || result.message() == null || result.message().length() > 5000) {
+        if (!requestId.equals(result.getRequestId()) || !program.getDigest().equals(result.getDigest())
+                || result.getMessage() == null || result.getMessage().length() > 5000) {
             throw new ProblemException("SPJ 编译响应无效", HttpStatus.SERVICE_UNAVAILABLE);
         }
-        if (result.success()) {
+        if (result.isSuccess()) {
             redis.setCacheObject(receiptKey(program.getDigest()), true, 30, TimeUnit.MINUTES);
         }
         return result;

@@ -7,9 +7,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.exception.ServiceException;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.AnnouncementEntityService;
+import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.pojo.dto.admin.AnnouncementDTO;
 import com.ymcloud.pojo.entity.Announcement;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.query.admin.AdminAnnouncementPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminAnnouncementService;
@@ -28,6 +30,9 @@ import java.util.List;
  */
 @Service
 public class AdminAnnouncementServiceImpl implements AdminAnnouncementService {
+
+    @Autowired
+    private FileEntityService files;
 
     @Autowired
     private AnnouncementEntityService announcementEntityService;
@@ -59,6 +64,10 @@ public class AdminAnnouncementServiceImpl implements AdminAnnouncementService {
         return announcement;
     }
 
+    /**
+     * 保存公告并绑定本次提交的正文图片
+     * @param announcementDTO 公告内容与预上传图片主键
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addAnnouncement(AnnouncementDTO announcementDTO) {
@@ -72,6 +81,9 @@ public class AdminAnnouncementServiceImpl implements AdminAnnouncementService {
         boolean success = announcementEntityService.save(announcement);
         if (!success) {
             throw new ServiceException("新增公告失败，请稍后再试");
+        }
+        if (CollUtil.isNotEmpty(announcementDTO.getFileIds())) {
+            files.bindImages(announcementDTO.getFileIds(), FileBizType.ANNOUNCEMENT, announcement.getId(), currentUser.getId());
         }
     }
 

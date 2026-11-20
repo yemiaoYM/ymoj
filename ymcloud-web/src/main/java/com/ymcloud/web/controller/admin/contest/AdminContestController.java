@@ -1,17 +1,21 @@
 package com.ymcloud.web.controller.admin.contest;
 
+import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.result.Result;
+import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.pojo.bo.ImageUploadBO;
 import com.ymcloud.pojo.dto.admin.CloneContestDTO;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.Problem;
+import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.query.admin.AdminContestPageQuery;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.AdminContestVO;
 import com.ymcloud.pojo.vo.admin.ContestProblemTableVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminContestService;
-import com.ymcloud.web.service.common.PublicImageService;
+import com.ymcloud.web.service.file.ImageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -43,17 +47,38 @@ public class AdminContestController {
     private AdminContestService adminContestService;
 
     @Autowired
-    private PublicImageService publicImages;
+    private ImageService imageService;
+
+    /**
+     * 上传比赛正文草稿图片
+     * @param file 待校验的原始图片
+     * @param contestId 比赛id
+     * @return 十进制文件主键
+     */
+    @PreAuthorize("@ss.hasAnyPermi('contest:contest:add', 'contest:contest:edit')")
+    @PostMapping("/description/image")
+    public Result<Long> uploadDescriptionImage(@RequestParam("file") MultipartFile file,
+                                               @RequestParam(value = "contestId",required = false) Long contestId) {
+        ImageUploadBO bo = ImageUploadBO.builder()
+                .bizType(FileBizType.CONTEST)
+                .bizId(contestId)
+                .uploaderId(SecurityUtils.getUserId())
+                .build();
+        Long fileId = imageService.upload(file, bo);
+        return Result.ok(fileId);
+    }
 
     /**
      * 上传比赛封面，文件保存后仍需另行保存比赛
-     * @param file 前端完成裁剪的图片，后端校验内容类型及容量
+     * @param file 图片文件
      * @return 已登记文件的公开地址
      */
     @PostMapping("/image")
     @PreAuthorize("@ss.hasAnyPermi('contest:contest:add', 'contest:contest:edit')")
     public Result<String> uploadContest(@RequestParam("file") MultipartFile file) {
-        return Result.ok(publicImages.upload(file));
+        log.info("上传比赛封面");
+        Long fileId = imageService.upload(file);
+        return Result.ok(FileConstants.PUBLIC_URL_PREFIX + fileId);
     }
 
     /**

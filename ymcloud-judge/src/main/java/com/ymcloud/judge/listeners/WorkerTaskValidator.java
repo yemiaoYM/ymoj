@@ -1,13 +1,11 @@
 package com.ymcloud.judge.listeners;
 
-import com.ymcloud.pojo.contract.judge.JudgeLanguage;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.judge.constant.JudgeConstants;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * @Author: Yemiao
@@ -18,7 +16,6 @@ import java.util.regex.Pattern;
 public class WorkerTaskValidator {
 
     private static final Set<String> SUPPORTED_LANGUAGES = Set.of("Java", "C", "C++", "Python");
-    private static final Pattern SHA256 = Pattern.compile("[0-9a-f]{64}");
 
     /**
      * 为独立消息入口建立任务校验边界
@@ -28,7 +25,7 @@ public class WorkerTaskValidator {
         validateIdentity(task);
         validateDeadline(task);
         validateExecutionLimits(task);
-        validateLanguage(task.getLanguageConfig());
+        validateLanguage(task.getLanguage());
         validateData(task);
         if (task.getSpj() != null) {
             if (task.getStrategy() != 0) {
@@ -59,9 +56,9 @@ public class WorkerTaskValidator {
     private void validateDeadline(JudgeTask task) {
         if (task.getSubmittedAtEpochMs() == null || task.getDeadlineEpochMs() == null
                 || task.getSubmittedAtEpochMs() <= 0 || task.getDeadlineEpochMs() <= 0
-                || task.getSubmittedAtEpochMs() > System.currentTimeMillis() + JudgeProtocol.MAX_CLOCK_SKEW_MILLIS
+                || task.getSubmittedAtEpochMs() > System.currentTimeMillis() + JudgeConstants.MAX_CLOCK_SKEW_MILLIS
                 || task.getDeadlineEpochMs() <= task.getSubmittedAtEpochMs()
-                || task.getDeadlineEpochMs() - task.getSubmittedAtEpochMs() > JudgeProtocol.MAX_TASK_DURATION_MILLIS) {
+                || task.getDeadlineEpochMs() - task.getSubmittedAtEpochMs() > JudgeConstants.MAX_TASK_DURATION_MILLIS) {
             throw new IllegalArgumentException("判题任务截止时间无效");
         }
         // 已过期任务仍进入恢复分支，发送终态或死信，避免永久滞留
@@ -84,24 +81,20 @@ public class WorkerTaskValidator {
      * 只接受 Worker 工具链支持的本站语言
      * @param language 待检查语言快照
      */
-    private void validateLanguage(JudgeLanguage language) {
-        if (language == null || language.getName() == null
-                || !SUPPORTED_LANGUAGES.contains(language.getName())) {
+    private void validateLanguage(String language) {
+        if (language == null || !SUPPORTED_LANGUAGES.contains(language)) {
             throw new IllegalArgumentException("判题语言配置无效");
         }
     }
 
     /**
-     * 区分有界自测输入与固定版本正式数据
+     * 区分有界自测输入与正式评测的题目编号
      * @param task 待检查任务
      */
     private void validateData(JudgeTask task) {
         if (task.getStrategy() == 0) {
-            if (task.getProblemId() == null || task.getProblemId() <= 0
-                    || task.getTestDataVersionId() == null || task.getTestDataVersionId() <= 0
-                    || task.getManifestSha256() == null
-                    || !SHA256.matcher(task.getManifestSha256()).matches()) {
-                throw new IllegalArgumentException("正式评测必须固定数据版本和清单哈希");
+            if (task.getProblemId() == null || task.getProblemId() <= 0) {
+                throw new IllegalArgumentException("正式评测缺少有效题目 ID");
             }
             return;
         }

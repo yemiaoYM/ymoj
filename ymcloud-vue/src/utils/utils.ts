@@ -1,5 +1,8 @@
 import { JUDGE_STATUS } from '@/constants/judge';
 
+const DECIMAL_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+const BINARY_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+
 //定义类型
 type AlterType = 'primary' | 'success' | 'warning' | 'info' | 'error';
 type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger';
@@ -99,18 +102,44 @@ export function formatContestDuration(minutes: number): string {
 }
 
 /**
- * 格式化内存显示
- * @param bytes - 内存大小（单位：KB）
- * @returns 格式化后的内存字符串，例如 "512 KB" / "1.5 MB"
+ * 按十进制格式化字节数，例如 1500 B 显示为 1.5 KB
+ * @param bytes 非负字节数
+ * @returns 最多保留一位小数的容量文本，缺失或无效的数值显示为 - -
  */
-export function formatSubmissionMemory(bytes: number | null): string {
-  if (bytes === null || bytes === undefined) return '- -';
-  if (bytes === 0) return '0 KB';
-  const unit = 1024;
-  const units = ['KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-  const index = Math.floor(Math.log(bytes) / Math.log(unit));
-  const value = bytes / Math.pow(unit, index);
-  return `${parseFloat(value.toFixed(1))} ${units[index]}`;
+export function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) {
+    return '- -';
+  }
+  let value = bytes;
+  let index = 0;
+  while (value >= 1000 && index < DECIMAL_UNITS.length - 1) {
+    value /= 1000;
+    index++;
+  }
+  return `${parseFloat(value.toFixed(1))} ${DECIMAL_UNITS[index]}`;
+}
+
+/**
+ * 按二进制格式化容量，例如 1536 B 显示为 1.5 KiB
+ * @param size 非负容量
+ * @param unit 输入单位，默认为 B
+ * @returns 最多保留一位小数的容量文本，缺失或无效的数值显示为 - -
+ */
+export function formatBinaryBytes(size: number | null | undefined, unit: 'B' | 'KiB' = 'B'): string {
+  if (size == null || !Number.isFinite(size) || size < 0) {
+    return '- -';
+  }
+  let value = size;
+  let index = unit === 'KiB' ? 1 : 0;
+  if (unit === 'KiB' && size > 0 && size < 1) {
+    value *= 1024;
+    index = 0;
+  }
+  while (value >= 1024 && index < BINARY_UNITS.length - 1) {
+    value /= 1024;
+    index++;
+  }
+  return `${parseFloat(value.toFixed(1))} ${BINARY_UNITS[index]}`;
 }
 
 /**
@@ -158,7 +187,7 @@ export function formatRelativeTime(date: string): string {
     }
   }
   return '刚刚';
-};
+}
 
 /**
  * 获取比赛状态类型
@@ -236,7 +265,7 @@ export function isNull(value: any): boolean {
   if (value === null || value === undefined) return true;
   if (typeof value === 'string') return value.trim().length === 0;
   if (typeof value === 'number') return value === 0;
-  if (typeof value === 'boolean') return value === false;
+  if (typeof value === 'boolean') return !value;
   if (Array.isArray(value)) return value.length === 0;
   if (value instanceof Set || value instanceof Map) return value.size === 0;
   if (typeof value === 'object') return Object.keys(value).length === 0;

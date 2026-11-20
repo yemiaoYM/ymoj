@@ -40,7 +40,7 @@ import 'codemirror/addon/fold/brace-fold.js';
 import 'codemirror/addon/edit/matchbrackets.js';
 import 'codemirror/addon/edit/closebrackets.js';
 import { compileSpj } from '@/api/problem';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 import { useThemeStore } from '@/stores/theme';
 import { ElNotification } from 'element-plus';
 

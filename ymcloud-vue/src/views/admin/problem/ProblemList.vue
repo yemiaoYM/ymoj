@@ -56,8 +56,8 @@
             plain
             type="danger"
             :icon="Delete"
-            :disabled="problemIds.length === 0"
-            @click="handleDelete"
+            :disabled="multiple"
+            @click="handleDelete()"
           >
             删除
           </el-button>
@@ -185,11 +185,15 @@
 
 <script lang="ts" setup>
 //import
+import modal from '@/plugins/modal';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
+import { useTableSelection } from '@/hooks/table/useTableSelection';
+import { useLoading } from '@/hooks/async/useLoading';
 import AsyncSelect from '@/components/common/AsyncSelect.vue';
 import { PROBLEM_DIFFICULTIES, PROBLEM_VISIBILITY } from '@/constants/problem';
 import { useUserStore } from '@/stores/user';
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import { fetchRemoteProblem, getAdminProblemList, deleteProblemByIds, updateProblemVisibility } from '@/api/problem';
 import type { RemoteProblemRequest, AdminProblemVO } from '@/types/problem';
@@ -202,9 +206,10 @@ const userStore = useUserStore();
 const router = useRouter();
 const route = useRoute();
 const problemList = ref<AdminProblemVO[]>([] as AdminProblemVO[]);
-const problemIds = ref<number[]>([]);
+const { ids: problemIds, multiple, handleSelectionChange } = useTableSelection((row: AdminProblemVO) => row.id);
 const total = ref<number>(0);
-const loading = ref<boolean>(false);
+const { beforeChange: remove } = useAsyncChange();
+const { loading, withLoading } = useLoading();
 const remoteStore = useRemoteProblemStore();
 const remoteVisible = ref(false);
 const remoteLoading = ref(false);
@@ -300,17 +305,20 @@ onMounted(() => {
 });
 //methods
 //查询题目列表
+const getList = () => withLoading(async () => {
+  try {
+    const { data } = await getAdminProblemList(queryParams.value);
+    problemList.value = data.data.records;
+    total.value = data.data.total;
+  } catch {
+    // 请求层已提示查询失败，保留当前列表
+    return;
+  }
+});
+
 const handleQuery = () => {
-  loading.value = true;
-  syncToUrl(queryParams.value); // 同步到 URL
-  getAdminProblemList(queryParams.value).then(res => {
-    problemList.value = res.data.data.records;
-    total.value = res.data.data.total;
-  }).catch(err => {
-    console.error('获取题目列表失败:', err);
-  }).finally(() => {
-    loading.value = false;
-  });
+  syncToUrl(queryParams.value);
+  return getList();
 };
 //重置查询
 const resetQuery = () => {
@@ -328,10 +336,6 @@ const handleCurrentChange = (val: number) => {
   queryParams.value.pageNo = val;
   handleQuery();
 };
-//选择题目
-const handleSelectionChange = (selection: AdminProblemVO[]) => {
-  problemIds.value = selection.map(item => item.id);
-};
 //获取权限文本
 const getVisibilityText = (visibility: number) => {
   switch (visibility) {
@@ -346,8 +350,8 @@ const handleAdd = () => {
   router.push('/admin/problem/add');
 };
 //编辑题目
-const handleUpdate = (row: AdminProblemVO) => {
-  const id = row.id || problemIds.value[0];
+const handleUpdate = (row?: AdminProblemVO) => {
+  const id = row?.id ?? problemIds.value[0];
   if (!id) {
     ElMessage.warning('请选择要编辑的题目');
     return;
@@ -366,35 +370,19 @@ const handleTestCase = (row: AdminProblemVO) => {
   router.push(`/admin/problem/${id}/testcases`);
 };
 //删除题目
-const handleDelete = (row: AdminProblemVO) => {
-  const ids = row.id || problemIds.value;
-  if (!ids) {
-    ElMessage.warning('请选择要删除的题目');
-    return;
-  }
-  ElMessageBox.confirm(
-    `是否确认删除题目编号为 "${ids}" 的数据项吗？`,
-    '删除确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(() => {
-    deleteProblemByIds(ids).then(res => {
-      ElMessage.success(res.data.msg);
-      handleQuery();
-    }).catch(e => {
-      console.log(e);
-    });
-  }).catch(() => { });
-};
+const handleDelete = (row?: AdminProblemVO) => remove(async () => {
+  const ids = row ? [row.id] : problemIds.value;
+  if (!ids.length) return false;
+  await modal.confirm(`是否确认删除题目编号为 "${ids.join(', ')}" 的数据项？`, '删除确认');
+  const response = await deleteProblemByIds(ids);
+  ElMessage.success(response.data.msg);
+  await getList();
+});
 //权限变更处理
 const handleVisibilityChange = async (row: AdminProblemVO, newVisibility: number) => {
-  await ElMessageBox.confirm(
+  await modal.confirm(
     `确认将题目 "${row.title}" 的权限从 "${getVisibilityText(row.visibility)}" 修改为 "${getVisibilityText(newVisibility)}" 吗？`,
     '权限修改确认',
-    { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
   );
   const response = await updateProblemVisibility(row.id, newVisibility);
   ElMessage.success(response.data.msg);
@@ -411,15 +399,7 @@ watch(
     );
     if (hasChanged) {
       Object.assign(queryParams.value, newParams);
-      loading.value = true;
-      getAdminProblemList(queryParams.value).then(res => {
-        problemList.value = res.data.data.records;
-        total.value = res.data.data.total;
-      }).catch(err => {
-        console.log(err);
-      }).finally(() => {
-        loading.value = false;
-      });
+      getList();
     }
   },
   { immediate: false }

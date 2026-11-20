@@ -6,6 +6,7 @@ import cn.hutool.core.date.LocalDateTimeUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ymcloud.common.constant.ContestConstants;
+import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.constant.ProblemConstants;
 import com.ymcloud.common.exception.contest.ContestException;
@@ -15,13 +16,14 @@ import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.ContestEntityService;
 import com.ymcloud.core.web.dao.ContestProblemEntityService;
+import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.pojo.dto.admin.CloneContestDTO;
 import com.ymcloud.pojo.dto.admin.ContestDTO;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
-import com.ymcloud.pojo.entity.File;
+import com.ymcloud.pojo.entity.FileInfo;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.User;
@@ -56,6 +58,9 @@ import java.util.stream.Collectors;
 public class AdminContestServiceImpl implements AdminContestService {
 
     private static final int MAX_CONTEST_PROBLEMS = 15;
+
+    @Autowired
+    private FileEntityService files;
 
     @Autowired
     private ResourceAccessService resourceAccess;
@@ -154,10 +159,13 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (!save) {
             throw new ContestException("添加比赛失败，请稍后再试");
         }
+        if (CollUtil.isNotEmpty(contestDTO.getFileIds())) {
+            files.bindImages(contestDTO.getFileIds(), FileBizType.CONTEST, contest.getId(), user.getId());
+        }
     }
 
     /**
-     * 修改比赛
+     * 修改比赛，恢复默认封面或退出密码模式时清空对应字段
      * @param id 比赛ID
      * @param contestDTO 比赛信息
      */
@@ -196,7 +204,11 @@ public class AdminContestServiceImpl implements AdminContestService {
             long duration = LocalDateTimeUtil.between(contestDTO.getStartTime(), contestDTO.getEndTime()).toMinutes();
             contest.setDuration(duration);
         }
-        boolean update = contestEntityService.updateById(contest);
+        boolean update = contestEntityService.lambdaUpdate()
+                .eq(Contest::getId, id)
+                .set(contest.getImage() == null, Contest::getImage, null)
+                .set(contest.getPassword() == null, Contest::getPassword, null)
+                .update(contest);
         if (!update) {
             throw new ContestException("修改比赛失败，请稍后再试");
         }
@@ -660,8 +672,18 @@ public class AdminContestServiceImpl implements AdminContestService {
         if (image == null) {
             return;
         }
-        File file = storedFiles.resolvePublicUrl(image);
-        if (file == null || file.getBizType() != FileBizType.IMAGE) {
+        if (!image.startsWith(FileConstants.PUBLIC_URL_PREFIX)) {
+            throw new FileException("封面地址不合法", HttpStatus.BAD_REQUEST);
+        }
+        Long fileId;
+        try {
+            fileId = Long.valueOf(image.substring(FileConstants.PUBLIC_URL_PREFIX.length()));
+        } catch (NumberFormatException e) {
+            throw new FileException("封面文件编号无效", HttpStatus.BAD_REQUEST, e);
+        }
+        FileInfo file = storedFiles.getById(fileId);
+        if (file.getBizType() != FileBizType.GENERAL
+                || !java.util.List.of("image/png", "image/jpeg", "image/webp", "image/gif").contains(String.valueOf(file.getFileType()))) {
             throw new FileException("封面不存在或不是公开图片，请重新上传", HttpStatus.BAD_REQUEST);
         }
     }

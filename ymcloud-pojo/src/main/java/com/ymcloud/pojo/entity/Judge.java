@@ -13,7 +13,7 @@ import lombok.ToString;
 import java.time.LocalDateTime;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2025-07-30
  * @Description: 本站判题提交记录，诊断输出仅包含显式允许的字段。
  */
@@ -30,9 +30,6 @@ public class Judge {
 
     @ToString.Include
     private Long problemId;
-
-    /** 提交时固定的数据版本，历史记录为空。 */
-    private Long testDataVersionId;
 
     /** 当前执行标识，历史记录为空。 */
     @ToString.Include

@@ -129,7 +129,7 @@ import ThemeSelect from '@/components/common/ThemeSelect.vue';
 import { ref, computed, watch, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/user';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 import { storeToRefs } from 'pinia';
 import { ElMessage } from 'element-plus';
 import { Menu } from '@element-plus/icons-vue';

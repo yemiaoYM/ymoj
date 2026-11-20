@@ -2,15 +2,15 @@
   <div class="role-management">
     <x-flex vertical :size="16">
       <el-card>
-        <el-form :model="queryParams" label-width="auto">
+        <el-form ref="queryFormRef" :model="queryParams" label-width="auto">
           <x-flex :size="10">
-            <el-form-item label="角色名称">
+            <el-form-item label="角色名称" prop="name">
               <el-input v-model="queryParams.name" placeholder="请输入角色名称" clearable />
             </el-form-item>
-            <el-form-item label="角色编码">
+            <el-form-item label="角色编码" prop="code">
               <el-input v-model="queryParams.code" placeholder="请输入角色编码" clearable />
             </el-form-item>
-            <el-form-item label="状态">
+            <el-form-item label="状态" prop="status">
               <el-select
                 v-model="queryParams.status"
                 placeholder="请选择状态"
@@ -104,21 +104,21 @@
             :page-sizes="[15, 25, 50]"
             background
             layout="total, sizes, prev, pager, next"
-            @current-change="loadRoles"
+            @current-change="getList"
             @size-change="handleQuery"
           />
         </x-flex>
       </el-card>
     </x-flex>
     <el-dialog
-      v-model="dialogVisible"
-      :title="editingRole ? '编辑角色' : '新增角色'"
+      v-model="dialog.visible"
+      :title="dialog.title"
       width="min(600px, calc(100vw - 32px))"
       :close-on-click-modal="false"
       destroy-on-close
       append-to-body
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" :disabled="saving">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" :disabled="buttonLoading">
         <el-form-item label="角色名称" prop="name">
           <el-input v-model="form.name" maxlength="64" placeholder="请输入角色名称" />
         </el-form-item>
@@ -147,12 +147,12 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="saving" @click="dialogVisible = false">取消</el-button>
+        <el-button :disabled="buttonLoading" @click="closeDialog">取消</el-button>
         <el-button
           v-if="userStore.isSuperAdmin"
           v-permission="editingRole ? ['system:role:edit'] : ['system:role:add']"
           type="primary"
-          :loading="saving"
+          :loading="buttonLoading"
           @click="handleSubmit"
         >
           确定
@@ -214,12 +214,12 @@
         <el-empty v-if="!authLoading && !authLoaded" description="权限加载失败，请关闭后重试" />
       </div>
       <template #footer>
-        <el-button :disabled="authSaving" @click="authDialogVisible = false">取消</el-button>
+        <el-button :disabled="buttonLoading" @click="authDialogVisible = false">取消</el-button>
         <el-button
           v-if="userStore.isSuperAdmin"
           v-permission="['system:role:auth']"
           type="primary"
-          :loading="authSaving"
+          :loading="buttonLoading"
           :disabled="!authLoaded"
           @click="handleSaveAuth"
         >
@@ -232,8 +232,13 @@
 
 <script setup lang="ts">
 //import
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
+import { useSearchReset } from '@/hooks/form/useSearchReset';
+import modal from '@/plugins/modal';
+import { useLoading } from '@/hooks/async/useLoading';
+import { useFormDialog } from '@/hooks/dialog/useFormDialog';
 import { ref, onMounted, nextTick, watch } from 'vue';
-import { ElMessage, ElMessageBox, ElTree, type FormInstance } from 'element-plus';
+import { ElMessage, ElTree, type FormInstance } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, Setting } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
 import {
@@ -251,6 +256,7 @@ import { buildAuthTree } from '@/utils/rbac';
 
 //data
 const userStore = useUserStore();
+const queryFormRef = ref<FormInstance>();
 const queryParams = ref<RolePageQuery>({
   name: '',
   code: '',
@@ -260,17 +266,18 @@ const queryParams = ref<RolePageQuery>({
 });
 const roleList = ref<RoleVO[]>([]);
 const total = ref(0);
-const loading = ref(false);
-const dialogVisible = ref(false);
-const saving = ref(false);
+const { loading, withLoading } = useLoading();
+const { pending: buttonLoading, beforeChange: runAction } = useAsyncChange();
 const editingRole = ref<RoleVO | null>(null);
 const formRef = ref<FormInstance>();
-const form = ref<RoleDTO>({
+const initialFormData: RoleDTO = {
   name: '',
   code: '',
   description: '',
   status: 1,
-});
+};
+const form = ref<RoleDTO>({ ...initialFormData });
+const { dialog, openDialog, showDialog, closeDialog } = useFormDialog(form, formRef, initialFormData);
 const rules = {
   name: [{ required: true, message: '请输入角色名称', trigger: 'blur' }],
   code: [
@@ -282,54 +289,36 @@ const authRole = ref<RoleVO | null>(null);
 const authDialogVisible = ref(false);
 const authLoading = ref(false);
 const authLoaded = ref(false);
-const authSaving = ref(false);
 const authKeyword = ref('');
 const authTree = ref<AuthTreeNode[]>([]);
 const treeRef = ref<InstanceType<typeof ElTree>>();
 
 //methods
 //查询角色列表
-const loadRoles = async () => {
-  loading.value = true;
+const getList = () => withLoading(async () => {
   try {
     const res = await getRoleList(queryParams.value);
     roleList.value = res.data.data.records;
     total.value = res.data.data.total;
-  } catch (e) {
-    console.error(e);
-  } finally {
-    loading.value = false;
+  } catch {
+    // 请求层已提示查询失败，保留当前列表
+    return;
   }
-};
+});
 
 //搜索角色
 const handleQuery = () => {
   queryParams.value.pageNo = 1;
-  loadRoles();
+  getList();
 };
 
 //重置查询条件
-const resetQuery = () => {
-  queryParams.value = {
-    name: '',
-    code: '',
-    status: null,
-    pageNo: 1,
-    pageSize: 15,
-  };
-  loadRoles();
-};
+const { resetQuery } = useSearchReset(queryFormRef, queryParams, 15, getList);
 
 //新增角色
 const handleAdd = () => {
   editingRole.value = null;
-  form.value = {
-    name: '',
-    code: '',
-    description: '',
-    status: 1,
-  };
-  dialogVisible.value = true;
+  openDialog('新增角色');
 };
 
 //编辑角色
@@ -344,50 +333,34 @@ const handleUpdate = async (row: RoleVO) => {
       description: role.description,
       status: role.status,
     };
-    dialogVisible.value = true;
+    showDialog('编辑角色');
   } catch (e) {
     console.error(e);
   }
 };
 
 //提交角色表单
-const handleSubmit = async () => {
-  if (saving.value) {
+const handleSubmit = () => runAction(async () => {
+  if (!(await formRef.value?.validate())) {
     return;
   }
-  try {
-    if (!(await formRef.value?.validate())) {
-      return;
-    }
-    saving.value = true;
-    if (editingRole.value) {
-      await updateRole(editingRole.value.id, form.value);
-    } else {
-      await addRole(form.value);
-    }
-    ElMessage.success('保存成功');
-    dialogVisible.value = false;
-    await loadRoles();
-  } catch (e) {
-    console.error(e);
-  } finally {
-    saving.value = false;
+  if (editingRole.value) {
+    await updateRole(editingRole.value.id, form.value);
+  } else {
+    await addRole(form.value);
   }
-};
+  ElMessage.success('保存成功');
+  closeDialog();
+  await getList();
+});
 
 //删除角色
-const handleDelete = async (row: RoleVO) => {
-  try {
-    await ElMessageBox.confirm(`是否确认删除角色“${row.name}”？`, '删除确认', { type: 'warning' });
-    await deleteRole(row.id);
-    ElMessage.success('删除成功');
-    await loadRoles();
-  } catch (e) {
-    if (e !== 'cancel' && e !== 'close') {
-      console.error(e);
-    }
-  }
-};
+const handleDelete = (row: RoleVO) => runAction(async () => {
+  await modal.confirm(`是否确认删除角色“${row.name}”？`, '删除确认');
+  await deleteRole(row.id);
+  ElMessage.success('删除成功');
+  await getList();
+});
 //根据名称或编码过滤权限树
 const filterAuth = (keyword: string, node: Record<string, unknown>) => {
   return !keyword
@@ -432,24 +405,17 @@ const handleAuthCheck = (node: AuthTreeNode) => {
 };
 
 //保存角色权限
-const handleSaveAuth = async () => {
-  if (!authLoaded.value || !authRole.value || authSaving.value) {
+const handleSaveAuth = () => runAction(async () => {
+  if (!authLoaded.value || !authRole.value) {
     return;
   }
-  authSaving.value = true;
-  try {
-    await updateRoleAuths(authRole.value.id, (treeRef.value?.getCheckedKeys() || []).map(Number));
-    ElMessage.success('分配权限成功');
-    authDialogVisible.value = false;
-  } catch (e) {
-    console.error(e);
-  } finally {
-    authSaving.value = false;
-  }
-};
+  await updateRoleAuths(authRole.value.id, (treeRef.value?.getCheckedKeys() || []).map(Number));
+  ElMessage.success('分配权限成功');
+  authDialogVisible.value = false;
+});
 //生命周期
 onMounted(() => {
-  loadRoles();
+  getList();
 });
 </script>
 

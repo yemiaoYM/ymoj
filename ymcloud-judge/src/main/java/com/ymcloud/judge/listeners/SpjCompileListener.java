@@ -1,14 +1,13 @@
 package com.ymcloud.judge.listeners;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ymcloud.judge.constant.JudgeConstants;
 import com.ymcloud.judge.exception.CompileException;
 import com.ymcloud.judge.gojudge.GoJudgeExecutor;
 import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
-import com.ymcloud.pojo.contract.judge.SpjCompileRequest;
-import com.ymcloud.pojo.contract.judge.SpjCompileResult;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
+import com.ymcloud.pojo.bo.judge.SpjCompileRequest;
+import com.ymcloud.pojo.bo.judge.SpjCompileResult;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
@@ -38,7 +37,7 @@ public class SpjCompileListener {
      * @param message 编译请求消息
      * @return 自动发送到请求 reply-to 的响应
      */
-    @RabbitListener(queues = SpjProgram.COMPILE_QUEUE, containerFactory = "spjListenerFactory")
+    @RabbitListener(queues = JudgeConstants.SPJ_COMPILE_QUEUE, containerFactory = "spjListenerFactory")
     public Message compile(Message message) {
         SpjCompileRequest request;
         try {
@@ -47,29 +46,29 @@ public class SpjCompileListener {
             }
             request = mapper.readValue(message.getBody(), SpjCompileRequest.class);
             long now = System.currentTimeMillis();
-            if (request == null || request.requestId() == null
-                    || !UUID.fromString(request.requestId()).toString().equals(request.requestId())
-                    || request.deadlineEpochMs() <= now
-                    || request.deadlineEpochMs() > now + SpjProgram.COMPILE_TIMEOUT_MILLIS
-                    + JudgeProtocol.MAX_CLOCK_SKEW_MILLIS
-                    || request.program() == null) {
+            if (request == null || request.getRequestId() == null
+                    || !UUID.fromString(request.getRequestId()).toString().equals(request.getRequestId())
+                    || request.getDeadlineEpochMs() <= now
+                    || request.getDeadlineEpochMs() > now + JudgeConstants.SPJ_COMPILE_TIMEOUT_MILLIS
+                    + JudgeConstants.MAX_CLOCK_SKEW_MILLIS
+                    || request.getProgram() == null) {
                 throw new IllegalArgumentException("编译请求身份或截止时间无效");
             }
-            request.program().validate();
+            request.getProgram().validate();
         } catch (IOException | IllegalArgumentException e) {
             throw new AmqpRejectAndDontRequeueException("SPJ 编译请求无效");
         }
         JudgeTask task = new JudgeTask();
-        task.setExecutionId(request.requestId());
-        task.setDeadlineEpochMs(request.deadlineEpochMs());
+        task.setExecutionId(request.getRequestId());
+        task.setDeadlineEpochMs(request.getDeadlineEpochMs());
         SpjCompileResult result;
         try (GoJudgeTaskSession session = executor.openTask(task)) {
-            executor.compileSpj(session, request.program());
-            result = new SpjCompileResult(request.requestId(), request.program().getDigest(), true, "编译通过");
+            executor.compileSpj(session, request.getProgram());
+            result = new SpjCompileResult(request.getRequestId(), request.getProgram().getDigest(), true, "编译通过");
         } catch (CompileException e) {
-            result = new SpjCompileResult(request.requestId(), request.program().getDigest(), false, e.getMessage());
+            result = new SpjCompileResult(request.getRequestId(), request.getProgram().getDigest(), false, e.getMessage());
         } catch (IOException e) {
-            result = new SpjCompileResult(request.requestId(), request.program().getDigest(), false,
+            result = new SpjCompileResult(request.getRequestId(), request.getProgram().getDigest(), false,
                     "SPJ 编译服务暂不可用，请稍后重新编译");
         }
         try {

@@ -84,6 +84,10 @@ export type Announcement = {
  */
 export type AnnouncementDTO = {
   /**
+   * 新增时绑定的已上传正文图片 ID
+   */
+  fileIds?: string[];
+  /**
    * 公告标题
    */
   title: string;

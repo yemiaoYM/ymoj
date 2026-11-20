@@ -1,7 +1,7 @@
 package com.ymcloud.web.config;
 
 import com.ymcloud.common.constant.HttpStatus;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
+import com.ymcloud.common.constant.JudgeConstants;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,9 +28,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * @Author: YeMiaoo
+ * @Author: Yemiao
  * @CreateTime: 2026-10-12
- * @Description: Worker 数据入口只接受专用服务身份，不复用管理员或用户的登录权限。
+ * @Description: Worker 数据入口只接受专用服务身份，独立于管理员和用户的登录权限
  */
 @Configuration
 @EnableConfigurationProperties(JudgeWorkerIdentityProperties.class)
@@ -67,12 +67,20 @@ public class JudgeWorkerSecurityConfig {
             return false;
         }
 
+        /**
+         * 核对内部服务身份和请求方法，通过后授予 Worker 读取权限
+         * @param request 调用方请求
+         * @param response 身份或方法无效时写入的响应
+         * @param chain 继续处理已认证请求的过滤器链
+         * @throws ServletException 后续过滤器处理失败
+         * @throws IOException 请求或响应读写失败
+         */
         @Override
         protected void doFilterInternal(HttpServletRequest request,
                                         HttpServletResponse response,
                                         FilterChain chain) throws ServletException, IOException {
             // 不向调用方暴露服务是否已配置，也不接受多个同名身份头。
-            List<String> values = Collections.list(request.getHeaders(JudgeProtocol.SERVICE_TOKEN_HEADER));
+            List<String> values = Collections.list(request.getHeaders(JudgeConstants.SERVICE_TOKEN_HEADER));
             String expected = properties.getToken();
             String supplied = values.size() == 1 ? values.get(0) : null;
             if (!isConfiguredIdentityValid(expected) || supplied == null || supplied.length() > 512

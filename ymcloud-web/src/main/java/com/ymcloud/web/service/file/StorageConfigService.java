@@ -1,80 +1,54 @@
 package com.ymcloud.web.service.file;
 
-import com.ymcloud.core.storage.config.StorageConfigSource;
-import com.ymcloud.core.storage.config.StorageProperties;
-import com.ymcloud.pojo.entity.File;
-import com.ymcloud.pojo.entity.StorageConfig;
+import com.ymcloud.pojo.dto.admin.StorageConfigDTO;
+import com.ymcloud.pojo.query.admin.StorageConfigPageQuery;
+import com.ymcloud.pojo.vo.common.PageVO;
+import com.ymcloud.pojo.vo.common.StorageConfigVO;
 
 import java.util.List;
 
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-11-16
- * @Description: 动态存储配置管理及文件引用核验入口
+ * @Description: 管理数据库中的对象存储配置
  */
-public interface StorageConfigService extends StorageConfigSource {
+public interface StorageConfigService {
 
     /**
-     * 读取当前默认存储配置标识
-     * @return 默认配置标识
+     * 分页查询存储配置
+     * @param query 分页与配置筛选条件
+     * @return 不含凭据的配置分页
      */
-    String active();
+    PageVO<StorageConfigVO> queryPageList(StorageConfigPageQuery query);
 
     /**
-     * 按标识读取动态存储配置
-     * @param key 存储配置标识
-     * @return 动态配置，不存在时为空
+     * 读取配置详情
+     * @param id 配置主键
+     * @return 不含凭据的配置详情
      */
-    StorageConfig find(String key);
+    StorageConfigVO queryById(Long id);
 
     /**
-     * 列出动态存储配置
-     * @return 动态配置列表
+     * 新增对象存储配置
+     * @param dto 连接参数和凭据
      */
-    List<StorageConfig> list();
+    void insert(StorageConfigDTO dto);
 
     /**
-     * 锁定存储配置状态以串行化配置修改
+     * 按主键更新存储配置
+     * @param dto 新配置，凭据留空时保留原值
      */
-    void lockForWrite();
+    void update(StorageConfigDTO dto);
 
     /**
-     * 判断存储配置是否被文件引用
-     * @param key 存储配置标识
-     * @return 是否存在文件引用
+     * 删除未被使用的配置
+     * @param ids 配置主键集合
      */
-    boolean referenced(String key);
+    void deleteByIds(List<Long> ids);
 
     /**
-     * 读取存储配置关联的文件用于恢复核验
-     * @param key 存储配置标识
-     * @return 按文件编号排序的引用列表
+     * 切换新上传使用的默认配置
+     * @param id 配置主键
      */
-    List<File> referencedFiles(String key);
-
-    /**
-     * 解密并组装内部客户端配置
-     * @param config 待处理的动态存储配置
-     * @return 仅内部使用的客户端配置
-     */
-    StorageProperties.Profile profile(StorageConfig config);
-
-    /**
-     * 保存动态存储配置，调用方持有配置状态锁
-     * @param config 待处理的动态存储配置
-     * @param exists 是否更新已有配置
-     */
-    void save(StorageConfig config, boolean exists);
-
-    /**
-     * 删除指定存储配置
-     * @param key 存储配置标识
-     */
-    void remove(String key);
-
-    /**
-     * 在配置写事务内更新唯一默认配置
-     * @param key 存储配置标识
-     */
-    void activate(String key);
+    void changeStatus(Long id);
 }

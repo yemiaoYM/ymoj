@@ -46,14 +46,18 @@
 
 <script lang="ts" setup>
 //import
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
+import { useLoading } from '@/hooks/async/useLoading';
+import modal from '@/plugins/modal';
 import { ref, onMounted } from 'vue';
 import { Delete } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import type { UserOnlineVO } from '@/types/system';
 import { getUserOnlineList, forceOffline } from '@/api/system';
 
 //data
-const loading = ref<boolean>(false);
+const { loading, withLoading } = useLoading();
+const { beforeChange: logout } = useAsyncChange();
 const userOnlineList = ref<UserOnlineVO[]>([] as UserOnlineVO[]);
 
 //methods
@@ -62,35 +66,23 @@ onMounted(() => {
 });
 
 //获取在线用户列表
-const getList = () => {
-  loading.value = true;
-  getUserOnlineList().then(res => {
-    userOnlineList.value = res.data.data;
-  }).catch(e=>{
-    console.log(e);
-  }).finally(() => {
-    loading.value = false;
-  });
-}
-//强制下线
-const handleForceOffline = (row: UserOnlineVO) => {
-  ElMessageBox.confirm(
-    `是否确认强退名称为 "${row.username}" 的用户？`,
-    '强退确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(() => {
-    forceOffline(row.token).then(res => {
-      ElMessage.success(res.data.msg);
-      getList();
-    }).catch(e => {
-      console.log(e);
-    });
-  })
-}
+const getList = () => withLoading(async () => {
+  try {
+    const response = await getUserOnlineList();
+    userOnlineList.value = response.data.data;
+  } catch {
+    // 请求层已提示查询失败，保留当前列表
+    return;
+  }
+});
+
+// 强制下线
+const handleForceOffline = (row: UserOnlineVO) => logout(async () => {
+  await modal.confirm(`是否确认强退名称为 "${row.username}" 的用户？`, '强退确认');
+  const response = await forceOffline(row.token);
+  ElMessage.success(response.data.msg);
+  await getList();
+});
 </script>
 
 <style scoped>

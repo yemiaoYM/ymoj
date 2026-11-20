@@ -1,5 +1,6 @@
 package com.ymcloud.pojo.vo.admin;
 
+import com.ymcloud.pojo.enums.FileBizType;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -7,20 +8,30 @@ import java.time.LocalDateTime;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-11
- * @Description: 文件管理只返回安全业务元数据，不暴露对象或本地文件定位信息
+ * @Description: 后台文件元数据及当前用户的操作权限
  */
 @Data
 public class AdminFileVO {
 
     /**
-     * 对外 UUIDv4 文件标识，不返回内部主键
+     * 文件主键
      */
-    private String id;
+    private Long id;
 
     /**
-     * 原始展示文件名
+     * 存储配置下的对象键
      */
     private String fileName;
+
+    /**
+     * 上传时的原文件名
+     */
+    private String originalName;
+
+    /**
+     * 入库的文件后缀，包含前导点
+     */
+    private String fileSuffix;
 
     /**
      * 媒体类型
@@ -33,9 +44,9 @@ public class AdminFileVO {
     private Long fileSize;
 
     /**
-     * FileBizType 对应业务类型编码
+     * 文件所属业务类型
      */
-    private Integer bizType;
+    private FileBizType bizType;
 
     /**
      * 所属业务资源的内部编号，未关联时为空
@@ -43,19 +54,14 @@ public class AdminFileVO {
     private Long bizId;
 
     /**
-     * 访问范围，0 为私有、1 为公开
-     */
-    private Integer isPublic;
-
-    /**
      * 文件绑定的存储配置标识
      */
-    private String storageKey;
+    private String service;
 
     /**
-     * 上传者用户名，系统导入可为空
+     * 文件创建者的账号编号
      */
-    private String uploaderUsername;
+    private Long createdBy;
 
     /**
      * 文件创建时间
@@ -63,14 +69,9 @@ public class AdminFileVO {
     private LocalDateTime createdTime;
 
     /**
-     * 公开文件访问地址，私有文件为空
+     * 文件表登记的对象存储地址
      */
     private String url;
-
-    /**
-     * 文件内容的 SHA-256 摘要
-     */
-    private String sha256;
 
     /**
      * 当前用户是否具有下载权限

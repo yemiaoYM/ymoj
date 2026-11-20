@@ -101,7 +101,7 @@
         SELECT p.id, p.problem_id, p.title, p.content, p.time_limit, p.memory_limit,
                p.`input`, p.`output`, p.examples, p.source, p.difficulty, p.judge_mode,
                <include refid="effectiveVisibility"/> AS visibility,
-               p.open_case_result, p.test_data_version_id, p.author_id, p.author_username,
+               p.open_case_result, p.author_id, p.author_username,
                p.created_time, p.updated_time
         FROM problem p
         <where>

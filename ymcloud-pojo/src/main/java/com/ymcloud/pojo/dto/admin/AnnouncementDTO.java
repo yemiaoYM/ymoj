@@ -1,17 +1,28 @@
 package com.ymcloud.pojo.dto.admin;
 
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.util.List;
+
 /**
- * @PackageName: com.ymcloud.pojo.dto.admin
- * @ClassName: AnnouncementDTO
  * @Author: Yemiao
  * @CreateTime: 2025-09-27
  * @Description: 管理端公告DTO
  */
 @Data
 public class AnnouncementDTO {
+
+    /**
+     * 新增业务时绑定的正文图片 ID
+     * 未传或空列表表示无需绑定图片
+     */
+    private List<@NotNull(message = "图片ID不能为空") @Positive(message = "图片ID必须为正数") Long> fileIds;
 
     /**
      * 公告标题

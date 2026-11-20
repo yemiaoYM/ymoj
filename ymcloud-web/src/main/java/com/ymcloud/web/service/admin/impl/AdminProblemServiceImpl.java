@@ -10,37 +10,30 @@ import com.ymcloud.common.exception.problem.ProblemException;
 import com.ymcloud.common.exception.problem.ProblemNotExistException;
 import com.ymcloud.core.security.service.ResourceAccessService;
 import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.core.web.dao.FileEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
-import com.ymcloud.pojo.bo.ProblemCaseInfo;
-import com.ymcloud.pojo.contract.judge.SpjCompileResult;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.pojo.bo.judge.SpjCompileResult;
+import com.ymcloud.pojo.bo.judge.SpjProgram;
 import com.ymcloud.pojo.dto.admin.ProblemDTO;
 import com.ymcloud.pojo.dto.admin.SpjCompileDTO;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
 import com.ymcloud.pojo.entity.User;
+import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.query.admin.AdminProblemPageQuery;
 import com.ymcloud.pojo.vo.admin.ProblemVO;
+import com.ymcloud.pojo.vo.admin.SpjCompileVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.pojo.vo.oj.ProblemCaseVO;
 import com.ymcloud.web.judge.SpjCompilation;
 import com.ymcloud.web.service.admin.AdminProblemService;
 import com.ymcloud.web.service.admin.ResourceDeletionService;
-import com.ymcloud.web.service.oj.TestDataService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.InputStreamResource;
-import org.springframework.core.io.Resource;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -54,13 +47,13 @@ import java.util.Objects;
 public class AdminProblemServiceImpl implements AdminProblemService {
 
     @Autowired
+    private FileEntityService files;
+
+    @Autowired
     private ResourceAccessService resourceAccess;
 
     @Autowired
     private ResourceDeletionService deletion;
-
-    @Autowired
-    private TestDataService testDataService;
 
     @Autowired
     private ProblemEntityService problemEntityService;
@@ -77,13 +70,19 @@ public class AdminProblemServiceImpl implements AdminProblemService {
      * @return 编译结果及仅管理端可见的诊断
      */
     @Override
-    public SpjCompileResult compileSpj(SpjCompileDTO request) {
+    public SpjCompileVO compileSpj(SpjCompileDTO request) {
         resourceAccess.requireProblemManager();
         SpjProgram program = new SpjProgram();
         program.setLanguage(request.getLanguage());
         program.setCode(request.getCode());
         program.setDigest(program.sourceDigest());
-        return spjCompilation.compile(program);
+        SpjCompileResult result = spjCompilation.compile(program);
+        SpjCompileVO view = new SpjCompileVO();
+        view.setRequestId(result.getRequestId());
+        view.setDigest(result.getDigest());
+        view.setSuccess(result.isSuccess());
+        view.setMessage(result.getMessage());
+        return view;
     }
 
     /**
@@ -173,6 +172,9 @@ public class AdminProblemServiceImpl implements AdminProblemService {
             conflict.initCause(cause);
             throw conflict;
         }
+        if (CollUtil.isNotEmpty(problemDTO.getFileIds())) {
+            files.bindImages(problemDTO.getFileIds(), FileBizType.PROBLEM, problem.getId(), user.getId());
+        }
         //题目标签
         List<Long> tagList = problemDTO.getTagList();
         if (CollUtil.isNotEmpty(tagList)) {
@@ -190,7 +192,7 @@ public class AdminProblemServiceImpl implements AdminProblemService {
 
     /**
      * 修改题目，保留展示 ID 和作者
-     * 空样例列表会清除旧样例
+     * 空样例列表清除旧样例，清空来源或停用特殊判题时同步清除对应字段
      * @param id 题目ID
      * @param problemDTO 题目信息
      */
@@ -222,7 +224,14 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         //题目测试用例
         List<ProblemCaseVO> problemCaseList = problemDTO.getProblemCaseList();
         problem.setExamples(JSON.toJSONString(problemCaseList == null ? List.of() : problemCaseList));
-        boolean update = problemEntityService.updateById(problem);
+        boolean clearSpj = !ProblemConstants.JUDGE_MODE_SPJ.equals(problem.getJudgeMode());
+        boolean update = problemEntityService.lambdaUpdate()
+                .eq(Problem::getId, id)
+                .set(problem.getSource() == null, Problem::getSource, null)
+                .set(clearSpj, Problem::getSpjLanguage, null)
+                .set(clearSpj, Problem::getSpjCode, null)
+                .set(clearSpj, Problem::getSpjDigest, null)
+                .update(problem);
         if (!update) {
             throw new ProblemException("修改题目失败，请稍后再试");
         }
@@ -331,63 +340,6 @@ public class AdminProblemServiceImpl implements AdminProblemService {
         if (!update) {
             throw new ProblemException("修改题目可见性失败，请稍后再试");
         }
-    }
-
-    /**
-     * 获取当前版本的测试样例列表，保持原管理接口结构
-     * @param problemId 题目 ID
-     * @return 当前版本的文件清单
-     */
-    @Override
-    public List<ProblemCaseInfo> getTestCaseFiles(Long problemId) {
-        getManagedProblem(problemId);
-        return testDataService.listCurrent(problemId);
-    }
-
-    /**
-     * 以不可变版本发布成对上传的测试数据
-     * @param problemId 题目 ID
-     * @param files 输入输出文件
-     */
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void uploadTestCaseFile(Long problemId, MultipartFile[] files) {
-        getManagedProblem(problemId);
-        testDataService.upload(problemId, files);
-    }
-
-    /**
-     * 下载时固定一次当前版本，避免并发发布造成文件与清单错配
-     * @param problemId 题目 ID
-     * @param fileName 版本内的文件名
-     * @return 当前版本文件流
-     */
-    @Override
-    public ResponseEntity<Resource> downloadTestCaseFile(Long problemId, String fileName) {
-        Problem problem = getManagedProblem(problemId);
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentDisposition(ContentDisposition.attachment()
-                .filename(fileName == null ? "testcase" : fileName.substring(fileName.lastIndexOf('/') + 1),
-                        StandardCharsets.UTF_8)
-                .build());
-        headers.setContentType(MediaType.TEXT_PLAIN);
-        Resource resource = new InputStreamResource(
-                testDataService.openFile(problemId, problem.getTestDataVersionId(), fileName));
-        return ResponseEntity.ok()
-                .headers(headers)
-                .body(resource);
-    }
-
-    /**
-     * 删除生成新版本，旧对象继续保留给排队任务
-     * @param problemId 题目 ID
-     * @param fileNames 待移除文件名
-     */
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void deleteTestCaseFiles(Long problemId, List<String> fileNames) {
-        getManagedProblem(problemId);
-        testDataService.delete(problemId, fileNames);
     }
 
     /**

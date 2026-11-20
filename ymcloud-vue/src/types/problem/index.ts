@@ -199,10 +199,6 @@ export type AdminProblemVO = {
    */
   openCaseResult: boolean;
   /**
-   * 当前不可变测试数据版本ID
-   */
-  testDataVersionId: number | null;
-  /**
    * 出题人ID（user.id）
    */
   authorId: number;
@@ -302,6 +298,10 @@ export type AdminProblemDetailVO = {
  */
 export type ProblemDTO = {
   /**
+   * 新增时绑定的已上传正文图片 ID
+   */
+  fileIds?: string[];
+  /**
    * 新增时自定义展示 ID：1～15 位英文字母、数字或下划线
    * 编辑不修改原 ID
    */
@@ -376,6 +376,10 @@ export type RemoteProblemRequest = {
  */
 export type RemoteProblemDraft = {
   /**
+   * 远程题面导入时已保存的图片 ID
+   */
+  fileIds: string[];
+  /**
    * 建议的展示题号，可在新增页修改
    */
   problemId: string;
@@ -422,19 +426,21 @@ export type RemoteProblemDraft = {
 /**
  * 测试数据文件清单
  */
+export type ProblemCaseFileVO = {
+  fileId: string;
+  size: number;
+  sha256: string;
+};
+
 export type ProblemCaseInfoVO = {
-  /**
-   * 样例编号
-   */
-  id: number;
-  /**
-   * 输入文件
-   */
-  input: string;
-  /**
-   * 输出文件
-   */
-  output: string;
+  name: string;
+  input: ProblemCaseFileVO;
+  output: ProblemCaseFileVO;
+};
+
+export type ProblemCaseListVO = {
+  version: number | null;
+  cases: ProblemCaseInfoVO[];
 };
 
 /**

@@ -225,6 +225,10 @@ export type AdminContest = {
  */
 export type ContestDTO = {
   /**
+   * 新增时绑定的已上传正文图片 ID
+   */
+  fileIds?: string[];
+  /**
    * 比赛标题
    */
   title: string;

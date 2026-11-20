@@ -1,5 +1,6 @@
 package com.ymcloud.web.remote;
 
+import com.ymcloud.common.constant.FileConstants;
 import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 import com.ymcloud.common.exception.problem.ProblemException;
@@ -29,7 +30,6 @@ import java.util.Set;
 public class RemoteProblemHttpClient {
 
     private static final int MAX_PAGE_BYTES = 2 * 1024 * 1024;
-    private static final int MAX_IMAGE_BYTES = 20 * 1024 * 1024;
     private static final Set<String> IMAGE_DOMAINS = Set.of("luogu.com.cn", "luogu.com", "luogu.org",
             "nowcoder.com", "nowcoder.net", "atcoder.jp", "codeforces.com",
             "leetcode.com", "leetcode.cn", "leetcode-cn.com");
@@ -85,7 +85,7 @@ public class RemoteProblemHttpClient {
     /**
      * 下载公开插图，地址只允许平台图片域名及标准端口，不跟随重定向或携带凭据。
      * @param url 题面中未经信任的图片地址
-     * @return 最多 20 MiB 的图片候选字节，实际格式由图片处理入口验证
+     * @return 最多 3 MiB 的图片候选字节，实际格式由图片处理入口验证
      */
     public byte[] getImage(String url) {
         URI uri;
@@ -107,9 +107,9 @@ public class RemoteProblemHttpClient {
                 if (response.getStatusCode().value() != HttpStatus.SUCCESS) {
                     throw new FileException("题面图片暂时无法下载，请稍后重试", HttpStatus.SERVICE_UNAVAILABLE);
                 }
-                byte[] image = response.getBody().readNBytes(MAX_IMAGE_BYTES + 1);
-                if (image.length > MAX_IMAGE_BYTES) {
-                    throw new FileException("题面单张图片不能超过20MB", HttpStatus.BAD_REQUEST);
+                byte[] image = response.getBody().readNBytes(FileConstants.MAX_IMAGE_BYTES + 1);
+                if (image.length > FileConstants.MAX_IMAGE_BYTES) {
+                    throw new FileException("题面单张图片不能超过3MB", HttpStatus.BAD_REQUEST);
                 }
                 return image;
             });

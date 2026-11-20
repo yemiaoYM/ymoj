@@ -1,8 +1,4 @@
 ymcloud:
-    file:
-        # 默认项目根目录/files；独立 jar 使用 jar 所在目录，自动创建 public/private。
-        # 已有部署可通过 YMCLOUD_FILE_BASE_DIR 指定绝对路径，继续使用原目录。
-        base-dir: ${YMCLOUD_FILE_BASE_DIR:./files}
     judge:
         # Web 与 Worker 共用正式判题任务和结果队列
         exchange: ${YMCLOUD_JUDGE_EXCHANGE:judge.worker.topic}

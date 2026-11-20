@@ -120,7 +120,7 @@
             </el-table-column>
             <el-table-column prop="memory" label="运行内存">
               <template #default="{ row }">
-                {{ formatSubmissionMemory(row.memory) }}
+                {{ formatBinaryBytes(row.memory, 'KiB') }}
               </template>
             </el-table-column>
             <el-table-column prop="codeLength" label="代码长度">
@@ -189,8 +189,8 @@ import type { SubmissionTableVO } from '@/types/submission';
 import { getSubmissionTableList } from '@/api/submission';
 import { getContestSubmissionList } from '@/api/contest';
 import {
+  formatBinaryBytes,
   getScoreType,
-  formatSubmissionMemory,
   formatSubmissionTime,
   formatSubmissionLength,
 } from "@/utils/utils";
@@ -224,7 +224,7 @@ type SubmissionQuery = {
   pageNo: number;
   pageSize: number;
 };
-let requestGeneration = 0;
+let disposed = false;
 let confirmedPath = '';
 
 const tableRowClassName = ({ row }: { row: SubmissionTableVO }) => {
@@ -233,7 +233,7 @@ const tableRowClassName = ({ row }: { row: SubmissionTableVO }) => {
 
 //列表、筛选状态和路由在同一次请求成功后一起生效
 const getData = async (params: SubmissionQuery, targetPath: string) => {
-  const generation = ++requestGeneration;
+  const originPath = route.fullPath;
   const target = router.resolve(targetPath);
   const nextIsContest = target.name === 'ContestSubmissionList';
   const nextContestId = nextIsContest ? Number(target.params.contestID) : 0;
@@ -242,7 +242,8 @@ const getData = async (params: SubmissionQuery, targetPath: string) => {
     const response = nextIsContest
       ? await getContestSubmissionList({ contestId: nextContestId, ...params })
       : await getSubmissionTableList(params);
-    if (generation !== requestGeneration) return;
+    // 离开原路由后，回包不能再触发该页的导航
+    if (disposed || originPath !== route.fullPath) return;
     tableData.value = response.data.data.records;
     total.value = response.data.data.total;
     isMine.value = params.isMine;
@@ -258,11 +259,11 @@ const getData = async (params: SubmissionQuery, targetPath: string) => {
     if (route.fullPath !== targetPath) await router.push(targetPath);
   } catch {
     //request 已提示失败，恢复最近成功的路由并保留原列表和筛选状态
-    if (generation === requestGeneration && confirmedPath && route.fullPath !== confirmedPath) {
+    if (!disposed && originPath === route.fullPath && confirmedPath && route.fullPath !== confirmedPath) {
       await router.replace(confirmedPath);
     }
   } finally {
-    if (generation === requestGeneration) loading.value = false;
+    loading.value = false;
   }
 };
 //查看提交详情
@@ -346,8 +347,6 @@ watch(
   () => route.fullPath,
   (path) => {
     if (path === confirmedPath) {
-      requestGeneration++;
-      loading.value = false;
       return;
     }
     const query = route.query;
@@ -362,7 +361,7 @@ watch(
   },
   { immediate: true }
 );
-onBeforeUnmount(() => { requestGeneration++; });
+onBeforeUnmount(() => { disposed = true; });
 </script>
 
 <style lang="css" scoped>

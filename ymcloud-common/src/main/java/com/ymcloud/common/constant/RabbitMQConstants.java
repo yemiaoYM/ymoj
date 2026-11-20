@@ -1,35 +1,53 @@
 package com.ymcloud.common.constant;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 /**
- * @PackageName: com.ymcloud.common.constant
- * @ClassName: RabbitMQConstants
  * @Author: Yemiao
  * @CreateTime: 2025-08-03  17:30
- * @Description: 消息队列常用变量
+ * @Description: 判题任务、结果与 SPJ 编译的 RabbitMQ 消息拓扑
  */
-public class RabbitMQConstants {
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class RabbitMQConstants {
 
     /**
-     * 评测队列
+     * 判题任务与结果共用的 Topic 交换机
      */
-    public static final String JUDGE_QUEUE = "judge.queue";
-    /**
-     * 评测结束更新用户ac表队列
-     */
-    public static final String JUDGE_RESULT_QUEUE = "judge.result.queue";
+    public static final String JUDGE_EXCHANGE = "judge.worker.topic";
 
     /**
-     * 评测交换机
+     * 正式判题和自测任务队列
      */
-    public static final String JUDGE_EXCHANGE = "judge.topic";
+    public static final String JUDGE_QUEUE = "judge.worker.queue";
 
     /**
-     * 评测路由key
+     * 判题进度与终态结果队列
+     */
+    public static final String JUDGE_RESULT_QUEUE = "judge.worker.result.queue";
+
+    /**
+     * 判题任务路由键
      */
     public static final String JUDGE_ROUTING_KEY = "judge";
+
     /**
-     * 评测ac表更新路由key
+     * 判题结果路由键
      */
     public static final String JUDGE_RESULT_ROUTING_KEY = "judge.result";
 
+    /**
+     * 延迟重试路由键
+     */
+    public static final String JUDGE_RETRY_ROUTING_KEY = "judge.retry";
+
+    /**
+     * 死信路由键
+     */
+    public static final String JUDGE_DEAD_ROUTING_KEY = "judge.dead";
+
+    /**
+     * SPJ 编译预检请求队列
+     */
+    public static final String SPJ_COMPILE_QUEUE = "judge.spj.compile.queue";
 }

@@ -1,7 +1,7 @@
 package com.ymcloud.judge.data;
 
+import com.ymcloud.judge.constant.JudgeConstants;
 import com.ymcloud.judge.http.ServiceEndpoint;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -37,7 +37,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Component
 public class HttpTestDataSource implements TestDataSource, AutoCloseable {
 
-    public static final String TOKEN_HEADER = JudgeProtocol.SERVICE_TOKEN_HEADER;
     private static final String DATA_PREFIX = "/internal/judge-worker/problems/";
 
     private final ServiceEndpoint endpoint;
@@ -88,15 +87,18 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
     }
 
     /**
-     * 读取有容量上限的原始清单，保留字节供固定版本哈希校验。
+     * 读取有容量上限的原始清单，同时取得同一发布记录的版本号。
      * @param problemId 正数题目编号
-     * @param versionId 正数版本编号
-     * @return 原始清单字节
+     * @param version 本地完整清单版本，首次请求为空
+     * @return 当前版本及清单字节，未变化时仅返回版本
      * @throws IOException 请求失败、中断、超时或清单超限
      */
     @Override
-    public byte[] fetchManifest(Long problemId, Long versionId) throws IOException {
-        try (InputStream input = request(problemId, versionId, null)) {
+    public ManifestResponse fetchManifest(Long problemId, Long version) throws IOException {
+        try (DeadlineStream input = request(problemId, version, null)) {
+            if (input == null) {
+                return new ManifestResponse(version, null);
+            }
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             byte[] buffer = new byte[8192];
             int read;
@@ -106,22 +108,21 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
                 }
                 output.write(buffer, 0, read);
             }
-            return output.toByteArray();
+            return new ManifestResponse(input.version, output.toByteArray());
         }
     }
 
     /**
      * 打开固定版本的文件流，由调用方关闭并核对长度和哈希。
      * @param problemId 正数题目编号
-     * @param versionId 正数版本编号
      * @param fileId 清单中的正数文件编号
      * @return 受完整传输截止时间约束的输入流
      * @throws IOException 请求失败、中断或超时
      */
     @Override
-    public InputStream openFile(Long problemId, Long versionId, Long fileId) throws IOException {
+    public InputStream openFile(Long problemId, Long fileId) throws IOException {
         requireId(fileId);
-        return request(problemId, versionId, fileId);
+        return request(problemId, null, fileId);
     }
 
     /**
@@ -140,28 +141,30 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
     /**
      * 仅访问固定内部路由；响应头和正文共用一次请求的总预算。
      * @param problemId 正数题目编号
-     * @param versionId 正数版本编号
+     * @param version 本地完整清单版本，首次请求为空
      * @param fileId 文件编号；null 表示读取清单
      * @return 调用方负责关闭的流
      * @throws IOException 地址、鉴权、容量或传输检查失败
      */
-    private InputStream request(Long problemId, Long versionId, Long fileId) throws IOException {
+    private DeadlineStream request(Long problemId, Long version, Long fileId) throws IOException {
         requireId(problemId);
-        requireId(versionId);
         if (closed.get() || Thread.currentThread().isInterrupted()) {
             throw new IOException("Worker 数据客户端已经关闭");
         }
-        String path = DATA_PREFIX + problemId + "/versions/" + versionId
+        String path = DATA_PREFIX + problemId
                 + (fileId == null ? "/manifest" : "/files/" + fileId);
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(readTimeout);
         var target = endpoint.requestUri(path,
                 TimeUnit.MILLISECONDS.toNanos(Math.min(connectTimeout, readTimeout)));
-        HttpRequest request = HttpRequest.newBuilder(target)
+        var builder = HttpRequest.newBuilder(target)
                 .timeout(Duration.ofNanos(Math.max(1, deadline - System.nanoTime())))
-                .header(TOKEN_HEADER, token)
+                .header(JudgeConstants.SERVICE_TOKEN_HEADER, token)
                 .header("Accept", fileId == null ? "application/json" : "application/octet-stream")
-                .GET()
-                .build();
+                .GET();
+        if (version != null) {
+            builder.header("If-None-Match", '"' + version.toString() + '"');
+        }
+        HttpRequest request = builder.build();
         DeadlineStream body = null;
         boolean opened = false;
         int status = -1;
@@ -170,6 +173,10 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
             body = new DeadlineStream(response.body(), deadline);
             body.checkDeadline();
             status = response.statusCode();
+            if (fileId == null && version != null && status == HttpURLConnection.HTTP_NOT_MODIFIED
+                    && response.headers().firstValue("ETag").orElse("").equals('"' + version.toString() + '"')) {
+                return null;
+            }
             if (status != HttpURLConnection.HTTP_OK) {
                 // 错误内容不写入日志或异常，避免响应中的配置及文件内容被传播。
                 throw new IOException("测试数据接口返回 HTTP " + status);
@@ -178,13 +185,24 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
             if (fileId == null && contentLength > maxManifestBytes) {
                 throw new IOException("服务端测试数据清单超过 Worker 限制");
             }
+            if (fileId == null) {
+                String tag = response.headers().firstValue("ETag").orElse("");
+                try {
+                    if (!tag.matches("\"[1-9][0-9]{0,18}\"")) {
+                        throw new NumberFormatException();
+                    }
+                    body.version = Long.valueOf(tag.substring(1, tag.length() - 1));
+                } catch (NumberFormatException e) {
+                    throw new IOException("清单响应缺少有效版本", e);
+                }
+            }
             opened = true;
             log.debug("Worker 测试数据接口响应 problem={} version={} file={} status={} bytes={}",
-                    problemId, versionId, fileId, status, contentLength);
+                    problemId, version, fileId, status, contentLength);
             return body;
         } catch (IOException e) {
             log.warn("Worker 测试数据接口请求失败 problem={} version={} file={} status={} cause={}",
-                    problemId, versionId, fileId, status, e.getClass().getSimpleName());
+                    problemId, version, fileId, status, e.getClass().getSimpleName());
             throw e;
         } finally {
             if (!opened && body != null) {
@@ -268,6 +286,8 @@ public class HttpTestDataSource implements TestDataSource, AutoCloseable {
     }
 
     private final class DeadlineStream extends FilterInputStream {
+
+        private Long version;
 
         private final ScheduledFuture<?> timer;
         private final AtomicBoolean expired = new AtomicBoolean();

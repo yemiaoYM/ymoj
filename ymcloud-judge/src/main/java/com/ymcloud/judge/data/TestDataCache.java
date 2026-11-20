@@ -5,6 +5,7 @@ import com.ymcloud.judge.data.TestDataManifestReader.FileSpec;
 import com.ymcloud.judge.data.TestDataManifestReader.VerifiedManifest;
 import com.ymcloud.judge.io.WorkerPaths;
 import jakarta.annotation.PreDestroy;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +16,6 @@ import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -24,6 +24,7 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,10 +51,9 @@ import java.util.stream.Stream;
 @Component
 public class TestDataCache implements AutoCloseable {
 
-    private static final Pattern VERSION_DIRECTORY = Pattern.compile("p([1-9][0-9]*)-v([1-9][0-9]*)");
+    private static final Pattern VERSION_DIRECTORY = Pattern.compile("case-p([1-9][0-9]*)-v([1-9][0-9]*)");
     private static final Pattern TEMP_DIRECTORY = Pattern.compile("\\.download-[0-9a-f-]{36}");
     private static final String MANIFEST = "manifest.json";
-    private static final String MANIFEST_HASH = "manifest.sha256";
 
     private final TestDataSource source;
     private final TestDataCacheProperties properties;
@@ -114,18 +114,34 @@ public class TestDataCache implements AutoCloseable {
     }
 
     /**
-     * 任务固定的清单哈希参与校验，不能以题目当前版本或缓存自身的哈希替代。
+     * 每次执行读取当前清单，租约持有独立的不可变版本目录。
      * @param problemId 正数题目 ID
-     * @param versionId 正数不可变版本 ID
-     * @param manifestSha256 任务固定的小写 SHA-256
      * @return 由调用方关闭的版本引用
      * @throws IOException 下载、完整性或容量检查失败，或任务中断
      */
-    public Lease acquire(Long problemId, Long versionId, String manifestSha256) throws IOException {
+    public Lease acquire(Long problemId) throws IOException {
         requireId(problemId);
-        requireId(versionId);
-        requireHash(manifestSha256);
-        Key key = new Key(problemId, versionId);
+        CachedVersion previous;
+        synchronized (state) {
+            requireOpen();
+            previous = versions.values().stream()
+                    .filter(value -> value.confirmed && value.key.getProblemId().equals(problemId))
+                    .max(Comparator.comparing(value -> value.key.getVersion()))
+                    .orElse(null);
+        }
+        Long baseline = previous == null ? null : previous.key.getVersion();
+        TestDataSource.ManifestResponse response = source.fetchManifest(problemId, baseline);
+        requireId(response.getVersion());
+        Key key = new Key(problemId, response.getVersion());
+        byte[] raw = response.getBody();
+        if (raw == null) {
+            if (previous == null || !previous.key.equals(key)) {
+                throw new IOException("服务端未返回当前版本的清单");
+            }
+            raw = previous.manifest;
+        }
+
+        // 先取得本次执行的清单，再合并相同题目和版本的下载。
         KeyLock keyLock;
         synchronized (state) {
             requireOpen();
@@ -145,46 +161,13 @@ public class TestDataCache implements AutoCloseable {
             throw new IOException("等待测试数据缓存时被中断", e);
         }
         try {
-            CachedVersion current;
-            synchronized (state) {
-                requireOpen();
-                current = versions.get(key);
-                if (current != null) {
-                    if (!manifestSha256.equals(current.manifestHash)) {
-                        log.warn("任务清单与缓存版本不一致 problem={} version={}", problemId, versionId);
-                        throw new IOException("任务的清单哈希与已缓存不可变版本不一致");
-                    }
-                    current.references++;
-                }
-            }
-            if (current != null) {
-                try {
-                    validateFiles(current, manifestSha256);
-                    synchronized (state) {
-                        current.lastAccess = System.nanoTime();
-                    }
-                    hits.incrementAndGet();
-                    log.debug("测试数据缓存命中 problem={} version={} cases={}",
-                            problemId, versionId, current.cases.size());
-                    return new Lease(current);
-                } catch (IOException e) {
-                    synchronized (state) {
-                        current.references--;
-                        if (Thread.currentThread().isInterrupted()) {
-                            throw e;
-                        }
-                        verificationFailures.incrementAndGet();
-                        log.warn("测试数据缓存校验失败 problem={} version={} references={} cause={}",
-                                problemId, versionId, current.references, e.getClass().getSimpleName());
-                        if (current.references != 0) {
-                            throw new IOException("运行中的测试数据缓存损坏，不能替换其文件", e);
-                        }
-                        removeVersion(current);
-                    }
-                }
+            Lease cached = reuse(key, raw);
+            if (cached != null) {
+                hits.incrementAndGet();
+                return cached;
             }
             misses.incrementAndGet();
-            return download(key, manifestSha256);
+            return download(key, raw);
         } finally {
             keyLock.lock.unlock();
             synchronized (state) {
@@ -194,6 +177,46 @@ public class TestDataCache implements AutoCloseable {
                 releaseProcessLockIfUnused();
             }
         }
+    }
+
+    /**
+     * 校验相同发布版本的文件并取得租约，损坏且空闲的缓存可按本次清单重新下载。
+     * @param key 本次执行取得的题目和版本
+     * @param manifest 已由服务端确认的完整清单
+     * @return 当前缓存的租约，缺失或需要重新下载时为空
+     * @throws IOException 正在使用的文件损坏、校验中断或缓存不可用
+     */
+    private Lease reuse(Key key, byte[] manifest) throws IOException {
+        CachedVersion cached;
+        synchronized (state) {
+            requireOpen();
+            cached = versions.get(key);
+            if (cached == null) {
+                return null;
+            }
+            cached.references++;
+        }
+        try {
+            if (!Arrays.equals(manifest, cached.manifest)) {
+                throw new IOException("本地清单与发布记录不一致");
+            }
+            validateFiles(cached);
+        } catch (IOException e) {
+            synchronized (state) {
+                release(cached);
+                checkInterrupted();
+                verificationFailures.incrementAndGet();
+                if (cached.references != 0) {
+                    throw new IOException("正在使用的测试缓存损坏", e);
+                }
+                removeVersion(cached);
+            }
+            return null;
+        }
+        synchronized (state) {
+            cached.confirmed = true;
+        }
+        return new Lease(cached);
     }
 
     /**
@@ -224,13 +247,13 @@ public class TestDataCache implements AutoCloseable {
     /**
      * 在临时目录下载并验证版本，完成后原子发布。
      * @param key 固定题目和版本
-     * @param expectedHash 任务清单哈希
+     * @param raw 已读取的发布清单
      * @return 持有已发布版本的引用
      * @throws IOException 下载、容量或校验失败
      */
-    private Lease download(Key key, String expectedHash) throws IOException {
+    private Lease download(Key key, byte[] raw) throws IOException {
         long started = System.nanoTime();
-        log.info("开始下载测试数据 problem={} version={}", key.problemId, key.versionId);
+        log.info("开始下载测试数据 problem={} version={}", key.getProblemId(), key.getVersion());
         Path staged = null;
         long reservation = 0;
         boolean published = false;
@@ -238,24 +261,45 @@ public class TestDataCache implements AutoCloseable {
         Long fileId = null;
         try {
             checkInterrupted();
-            byte[] raw = source.fetchManifest(key.problemId, key.versionId);
-            CachedVersion planned = parseVersion(key, raw, expectedHash, directory(key));
+            CachedVersion planned = parseVersion(key, raw, directory(key));
+            staged = Files.createDirectory(root.resolve(".download-" + UUID.randomUUID()));
+            privatePermissions(staged, true);
             stage = "capacity";
             synchronized (state) {
                 requireOpen();
+                // 先将可复用文件链接到新目录，再允许容量淘汰旧版本。
+                for (FileSpec file : planned.files.values()) {
+                    for (CachedVersion existing : versions.values()) {
+                        if (existing.key.getProblemId().equals(key.getProblemId()) && file.equals(existing.files.get(file.getId()))) {
+                            Path candidate = existing.directory.resolve(file.filename());
+                            if (Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)) {
+                                Files.createLink(staged.resolve(file.filename()), candidate);
+                                break;
+                            }
+                        }
+                    }
+                }
                 ensureCapacity(planned.bytes);
                 reservedBytes += planned.bytes;
                 reservation = planned.bytes;
             }
-            stage = "staging";
-            staged = Files.createDirectory(root.resolve(".download-" + UUID.randomUUID()));
-            privatePermissions(staged, true);
-            writeManifest(staged, raw, expectedHash);
+            writeManifest(staged, raw);
             for (FileSpec file : planned.files.values()) {
                 stage = "file";
-                fileId = file.id();
+                fileId = file.getId();
                 checkInterrupted();
-                try (InputStream input = source.openFile(key.problemId, key.versionId, file.id())) {
+                Path target = staged.resolve(file.filename());
+                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                    try (InputStream input = verifiedStream(target, file)) {
+                        input.transferTo(OutputStream.nullOutputStream());
+                        continue;
+                    } catch (IOException e) {
+                        checkInterrupted();
+                        verificationFailures.incrementAndGet();
+                        Files.delete(target);
+                    }
+                }
+                try (InputStream input = source.openFile(key.getProblemId(), file.getId())) {
                     writeVerified(staged.resolve(file.filename()), input, file);
                 }
             }
@@ -265,20 +309,21 @@ public class TestDataCache implements AutoCloseable {
                 requireOpen();
                 Files.move(staged, planned.directory, StandardCopyOption.ATOMIC_MOVE);
                 planned.references = 1;
+                planned.confirmed = true;
                 versions.put(key, planned);
                 readyBytes += planned.bytes;
                 reservedBytes -= reservation;
                 reservation = 0;
                 published = true;
                 log.info("测试数据下载校验完成 problem={} version={} files={} cases={} bytes={} elapsedMs={}",
-                        key.problemId, key.versionId, planned.files.size(), planned.cases.size(), planned.bytes,
+                        key.getProblemId(), key.getVersion(), planned.files.size(), planned.cases.size(), planned.bytes,
                         TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
                 return new Lease(planned);
             }
         } catch (IOException | RuntimeException e) {
             downloadFailures.incrementAndGet();
             log.warn("测试数据下载失败 problem={} version={} stage={} file={} elapsedMs={} cause={}",
-                    key.problemId, key.versionId, stage, fileId,
+                    key.getProblemId(), key.getVersion(), stage, fileId,
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), e.getClass().getSimpleName());
             if (e instanceof IOException ioException) {
                 throw ioException;
@@ -294,7 +339,7 @@ public class TestDataCache implements AutoCloseable {
                     // 残留下载无法删除时停止新任务准备，避免释放预算后继续占满磁盘。
                     closed = true;
                     log.warn("下载临时目录清理失败，停止缓存准备 problem={} version={} cause={}",
-                            key.problemId, key.versionId, e.getClass().getSimpleName());
+                            key.getProblemId(), key.getVersion(), e.getClass().getSimpleName());
                 }
                 throw e;
             } finally {
@@ -325,13 +370,13 @@ public class TestDataCache implements AutoCloseable {
                 try {
                     Key key = new Key(Long.parseLong(matcher.group(1)), Long.parseLong(matcher.group(2)));
                     byte[] raw = readManifest(path.resolve(MANIFEST));
-                    CachedVersion recovered = parseVersion(key, raw, readManifestHash(path), path);
-                    validateFiles(recovered, recovered.manifestHash);
+                    CachedVersion recovered = parseVersion(key, raw, path);
+                    validateFiles(recovered);
                     ensureCapacity(recovered.bytes);
                     versions.put(key, recovered);
                     readyBytes += recovered.bytes;
                     log.debug("恢复测试数据缓存 problem={} version={} cases={} bytes={}",
-                            key.problemId, key.versionId, recovered.cases.size(), recovered.bytes);
+                            key.getProblemId(), key.getVersion(), recovered.cases.size(), recovered.bytes);
                 } catch (IOException | RuntimeException e) {
                     verificationFailures.incrementAndGet();
                     log.warn("移除无效的测试数据缓存 directory={} cause={}", name, e.getClass().getSimpleName());
@@ -345,15 +390,14 @@ public class TestDataCache implements AutoCloseable {
      * 校验原始清单并建立版本元数据。
      * @param key 固定题目和版本
      * @param raw 有界原始清单
-     * @param expectedHash 任务清单哈希
      * @param directory 当前版本目录
      * @return 已验证版本描述
      * @throws IOException 清单与任务不匹配或字段非法
      */
-    private CachedVersion parseVersion(Key key, byte[] raw, String expectedHash, Path directory) throws IOException {
+    private CachedVersion parseVersion(Key key, byte[] raw, Path directory) throws IOException {
         try {
-            VerifiedManifest manifest = manifestReader.read(key.problemId, key.versionId, raw, expectedHash);
-            return new CachedVersion(key, directory, expectedHash, manifest.bytes(), manifest.files(), manifest.cases());
+            VerifiedManifest manifest = manifestReader.read(raw);
+            return new CachedVersion(key, directory, raw, manifest.getBytes(), manifest.getFiles(), manifest.getCases());
         } catch (IOException e) {
             verificationFailures.incrementAndGet();
             throw e;
@@ -363,23 +407,16 @@ public class TestDataCache implements AutoCloseable {
     /**
      * 核对清单及全部文件完整性，拒绝额外文件。
      * @param version 待核验缓存版本
-     * @param expectedHash 任务清单哈希
      * @throws IOException 文件缺失、校验失败或中断
      */
-    private void validateFiles(CachedVersion version, String expectedHash) throws IOException {
+    private void validateFiles(CachedVersion version) throws IOException {
         WorkerPaths.rejectSymbolicLinks(version.directory);
         if (!Files.isDirectory(version.directory, LinkOption.NOFOLLOW_LINKS)) {
             throw new IOException("缓存版本目录不存在或路径无效");
         }
         privatePermissions(version.directory, true);
-        if (!expectedHash.equals(version.manifestHash)
-                || !expectedHash.equals(readManifestHash(version.directory))
-                || !expectedHash.equals(hash(readManifest(version.directory.resolve(MANIFEST))))) {
-            throw new IOException("缓存清单与任务的固定版本不一致");
-        }
         Set<String> expectedNames = new HashSet<>();
         expectedNames.add(MANIFEST);
-        expectedNames.add(MANIFEST_HASH);
         for (FileSpec file : version.files.values()) {
             expectedNames.add(file.filename());
             try (InputStream input = verifiedStream(version.directory.resolve(file.filename()), file)) {
@@ -425,43 +462,16 @@ public class TestDataCache implements AutoCloseable {
     }
 
     /**
-     * 读取固定长度的清单摘要标记。
-     * @param directory 版本目录
-     * @return 小写 SHA-256
-     * @throws IOException 标记缺失、非法或读取失败
-     */
-    private String readManifestHash(Path directory) throws IOException {
-        Path path = directory.resolve(MANIFEST_HASH);
-        WorkerPaths.rejectSymbolicLinks(path);
-        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != 64) {
-            throw new IOException("缓存清单的固定哈希标记无效");
-        }
-        privatePermissions(path, false);
-        byte[] bytes;
-        try (InputStream input = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS)) {
-            bytes = input.readNBytes(65);
-        }
-        String hash = new String(bytes, StandardCharsets.US_ASCII);
-        requireHash(hash);
-        return hash;
-    }
-
-    /**
-     * 写入并刷盘原始清单和固定摘要。
+     * 写入并刷盘原始清单。
      * @param staged 当前下载临时目录
      * @param raw 原始清单字节
-     * @param expectedHash 任务清单摘要
      * @throws IOException 写入、权限或刷盘失败
      */
-    private void writeManifest(Path staged, byte[] raw, String expectedHash) throws IOException {
+    private void writeManifest(Path staged, byte[] raw) throws IOException {
         Path path = staged.resolve(MANIFEST);
         Files.write(path, raw, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
         privatePermissions(path, false);
         forceFile(path);
-        Path marker = staged.resolve(MANIFEST_HASH);
-        Files.writeString(marker, expectedHash, StandardCharsets.US_ASCII, StandardOpenOption.CREATE_NEW);
-        privatePermissions(marker, false);
-        forceFile(marker);
     }
 
     /**
@@ -482,7 +492,7 @@ public class TestDataCache implements AutoCloseable {
             while ((read = input.read(buffer)) != -1) {
                 checkInterrupted();
                 count += read;
-                if (count > file.size()) {
+                if (count > file.getSize()) {
                     verificationFailures.incrementAndGet();
                     throw new IOException("下载的测试数据超过清单声明大小");
                 }
@@ -490,7 +500,7 @@ public class TestDataCache implements AutoCloseable {
                 output.write(buffer, 0, read);
             }
         }
-        if (count != file.size() || !file.sha256().equals(HexFormat.of().formatHex(digest.digest()))) {
+        if (count != file.getSize() || !file.getSha256().equals(HexFormat.of().formatHex(digest.digest()))) {
             verificationFailures.incrementAndGet();
             throw new IOException("下载的测试数据大小或 SHA-256 校验失败");
         }
@@ -528,7 +538,7 @@ public class TestDataCache implements AutoCloseable {
         if (versions.remove(version.key, version)) {
             readyBytes -= version.bytes;
             log.debug("清理未使用的测试数据缓存 problem={} version={} bytes={}",
-                    version.key.problemId, version.key.versionId, version.bytes);
+                    version.key.getProblemId(), version.key.getVersion(), version.bytes);
         }
     }
 
@@ -561,7 +571,7 @@ public class TestDataCache implements AutoCloseable {
      * @return 缓存根目录内的版本路径
      */
     private Path directory(Key key) {
-        return root.resolve("p" + key.problemId + "-v" + key.versionId);
+        return root.resolve("case-p" + key.getProblemId() + "-v" + key.getVersion());
     }
 
     /**
@@ -626,17 +636,6 @@ public class TestDataCache implements AutoCloseable {
     }
 
     /**
-     * 要求摘要为 64 位小写十六进制。
-     * @param hash 任务或缓存清单摘要
-     * @throws IOException 格式不合法
-     */
-    private static void requireHash(String hash) throws IOException {
-        if (hash == null || !hash.matches("[0-9a-f]{64}")) {
-            throw new IOException("测试数据 SHA-256 无效");
-        }
-    }
-
-    /**
      * 限制缓存文件仅由当前所有者访问，非 POSIX 平台保留系统权限。
      * @param path 缓存路径
      * @param directory 是否为目录
@@ -683,15 +682,6 @@ public class TestDataCache implements AutoCloseable {
     }
 
     /**
-     * 计算有界清单正文的 SHA-256。
-     * @param value 原始清单字节
-     * @return 小写十六进制摘要
-     */
-    private static String hash(byte[] value) {
-        return HexFormat.of().formatHex(digest().digest(value));
-    }
-
-    /**
      * 打开受限本地文件，EOF 和提前关闭都检查完整性。
      * @param path 缓存文件路径
      * @param file 固定文件元数据
@@ -700,12 +690,12 @@ public class TestDataCache implements AutoCloseable {
      */
     private static InputStream verifiedStream(Path path, FileSpec file) throws IOException {
         WorkerPaths.rejectSymbolicLinks(path);
-        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != file.size()) {
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.size(path) != file.getSize()) {
             throw new IOException("缓存文件不存在或大小不一致");
         }
         privatePermissions(path, false);
         InputStream input = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS);
-        return new VerifiedTestDataStream(input, file.size(), file.sha256());
+        return new VerifiedTestDataStream(input, file.getSize(), file.getSha256());
     }
 
     public final class Lease implements AutoCloseable {
@@ -816,7 +806,7 @@ public class TestDataCache implements AutoCloseable {
          * @return 从 1 开始的测试点编号
          */
         public int id() {
-            return testCase.id();
+            return testCase.getId();
         }
 
         /**
@@ -825,7 +815,7 @@ public class TestDataCache implements AutoCloseable {
          * @throws IOException 引用已释放或文件非法
          */
         public InputStream openInput() throws IOException {
-            return lease.openFile(testCase.input());
+            return lease.openFile(testCase.getInput());
         }
 
         /**
@@ -834,14 +824,68 @@ public class TestDataCache implements AutoCloseable {
          * @throws IOException 引用已释放或文件非法
          */
         public InputStream openOutput() throws IOException {
-            return lease.openFile(testCase.output());
+            return lease.openFile(testCase.getOutput());
         }
     }
 
-    public record Statistics(long hits, long misses, long downloadFailures, long verificationFailures,
-                             long readyBytes, long reservedBytes, int versions) {}
+    /**
+     * 当前 Worker 测试数据缓存统计
+     */
+    @Value
+    public static class Statistics {
 
-    private record Key(Long problemId, Long versionId) {}
+        /**
+         * 命中缓存的次数
+         */
+        long hits;
+
+        /**
+         * 未命中缓存的次数
+         */
+        long misses;
+
+        /**
+         * 下载失败次数
+         */
+        long downloadFailures;
+
+        /**
+         * 完整性校验失败次数
+         */
+        long verificationFailures;
+
+        /**
+         * 已就绪缓存占用的字节数
+         */
+        long readyBytes;
+
+        /**
+         * 进行中下载预留的字节数
+         */
+        long reservedBytes;
+
+        /**
+         * 已就绪的清单版本数
+         */
+        int versions;
+    }
+
+    /**
+     * 按内部题号和清单版本区分本地缓存
+     */
+    @Value
+    private static class Key {
+
+        /**
+         * 题目内部主键
+         */
+        Long problemId;
+
+        /**
+         * 测试清单发布版本
+         */
+        Long version;
+    }
 
     private static final class KeyLock {
 
@@ -853,7 +897,8 @@ public class TestDataCache implements AutoCloseable {
 
         private final Key key;
         private final Path directory;
-        private final String manifestHash;
+        private final byte[] manifest;
+        private boolean confirmed;
         private final long bytes;
         private final Map<Long, FileSpec> files;
         private final List<CaseSpec> cases;
@@ -864,16 +909,16 @@ public class TestDataCache implements AutoCloseable {
          * 保存已验证版本的索引和磁盘占用。
          * @param key 固定版本键
          * @param directory 版本目录
-         * @param manifestHash 清单摘要
+         * @param manifest 经校验的清单原文，用于条件读取及同版本修复
          * @param bytes 总占用字节数
          * @param files 不可变文件索引
          * @param cases 不可变测试点列表
          */
-        private CachedVersion(Key key, Path directory, String manifestHash, long bytes,
+        private CachedVersion(Key key, Path directory, byte[] manifest, long bytes,
                               Map<Long, FileSpec> files, List<CaseSpec> cases) {
             this.key = key;
             this.directory = directory;
-            this.manifestHash = manifestHash;
+            this.manifest = manifest;
             this.bytes = bytes;
             this.files = files;
             this.cases = cases;

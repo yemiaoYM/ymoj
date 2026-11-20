@@ -8,6 +8,7 @@ import com.ymcloud.pojo.dto.UpdateUserEmailDTO;
 import com.ymcloud.pojo.dto.UpdateUserPasswordDTO;
 import com.ymcloud.pojo.dto.UpdateUserProfileDTO;
 import com.ymcloud.pojo.vo.oj.UserProfileVO;
+import com.ymcloud.web.service.file.ImageService;
 import com.ymcloud.web.service.oj.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,20 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private ImageService imageService;
+
+    /**
+     * 登录用户上传签名插图
+     * 正文保存权限由各业务接口校验，不从服务端抓取外部 URL
+     * @param file 待校验的 JPEG、PNG 或 WebP 图片
+     * @return 签名图片文件主键
+     */
+    @PostMapping("/signature/image")
+    public Result<Long> uploadSignatureImage(@RequestParam("file") MultipartFile file) {
+        return Result.ok(imageService.upload(file));
+    }
 
     /**
      * 获取当前用户基本信息

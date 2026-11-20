@@ -16,7 +16,7 @@
             <x-flex align="center">
               <el-icon size="25"><component :is="HardwareChipSharp" /></el-icon>
               <span>运行内存
-                {{ formatSubmissionMemory(submissionData.memory) }}</span>
+                {{ formatBinaryBytes(submissionData.memory, 'KiB') }}</span>
             </x-flex>
           </x-flex>
         </el-alert>
@@ -58,7 +58,7 @@
             {{ formatSubmissionTime(submissionData.time) }}
           </el-descriptions-item>
           <el-descriptions-item label="运行内存">
-            {{ formatSubmissionMemory(submissionData.memory) }}
+            {{ formatBinaryBytes(submissionData.memory, 'KiB') }}
           </el-descriptions-item>
           <el-descriptions-item label="代码长度">
             {{ formatSubmissionLength(submissionData.codeLength) }}
@@ -91,7 +91,7 @@
               <span style="font-weight: bold">Test #{{ judgeCase.caseIndex }}</span>
               <span style="font-size: 20px; font-weight: bold">{{ judgeCase.status }}</span>
               <span style="font-size: 15px; font-weight: bold; color: var(--ym-muted-text)">
-                {{ formatSubmissionTime(judgeCase.time) }} / {{ formatSubmissionMemory(judgeCase.memory) }}
+                {{ formatSubmissionTime(judgeCase.time) }} / {{ formatBinaryBytes(judgeCase.memory, 'KiB') }}
               </span>
               <x-flex align="center">
                 <span>{{ judgeCase.score !== null ? judgeCase.score : "- -" }}</span>
@@ -128,9 +128,9 @@ import {
   Clipboard,
 } from "@vicons/ionicons5";
 import {
+  formatBinaryBytes,
   getStatusType,
   getScoreType,
-  formatSubmissionMemory,
   formatSubmissionTime,
   formatSubmissionLength,
 } from "@/utils/utils";
@@ -192,7 +192,7 @@ export default defineComponent({
       copyCode,
       getStatusType,
       getScoreType,
-      formatSubmissionMemory,
+      formatBinaryBytes,
       formatSubmissionTime,
       formatSubmissionLength,
       getTestCaseClass,

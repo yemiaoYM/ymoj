@@ -2,9 +2,11 @@ package com.ymcloud.judge.listeners;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.judge.config.WorkerProperties;
-import com.ymcloud.pojo.contract.judge.JudgeResult;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.pojo.bo.judge.JudgeResult;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
 import jakarta.annotation.PreDestroy;
+import lombok.ToString;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -114,8 +116,8 @@ public class WorkerExecutionStore {
             throw new IllegalArgumentException("同一执行标识收到不同任务内容");
         }
         if (status == 0) {
-            log.debug("Worker 执行租约已被占用 submission={} execution={} version={}",
-                    task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId());
+            log.debug("Worker 执行租约已被占用 submission={} execution={}",
+                    task.getSubmissionId(), task.getExecutionId());
             return new Claim(null, null, true, digest);
         }
         if (status == 2) {
@@ -128,8 +130,8 @@ public class WorkerExecutionStore {
         if (status < 11 || status - 10 > Integer.MAX_VALUE) {
             throw new IllegalStateException("Worker 执行租约返回无效状态");
         }
-        log.debug("Worker 获取执行租约 submission={} execution={} version={} attempt={}",
-                task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(), status - 10);
+        log.debug("Worker 获取执行租约 submission={} execution={} attempt={}",
+                task.getSubmissionId(), task.getExecutionId(), status - 10);
         return new Claim(new Lease(task, state, lock, owner, (int) (status - 10)), null, false, digest);
     }
 
@@ -199,7 +201,34 @@ public class WorkerExecutionStore {
         return properties.getRedisPrefix() + "{" + executionId + "}:" + suffix;
     }
 
-    public record Claim(Lease lease, JudgeResult completed, boolean busy, String digest) {}
+    /**
+     * 领取判题任务后得到的租约或已完成结果
+     */
+    @Value
+    public static class Claim {
+
+        /**
+         * 本次领取的执行租约
+         */
+        @ToString.Exclude
+        Lease lease;
+
+        /**
+         * 可重发的既有终态结果
+         */
+        @ToString.Exclude
+        JudgeResult completed;
+
+        /**
+         * 该任务是否已由其他 Worker 持有
+         */
+        boolean busy;
+
+        /**
+         * 领取时核对的任务指纹
+         */
+        String digest;
+    }
 
     public final class Lease implements AutoCloseable {
 
@@ -209,7 +238,6 @@ public class WorkerExecutionStore {
         private final int attempt;
         private final Long submissionId;
         private final String executionId;
-        private final Long versionId;
         private final AtomicBoolean lost = new AtomicBoolean();
         private final Object lifecycle = new Object();
         private final ScheduledFuture<?> renewal;
@@ -231,7 +259,6 @@ public class WorkerExecutionStore {
             this.attempt = attempt;
             this.submissionId = task.getSubmissionId();
             this.executionId = task.getExecutionId();
-            this.versionId = task.getTestDataVersionId();
             Thread running = Thread.currentThread();
             this.renewal = heartbeat.scheduleAtFixedRate(() -> {
                 boolean owned;
@@ -240,8 +267,8 @@ public class WorkerExecutionStore {
                             List.of(lock), owner, String.valueOf(properties.getLeaseMillis())));
                 } catch (RuntimeException e) {
                     owned = false;
-                    log.warn("Worker 执行租约续期失败 submission={} execution={} version={} attempt={} exception={}",
-                            submissionId, executionId, versionId, attempt, e.getClass().getSimpleName());
+                    log.warn("Worker 执行租约续期失败 submission={} execution={} attempt={} exception={}",
+                            submissionId, executionId, attempt, e.getClass().getSimpleName());
                 }
                 // Redis 调用可能在 close 后才返回，关闭后不能再中断复用该线程的下一任务。
                 synchronized (lifecycle) {
@@ -249,8 +276,8 @@ public class WorkerExecutionStore {
                         return;
                     }
                     if (!owned && lost.compareAndSet(false, true)) {
-                        log.warn("Worker 失去执行租约 submission={} execution={} version={} attempt={}",
-                                submissionId, executionId, versionId, attempt);
+                        log.warn("Worker 失去执行租约 submission={} execution={} attempt={}",
+                                submissionId, executionId, attempt);
                         running.interrupt();
                     }
                 }
@@ -259,8 +286,8 @@ public class WorkerExecutionStore {
             this.deadline = deadlines.schedule(() -> {
                 synchronized (lifecycle) {
                     if (!closed) {
-                        log.warn("Worker 执行达到总截止时间 submission={} execution={} version={} attempt={}",
-                                submissionId, executionId, versionId, attempt);
+                        log.warn("Worker 执行达到总截止时间 submission={} execution={} attempt={}",
+                                submissionId, executionId, attempt);
                         running.interrupt();
                     }
                 }
@@ -309,8 +336,8 @@ public class WorkerExecutionStore {
                 redis.execute(RELEASE, List.of(lock), owner);
             } catch (RuntimeException e) {
                 // 结果确认及 ACK 已完成时，清理失败不能触发第二次 ACK 或重复发布；租约会自动过期。
-                log.warn("Worker 租约释放失败，等待租约过期 submission={} execution={} version={} attempt={} exception={}",
-                        submissionId, executionId, versionId, attempt, e.getClass().getSimpleName());
+                log.warn("Worker 租约释放失败，等待租约过期 submission={} execution={} attempt={} exception={}",
+                        submissionId, executionId, attempt, e.getClass().getSimpleName());
             }
         }
 

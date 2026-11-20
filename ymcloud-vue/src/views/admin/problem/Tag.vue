@@ -7,9 +7,9 @@
           <el-text type="info">共 {{ tagCount }} 个标签 · {{ classifications.length }} 个分类，点击标签可编辑</el-text>
         </div>
         <x-flex class="tag-actions" align="center" :size="8">
-          <el-button :icon="Refresh" :loading="loading" :disabled="busy" @click="handleLoadTags">刷新</el-button>
-          <el-button v-permission="['problem:tag:add']" :icon="FolderAdd" :disabled="busy" @click="onOpenClassification()">添加分类</el-button>
-          <el-button v-permission="['problem:tag:add']" type="primary" :icon="Plus" :disabled="busy" @click="onOpenTag()">添加标签</el-button>
+          <el-button :icon="Refresh" :loading="loading" :disabled="buttonLoading" @click="getList">刷新</el-button>
+          <el-button v-permission="['problem:tag:add']" :icon="FolderAdd" :disabled="buttonLoading" @click="onOpenClassification()">添加分类</el-button>
+          <el-button v-permission="['problem:tag:add']" type="primary" :icon="Plus" :disabled="buttonLoading" @click="onOpenTag()">添加标签</el-button>
         </x-flex>
       </x-flex>
       <el-input
@@ -39,8 +39,8 @@
               <el-text v-if="group.classification" type="info" size="small">排序 {{ group.classification.priority }}</el-text>
             </x-flex>
             <x-flex v-if="group.classification" class="tag-actions" align="center" :size="4">
-              <el-button v-permission="['problem:tag:edit']" text size="small" :icon="Edit" :disabled="busy" @click="onOpenClassification(group.classification)">编辑分类</el-button>
-              <el-button v-permission="['problem:tag:remove']" text type="danger" size="small" :icon="Delete" :disabled="busy" @click="onDeleteClassification(group.classification)">删除分类</el-button>
+              <el-button v-permission="['problem:tag:edit']" text size="small" :icon="Edit" :disabled="buttonLoading" @click="onOpenClassification(group.classification)">编辑分类</el-button>
+              <el-button v-permission="['problem:tag:remove']" text type="danger" size="small" :icon="Delete" :disabled="buttonLoading" @click="onDeleteClassification(group.classification)">删除分类</el-button>
             </x-flex>
           </x-flex>
         </template>
@@ -52,9 +52,9 @@
             effect="dark"
             size="default"
             :color="item.color"
-            :closable="canRemove && !busy"
+            :closable="canRemove && !buttonLoading"
             :role="canEdit ? 'button' : undefined"
-            :tabindex="canEdit && !busy ? 0 : undefined"
+            :tabindex="canEdit && !buttonLoading ? 0 : undefined"
             :aria-label="canEdit ? '编辑标签：' + item.name : undefined"
             @click="onOpenTag(item)"
             @keydown.enter.prevent="onOpenTag(item)"
@@ -67,7 +67,7 @@
             type="primary"
             plain
             :icon="Plus"
-            :disabled="busy"
+            :disabled="buttonLoading"
             @click="onOpenTag(null, group.classification)"
           >添加标签</el-button>
           <el-text v-if="!group.tagList.length" type="info" size="small">此分类暂无标签</el-text>
@@ -80,10 +80,10 @@
       v-model="tagDialogOpen"
       :title="tag.id === null ? '添加标签' : '编辑标签'"
       :close-on-click-modal="false"
-      :close-on-press-escape="!savingTag"
-      :show-close="!savingTag"
+      :close-on-press-escape="!buttonLoading"
+      :show-close="!buttonLoading"
     >
-      <el-form ref="tagFormRef" label-width="88px" :model="tag" :rules="tagRules" :disabled="savingTag">
+      <el-form ref="tagFormRef" label-width="88px" :model="tag" :rules="tagRules" :disabled="buttonLoading">
         <el-form-item label="标签名称" prop="name">
           <el-input placeholder="1～20 个字符" maxlength="20" show-word-limit v-model="tag.name" />
         </el-form-item>
@@ -100,8 +100,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="savingTag" @click="onCloseTag">取消</el-button>
-        <el-button type="primary" :loading="savingTag" @click="onSaveTag">保存</el-button>
+        <el-button :disabled="buttonLoading" @click="onCloseTag">取消</el-button>
+        <el-button type="primary" :loading="buttonLoading" @click="onSaveTag">保存</el-button>
       </template>
     </el-dialog>
 
@@ -110,10 +110,10 @@
       v-model="classificationDialogOpen"
       :title="classification.id === null ? '添加分类' : '编辑分类'"
       :close-on-click-modal="false"
-      :close-on-press-escape="!savingClassification"
-      :show-close="!savingClassification"
+      :close-on-press-escape="!buttonLoading"
+      :show-close="!buttonLoading"
     >
-      <el-form ref="classificationFormRef" label-width="88px" :model="classification" :rules="classificationRules" :disabled="savingClassification">
+      <el-form ref="classificationFormRef" label-width="88px" :model="classification" :rules="classificationRules" :disabled="buttonLoading">
         <el-form-item label="分类名称" prop="name">
           <el-input placeholder="1～30 个字符" maxlength="30" show-word-limit v-model="classification.name" />
         </el-form-item>
@@ -123,19 +123,21 @@
         <el-text type="info" size="small">数值越小越靠前。删除分类后，标签会移至「未分类」。</el-text>
       </el-form>
       <template #footer>
-        <el-button :disabled="savingClassification" @click="onCloseClassification">取消</el-button>
-        <el-button type="primary" :loading="savingClassification" @click="onSaveClassification">保存</el-button>
+        <el-button :disabled="buttonLoading" @click="onCloseClassification">取消</el-button>
+        <el-button type="primary" :loading="buttonLoading" @click="onSaveClassification">保存</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useLoading } from '@/hooks/async/useLoading';
+import modal from '@/plugins/modal';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { Plus, Edit, Delete, Folder, FolderAdd, Refresh, Search } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 import type {
   Tag,
   TagDTO,
@@ -159,13 +161,10 @@ const canRemove = computed(() => userStore.hasEveryPermission(['problem:tag:remo
 const groups = ref<TagsWithClassification[]>([]);
 const classifications = computed(() => groups.value.flatMap(group => group.classification ? [group.classification] : []));
 const search = ref('');
-const loading = ref(false);
+const { loading, withLoading } = useLoading();
 const loaded = ref(false);
 const loadFailed = ref(false);
-const { pending: savingTag, beforeChange: saveTag } = useAsyncChange();
-const { pending: savingClassification, beforeChange: saveClassification } = useAsyncChange();
-const { pending: deleting, beforeChange: deleteItem } = useAsyncChange();
-const busy = computed(() => savingTag.value || savingClassification.value || deleting.value);
+const { pending: buttonLoading, beforeChange: runAction } = useAsyncChange();
 const tagDialogOpen = ref(false);
 const classificationDialogOpen = ref(false);
 const tagFormRef = ref<FormInstance>();
@@ -193,32 +192,21 @@ const filteredGroups = computed(() => {
       : group.tagList.filter(item => item.name.toLocaleLowerCase().includes(keyword))
   })).filter(group => group.tagList.length || (group.classification?.name || '未分类').toLocaleLowerCase().includes(keyword));
 });
-let generation = 0;
 let disposed = false;
 
-async function handleLoadTags() {
-  const current = ++generation;
-  loading.value = true;
+const getList = () => withLoading(async () => {
   loadFailed.value = false;
   try {
     const tagsResponse = await getAdminTagsAndClassifications();
-    if (!disposed && current === generation) {
-      groups.value = tagsResponse.data.data;
-      loaded.value = true;
-    }
+    groups.value = tagsResponse.data.data;
+    loaded.value = true;
   } catch {
-    if (!disposed && current === generation) {
-      loadFailed.value = true;
-    }
-  } finally {
-    if (!disposed && current === generation) {
-      loading.value = false;
-    }
+    loadFailed.value = true;
   }
-}
+});
 
 async function onOpenTag(value: Tag | null = null, parent: TagClassification | null = null) {
-  if (busy.value || !userStore.hasEveryPermission([value ? 'problem:tag:edit' : 'problem:tag:add'])) {
+  if (buttonLoading.value || !userStore.hasEveryPermission([value ? 'problem:tag:edit' : 'problem:tag:add'])) {
     return;
   }
   Object.assign(tag, value
@@ -230,7 +218,7 @@ async function onOpenTag(value: Tag | null = null, parent: TagClassification | n
 }
 
 async function onOpenClassification(value: TagClassification | null = null) {
-  if (busy.value || !userStore.hasEveryPermission([value ? 'problem:tag:edit' : 'problem:tag:add'])) {
+  if (buttonLoading.value || !userStore.hasEveryPermission([value ? 'problem:tag:edit' : 'problem:tag:add'])) {
     return;
   }
   Object.assign(classification, value ?? { id: null, name: '', priority: 1 });
@@ -249,10 +237,10 @@ function onCloseClassification() {
 
 async function onSaveTag() {
   const form = tagFormRef.value;
-  if (busy.value || !form || !userStore.hasEveryPermission([tag.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
+  if (buttonLoading.value || !form || !userStore.hasEveryPermission([tag.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
     return;
   }
-  await saveTag(async () => {
+  await runAction(async () => {
     await form.validate();
     if (disposed) {
       return false;
@@ -262,17 +250,17 @@ async function onSaveTag() {
     if (!disposed) {
       ElMessage.success(response.data.msg);
       tagDialogOpen.value = false;
-      await handleLoadTags();
+      await getList();
     }
   });
 }
 
 async function onSaveClassification() {
   const form = classificationFormRef.value;
-  if (busy.value || !form || !userStore.hasEveryPermission([classification.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
+  if (buttonLoading.value || !form || !userStore.hasEveryPermission([classification.id === null ? 'problem:tag:add' : 'problem:tag:edit'])) {
     return;
   }
-  await saveClassification(async () => {
+  await runAction(async () => {
     await form.validate();
     if (disposed) {
       return false;
@@ -284,22 +272,21 @@ async function onSaveClassification() {
     if (!disposed) {
       ElMessage.success(response.data.msg);
       classificationDialogOpen.value = false;
-      await handleLoadTags();
+      await getList();
     }
   });
 }
 
 async function handleDelete(kind: 'tag' | 'classification', value: Tag | TagClassification) {
-  if (busy.value || !canRemove.value) {
+  if (buttonLoading.value || !canRemove.value) {
     return;
   }
-  await deleteItem(async () => {
-    await ElMessageBox.confirm(
+  await runAction(async () => {
+    await modal.confirm(
       kind === 'tag'
         ? '确认删除标签「' + value.name + '」？关联题目将取消此标签。'
         : '确认删除分类「' + value.name + '」？标签将保留并移至未分类。',
-      '删除确认',
-      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+      '删除确认', '删除',
     );
     if (disposed) {
       return false;
@@ -307,7 +294,7 @@ async function handleDelete(kind: 'tag' | 'classification', value: Tag | TagClas
     const response = kind === 'tag' ? await deleteAdminTag(value.id) : await deleteAdminTagClassification(value.id);
     if (!disposed) {
       ElMessage.success(response.data.msg);
-      await handleLoadTags();
+      await getList();
     }
   });
 }
@@ -320,10 +307,9 @@ function onDeleteClassification(value: TagClassification) {
   return handleDelete('classification', value);
 }
 
-onMounted(handleLoadTags);
+onMounted(getList);
 onBeforeUnmount(() => {
   disposed = true;
-  generation++;
 });
 </script>
 

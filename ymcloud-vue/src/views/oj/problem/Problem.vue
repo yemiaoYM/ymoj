@@ -23,21 +23,21 @@
                                         </p>
                                         <p>
                                             <el-tag>空间限制</el-tag>
-                                            C/C++ {{ formatSubmissionMemory(problem.memoryLimit) }}，其他语言 {{ formatSubmissionMemory(2 * problem.memoryLimit) }}
+                                            C/C++ {{ formatBinaryBytes(problem.memoryLimit, 'KiB') }}，其他语言 {{ formatBinaryBytes(2 * problem.memoryLimit, 'KiB') }}
                                         </p>
                                     </x-flex>
                                 </header>
                                 <section class="statement-section">
                                     <h2>题目描述</h2>
-                                    <MarkdownPreview :content="problem.content" />
+                                    <MarkdownPreview :contest-id="isContest ? contestId : undefined" :content="problem.content" />
                                 </section>
                                 <section class="statement-section">
                                     <h2>输入描述</h2>
-                                    <MarkdownPreview :content="problem.input" />
+                                    <MarkdownPreview :contest-id="isContest ? contestId : undefined" :content="problem.input" />
                                 </section>
                                 <section class="statement-section">
                                     <h2>输出描述</h2>
-                                    <MarkdownPreview :content="problem.output" />
+                                    <MarkdownPreview :contest-id="isContest ? contestId : undefined" :content="problem.output" />
                                 </section>
                                 <section class="statement-section">
                                     <h2>测试用例</h2>
@@ -108,7 +108,7 @@
                             </el-table-column>
                             <el-table-column prop="memory" label="运行内存" align="center">
                                 <template #default="{ row }">
-                                {{ formatSubmissionMemory(row.memory) }}
+                                {{ formatBinaryBytes(row.memory, 'KiB') }}
                                 </template>
                             </el-table-column>
                             <el-table-column prop="language" label="语言" align="center">
@@ -161,7 +161,7 @@ import { getProblemDetail } from '@/api/problem';
 import { getProblemSubmissionList } from '@/api/submission';
 import { getContestProblemInfo, getContestProblemSubmissionList } from '@/api/contest';
 import Storage from '@/utils/storage';
-import { getStatusType,formatSubmissionMemory,formatSubmissionTime,formatRelativeTime } from '@/utils/utils';
+import { formatBinaryBytes, getStatusType, formatSubmissionTime, formatRelativeTime } from '@/utils/utils';
 import useClipboard from 'vue-clipboard3';
 const MarkdownPreview = defineAsyncComponent(() => import('@/components/common/markdown/MarkdownPreview.vue'));
 const CodeMirror = defineAsyncComponent(() => import('@/components/common/Codemirror.vue'));

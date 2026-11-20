@@ -83,7 +83,7 @@ import { getAdminSystemSetting, updateSystemSetting } from '@/api/system';
 import type { SystemSettingDTO } from '@/types/system';
 import { useUserStore } from "@/stores/user";
 import CarouselSetting from "@/components/admin/CarouselSetting.vue";
-import { useAsyncChange } from "@/hooks/useAsyncChange";
+import { useAsyncChange } from "@/hooks/async/useAsyncChange";
 
 //data
 const userStore = useUserStore();

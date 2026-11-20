@@ -1,7 +1,6 @@
 package com.ymcloud.pojo.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
@@ -49,7 +48,6 @@ public class Problem {
     private String examples;
 
     /** 题目来源说明，最多255字符，可为空；不参与判题和题号生成 */
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String source;
 
     /** 难度：1=基础，2=进阶，3=挑战，4=高阶，5=大师 */
@@ -64,7 +62,6 @@ public class Problem {
      * 校验器语言，仅在特殊判题下使用
      */
     @JsonIgnore
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String spjLanguage;
 
     /**
@@ -72,14 +69,12 @@ public class Problem {
      */
     @JsonIgnore
     @ToString.Exclude
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String spjCode;
 
     /**
      * 包含编译协议的校验器源码摘要
      */
     @JsonIgnore
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String spjDigest;
 
     /** 可见性：1=公开，2=私有，3=比赛专用 */
@@ -87,9 +82,6 @@ public class Problem {
 
     /** 是否允许查看测试样例结果（0=否，1=是） */
     private Boolean openCaseResult;
-
-    /** 当前不可变测试数据版本ID */
-    private Long testDataVersionId;
 
     /** 出题人ID（user.id） */
     private Long authorId;

@@ -3,7 +3,11 @@ package com.ymcloud.judge.listeners;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.judge.config.WorkerProperties;
 import com.ymcloud.judge.io.WorkerPaths;
-import com.ymcloud.pojo.contract.judge.JudgeResult;
+import com.ymcloud.pojo.bo.judge.JudgeResult;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -68,14 +72,14 @@ public class ResultJournal {
         try (var input = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS)) {
             entry = mapper.readValue(input, Entry.class);
         }
-        if (entry == null || !digest.equals(entry.digest()) || entry.result() == null || !entry.result().isTerminal()
-                || !executionId.equals(entry.result().getExecutionId())) {
+        if (entry == null || !digest.equals(entry.getDigest()) || entry.getResult() == null || !entry.getResult().isTerminal()
+                || !executionId.equals(entry.getResult().getExecutionId())) {
             throw new IOException("Worker 结果日志与任务指纹不一致");
         }
-        JudgeResult result = entry.result();
-        log.debug("Worker 读取本地终态记录 submission={} execution={} version={} status={}",
-                result.getSubmissionId(), executionId, result.getTestDataVersionId(), result.getStatus());
-        return entry.result();
+        JudgeResult result = entry.getResult();
+        log.debug("Worker 读取本地终态记录 submission={} execution={} status={}",
+                result.getSubmissionId(), executionId, result.getStatus());
+        return entry.getResult();
     }
 
     /**
@@ -97,8 +101,8 @@ public class ResultJournal {
                 channel.force(true);
             }
             Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            log.debug("Worker 保存本地终态记录 submission={} execution={} version={} status={}",
-                    result.getSubmissionId(), executionId, result.getTestDataVersionId(), result.getStatus());
+            log.debug("Worker 保存本地终态记录 submission={} execution={} status={}",
+                    result.getSubmissionId(), executionId, result.getStatus());
         } finally {
             Files.deleteIfExists(temporary);
         }
@@ -168,5 +172,22 @@ public class ResultJournal {
         }
     }
 
-    public record Entry(String digest, JudgeResult result) {}
+    /**
+     * 恢复日志持久化的任务指纹及终态结果
+     */
+    @Getter
+    @AllArgsConstructor
+    @NoArgsConstructor(access = AccessLevel.PRIVATE)
+    public static final class Entry {
+
+        /**
+         * 原任务快照的指纹
+         */
+        private String digest;
+
+        /**
+         * 与执行身份对应的终态结果
+         */
+        private JudgeResult result;
+    }
 }

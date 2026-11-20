@@ -80,13 +80,13 @@ LABEL org.opencontainers.image.version="${YMCLOUD_VERSION}"
 RUN test -n "$YMCLOUD_VERSION" \
     && groupadd --gid 10001 ymcloud \
     && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin ymcloud \
-    && mkdir -p /app /data/files /data/logs \
+    && mkdir -p /app /data/logs \
     && chown -R 10001:10001 /data
 COPY ymcloud-web/target/ymcloud-web.jar /app/web.jar
 COPY docker/web/entrypoint.py /opt/ymcloud/entrypoint.py
 COPY docker/web/healthcheck.py /opt/ymcloud/web-healthcheck.py
 COPY docker/web/preflight.py /opt/ymcloud/deployment-preflight.py
-ENV SERVER_ADDRESS=0.0.0.0 YMCLOUD_FILE_BASE_DIR=/data/files LOGGING_FILE_PATH=/data/logs
+ENV SERVER_ADDRESS=0.0.0.0 LOGGING_FILE_PATH=/data/logs
 USER 10001:10001
 WORKDIR /app
 EXPOSE 9091

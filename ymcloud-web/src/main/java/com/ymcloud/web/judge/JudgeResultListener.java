@@ -1,6 +1,6 @@
 package com.ymcloud.web.judge;
 
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
+import com.ymcloud.common.constant.RabbitMQConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Message;
@@ -33,7 +33,7 @@ public class JudgeResultListener {
      * 校验消息容量及 UTF-8 后调用结果事务，毒消息拒绝且不重新入队。
      * @param message 原始判题结果消息
      */
-    @RabbitListener(queues = "${ymcloud.judge.result-queue:" + JudgeProtocol.RESULT_QUEUE + "}",
+    @RabbitListener(queues = "${ymcloud.judge.result-queue:" + RabbitMQConstants.JUDGE_RESULT_QUEUE + "}",
             containerFactory = "judgeResultListenerContainerFactory")
     public void receive(Message message) {
         if (message.getBody().length > MAX_MESSAGE_BYTES) {

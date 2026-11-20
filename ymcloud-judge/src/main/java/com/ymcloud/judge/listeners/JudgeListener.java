@@ -3,12 +3,12 @@ package com.ymcloud.judge.listeners;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.ymcloud.judge.config.WorkerProperties;
+import com.ymcloud.judge.constant.JudgeConstants;
 import com.ymcloud.judge.strategy.JudgeRun;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
-import com.ymcloud.pojo.contract.judge.JudgeResult;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
-import com.ymcloud.pojo.contract.judge.JudgeVerdict;
-import com.ymcloud.pojo.contract.judge.TestCaseResult;
+import com.ymcloud.pojo.bo.judge.JudgeCaseResult;
+import com.ymcloud.pojo.bo.judge.JudgeResult;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
@@ -36,17 +36,6 @@ public class JudgeListener {
     private static final int MAX_TASK_MESSAGE_BYTES = 3 * 1024 * 1024;
     private static final int MAX_TEST_CASES = 10000;
     private static final int MAX_RECOVERED_PREVIEW_CHARACTERS = 2 * 1024 * 1024;
-    private static final Set<JudgeVerdict> TERMINAL = Set.of(
-            JudgeVerdict.STATUS_CANCELLED,
-            JudgeVerdict.STATUS_PRESENTATION_ERROR,
-            JudgeVerdict.STATUS_COMPILE_ERROR,
-            JudgeVerdict.STATUS_WRONG_ANSWER,
-            JudgeVerdict.STATUS_ACCEPTED,
-            JudgeVerdict.STATUS_TIME_LIMIT_EXCEEDED,
-            JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED,
-            JudgeVerdict.STATUS_RUNTIME_ERROR,
-            JudgeVerdict.STATUS_SYSTEM_ERROR,
-            JudgeVerdict.STATUS_PARTIAL_ACCEPTED);
 
     @Autowired
     private ObjectMapper mapper;
@@ -78,7 +67,7 @@ public class JudgeListener {
      * @param channel 当前投递的 RabbitMQ 通道
      * @throws IOException 通道确认、拒绝或到期恢复失败
      */
-    @RabbitListener(queues = "${ymcloud.judge.task-queue:" + JudgeProtocol.TASK_QUEUE + "}",
+    @RabbitListener(queues = "${ymcloud.judge.task-queue:" + JudgeConstants.JUDGE_QUEUE + "}",
             containerFactory = "workerListenerFactory")
     public void listenJudge(Message message, Channel channel) throws IOException {
         long delivery = message.getMessageProperties().getDeliveryTag();
@@ -99,10 +88,9 @@ public class JudgeListener {
             return;
         }
         Timer.Sample sample = Timer.start(metrics);
-        log.info("Worker 接收评测任务 submission={} execution={} version={} strategy={} mode={} redelivered={}",
+        log.info("Worker 接收评测任务 submission={} execution={} strategy={} mode={} redelivered={}",
                 task.getSubmissionId(),
                 task.getExecutionId(),
-                task.getTestDataVersionId(),
                 task.getStrategy(),
                 task.getMode(), message.getMessageProperties().isRedelivered());
         metrics.timer("ymcloud.judge.queue.wait").record(Math.max(0, System.currentTimeMillis() - task.getSubmittedAtEpochMs()), TimeUnit.MILLISECONDS);
@@ -113,19 +101,17 @@ public class JudgeListener {
             }
             processClaim(task, store.claim(task), channel, delivery);
         } catch (IllegalArgumentException e) {
-            log.warn("拒绝内容无效或任务指纹不一致的消息 submission={} execution={} version={} exception={}",
+            log.warn("拒绝内容无效或任务指纹不一致的消息 submission={} execution={} exception={}",
                     task.getSubmissionId(),
                     task.getExecutionId(),
-                    task.getTestDataVersionId(),
                     e.getClass().getSimpleName());
             channel.basicReject(delivery, false);
         } catch (Exception e) {
             Thread.interrupted();
             metrics.counter("ymcloud.judge.message.failures").increment();
-            log.warn("Worker 消息处理待恢复 submission={} execution={} version={} exception={}",
+            log.warn("Worker 消息处理待恢复 submission={} execution={} exception={}",
                     task.getSubmissionId(),
                     task.getExecutionId(),
-                    task.getTestDataVersionId(),
                     e.getClass().getSimpleName());
             if (expired(task)) {
                 finishExpired(task, channel, delivery);
@@ -137,10 +123,9 @@ public class JudgeListener {
                 channel.basicAck(delivery, false);
             } catch (RuntimeException publishFailure) {
                 // 延时路由也不可用时交给死信和 Web outbox 恢复，不能立即重入相同故障。
-                log.warn("Worker 消息进入死信等待恢复 submission={} execution={} version={} exception={}",
+                log.warn("Worker 消息进入死信等待恢复 submission={} execution={} exception={}",
                         task.getSubmissionId(),
                         task.getExecutionId(),
-                        task.getTestDataVersionId(),
                         publishFailure.getClass().getSimpleName());
                 channel.basicReject(delivery, false);
             }
@@ -161,11 +146,10 @@ public class JudgeListener {
                               WorkerExecutionStore.Claim claim,
                               Channel channel,
                               long delivery) throws Exception {
-        if (claim.busy()) {
-            log.debug("Worker 重复任务等待执行租约 submission={} execution={} version={}",
+        if (claim.isBusy()) {
+            log.debug("Worker 重复任务等待执行租约 submission={} execution={}",
                     task.getSubmissionId(),
-                    task.getExecutionId(),
-                    task.getTestDataVersionId());
+                    task.getExecutionId());
             if (expired(task)) {
                 finishExpired(task, channel, delivery);
             } else {
@@ -174,15 +158,14 @@ public class JudgeListener {
             }
             return;
         }
-        if (claim.completed() != null) {
+        if (claim.getCompleted() != null) {
             metrics.counter("ymcloud.judge.task.duplicate").increment();
-            log.debug("Worker 重复任务复用已完成结果 submission={} execution={} version={}",
+            log.debug("Worker 重复任务复用已完成结果 submission={} execution={}",
                     task.getSubmissionId(),
-                    task.getExecutionId(),
-                    task.getTestDataVersionId());
-            JudgeResult completed = recovered(task, claim.completed());
-            if (completed != claim.completed()) {
-                journal.save(task.getExecutionId(), claim.digest(), completed);
+                    task.getExecutionId());
+            JudgeResult completed = recovered(task, claim.getCompleted());
+            if (completed != claim.getCompleted()) {
+                journal.save(task.getExecutionId(), claim.getDigest(), completed);
                 store.repairCompleted(task, completed);
             }
             publisher.publish(completed);
@@ -205,20 +188,18 @@ public class JudgeListener {
                               Channel channel,
                               long delivery) throws Exception {
         long started = System.nanoTime();
-        try (WorkerExecutionStore.Lease lease = claim.lease()) {
-            log.info("Worker 开始处理评测任务 submission={} execution={} version={} attempt={}",
+        try (WorkerExecutionStore.Lease lease = claim.getLease()) {
+            log.info("Worker 开始处理评测任务 submission={} execution={} attempt={}",
                     task.getSubmissionId(),
                     task.getExecutionId(),
-                    task.getTestDataVersionId(),
                     lease.attempt());
-            JudgeResult result = readJournal(task, claim.digest(), lease);
+            JudgeResult result = readJournal(task, claim.getDigest(), lease);
             if (result == null) {
                 try {
                     if (expired(task) || lease.attempt() > properties.getMaxAttempts()) {
-                        log.warn("Worker 任务达到执行边界 submission={} execution={} version={} attempt={}",
+                        log.warn("Worker 任务达到执行边界 submission={} execution={} attempt={}",
                                 task.getSubmissionId(),
                                 task.getExecutionId(),
-                                task.getTestDataVersionId(),
                                 lease.attempt());
                         result = runner.systemFailure(task, "评测任务超过截止时间或重试次数");
                     } else {
@@ -233,40 +214,37 @@ public class JudgeListener {
                     lease.requireOwned();
                     if (lease.attempt() < properties.getMaxAttempts() && !expired(task)) {
                         metrics.counter("ymcloud.judge.task.retry").increment();
-                        log.warn("Worker 执行失败，准备延时重试 submission={} execution={} version={} attempt={} exception={}",
+                        log.warn("Worker 执行失败，准备延时重试 submission={} execution={} attempt={} exception={}",
                                 task.getSubmissionId(),
                                 task.getExecutionId(),
-                                task.getTestDataVersionId(),
                                 lease.attempt(),
                                 e.getClass().getSimpleName());
                         publisher.retry(task);
                         channel.basicAck(delivery, false);
                         return;
                     }
-                    log.warn("Worker 执行失败，产生系统错误 submission={} execution={} version={} attempt={} exception={}",
-                            task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(),
+                    log.warn("Worker 执行失败，产生系统错误 submission={} execution={} attempt={} exception={}",
+                            task.getSubmissionId(), task.getExecutionId(),
                             lease.attempt(), e.getClass().getSimpleName());
                     result = runner.systemFailure(task, "评测系统异常，请联系管理员");
                 }
                 lease.requireOwned();
-                journal.save(task.getExecutionId(), claim.digest(), result);
+                journal.save(task.getExecutionId(), claim.getDigest(), result);
             }
             lease.requireOwned();
             publisher.publish(result);
             lease.complete(result);
-            if (result.getStatus() == JudgeVerdict.STATUS_SYSTEM_ERROR) {
+            if (result.getStatus() == JudgeStatus.STATUS_SYSTEM_ERROR) {
                 metrics.counter("ymcloud.judge.system.errors").increment();
-                log.warn("Worker 评测终态为系统错误 submission={} execution={} version={} attempt={}",
+                log.warn("Worker 评测终态为系统错误 submission={} execution={} attempt={}",
                         task.getSubmissionId(),
                         task.getExecutionId(),
-                        task.getTestDataVersionId(),
                         lease.attempt());
             }
             channel.basicAck(delivery, false);
-            log.info("Worker 评测任务处理完成 submission={} execution={} version={} attempt={} status={} elapsedMs={}",
+            log.info("Worker 评测任务处理完成 submission={} execution={} attempt={} status={} elapsedMs={}",
                     task.getSubmissionId(),
                     task.getExecutionId(),
-                    task.getTestDataVersionId(),
                     lease.attempt(),
                     result.getStatus(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
@@ -290,8 +268,8 @@ public class JudgeListener {
             result = journal.read(task.getExecutionId(), digest);
         } catch (IOException corruptedJournal) {
             // 损坏结果不会反复执行或永久重投，使用当前任务身份生成系统错误并重写。
-            log.warn("Worker 本地终态记录恢复失败 submission={} execution={} version={} exception={}",
-                    task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(),
+            log.warn("Worker 本地终态记录恢复失败 submission={} execution={} exception={}",
+                    task.getSubmissionId(), task.getExecutionId(),
                     corruptedJournal.getClass().getSimpleName());
             result = runner.systemFailure(task, "评测结果恢复失败，请联系管理员");
             lease.requireOwned();
@@ -301,8 +279,8 @@ public class JudgeListener {
         if (result == null) {
             return null;
         }
-        log.info("Worker 恢复本地终态记录 submission={} execution={} version={} attempt={}",
-                task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(), lease.attempt());
+        log.info("Worker 恢复本地终态记录 submission={} execution={} attempt={}",
+                task.getSubmissionId(), task.getExecutionId(), lease.attempt());
         JudgeResult validated = recovered(task, result);
         if (validated != result) {
             lease.requireOwned();
@@ -328,16 +306,15 @@ public class JudgeListener {
      * @throws IOException 通道确认或拒绝失败
      */
     private void finishExpired(JudgeTask task, Channel channel, long delivery) throws IOException {
-        log.warn("Worker 恢复过期任务终态 submission={} execution={} version={}",
-                task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId());
+        log.warn("Worker 恢复过期任务终态 submission={} execution={}",
+                task.getSubmissionId(), task.getExecutionId());
         JudgeResult result = null;
         try {
             result = journal.read(task.getExecutionId(), store.digest(task));
         } catch (Exception unavailableJournal) {
-            log.warn("过期执行无法恢复本地结果 submission={} execution={} version={} exception={}",
+            log.warn("过期执行无法恢复本地结果 submission={} execution={} exception={}",
                     task.getSubmissionId(),
                     task.getExecutionId(),
-                    task.getTestDataVersionId(),
                     unavailableJournal.getClass().getSimpleName());
         }
         if (result == null) {
@@ -348,10 +325,9 @@ public class JudgeListener {
                 try {
                     journal.save(task.getExecutionId(), store.digest(task), validated);
                 } catch (Exception unavailableJournal) {
-                    log.warn("过期执行无法修复本地结果 submission={} execution={} version={} exception={}",
+                    log.warn("过期执行无法修复本地结果 submission={} execution={} exception={}",
                             task.getSubmissionId(),
                             task.getExecutionId(),
-                            task.getTestDataVersionId(),
                             unavailableJournal.getClass().getSimpleName());
                 }
             }
@@ -360,17 +336,15 @@ public class JudgeListener {
         try {
             publisher.publish(result);
             channel.basicAck(delivery, false);
-            log.info("Worker 过期任务终态确认完成 submission={} execution={} version={} status={}",
+            log.info("Worker 过期任务终态确认完成 submission={} execution={} status={}",
                     task.getSubmissionId(),
                     task.getExecutionId(),
-                    task.getTestDataVersionId(),
                     result.getStatus());
         } catch (RuntimeException unavailableBroker) {
             // Web 持久化超时恢复负责最终收敛；已经过期的任务不再回流到重试队列。
-            log.warn("Worker 过期任务进入死信等待恢复 submission={} execution={} version={} exception={}",
+            log.warn("Worker 过期任务进入死信等待恢复 submission={} execution={} exception={}",
                     task.getSubmissionId(),
                     task.getExecutionId(),
-                    task.getTestDataVersionId(),
                     unavailableBroker.getClass().getSimpleName());
             channel.basicReject(delivery, false);
         }
@@ -384,18 +358,16 @@ public class JudgeListener {
      */
     private JudgeResult recovered(JudgeTask task, JudgeResult result) {
         boolean valid = result.isTerminal() && result.getSequence() == 3 && result.getStatus() != null
-                && TERMINAL.contains(result.getStatus())
+                && result.getStatus().isTerminal()
                 && Objects.equals(task.getExecutionId(), result.getExecutionId())
                 && Objects.equals(task.getSubmissionId(), result.getSubmissionId())
                 && Objects.equals(task.getProblemId(), result.getProblemId())
-                && Objects.equals(task.getTestDataVersionId(), result.getTestDataVersionId())
                 && Objects.equals(task.getStrategy(), result.getStrategy())
                 && validRecoveredPayload(result);
         if (!valid) {
-            log.warn("恢复结果身份或协议损坏 submission={} execution={} version={}",
+            log.warn("恢复结果身份或协议损坏 submission={} execution={}",
                     task.getSubmissionId(),
-                    task.getExecutionId(),
-                    task.getTestDataVersionId());
+                    task.getExecutionId());
             return runner.systemFailure(task, "评测结果恢复校验失败，请联系管理员");
         }
         return result;
@@ -412,7 +384,7 @@ public class JudgeListener {
                 || !validScore(result.getScore()) || length(result.getErrorMessage()) > 16384) {
             return false;
         }
-        List<TestCaseResult> cases = result.getTestCaseResults();
+        List<JudgeCaseResult> cases = result.getTestCaseResults();
         if (cases == null) {
             return true;
         }
@@ -422,10 +394,10 @@ public class JudgeListener {
         Set<Integer> indices = new HashSet<>();
         long previewCharacters = length(result.getErrorMessage());
         int outputLimit = result.getStrategy() == 1 ? 65536 : 4096;
-        for (TestCaseResult testCase : cases) {
+        for (JudgeCaseResult testCase : cases) {
             if (testCase == null || testCase.getCaseIndex() == null || testCase.getCaseIndex() <= 0
                     || !indices.add(testCase.getCaseIndex()) || testCase.getStatus() == null
-                    || !TERMINAL.contains(testCase.getStatus())
+                    || !testCase.getStatus().isTerminal()
                     || !nonNegative(testCase.getTime()) || !nonNegative(testCase.getMemory())
                     || !validScore(testCase.getScore())
                     || (testCase.getJudgeId() != null

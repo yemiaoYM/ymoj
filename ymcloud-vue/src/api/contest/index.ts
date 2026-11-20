@@ -324,7 +324,7 @@ export function reorderContestProblems(contestId: number, ids: number[]) {
  */
 export function uploadContestImage(file: Blob) {
   const data = new FormData();
-  data.append('file', file, 'contest.png');
+  data.append('file', file, file instanceof File ? file.name : 'contest.png');
   return request<ApiResult<string>>({
     url: '/admin/contest/image',
     method: 'POST',

@@ -39,8 +39,8 @@
             plain
             type="success"
             :icon="Edit"
-            :disabled="userIds.length !== 1"
-            @click="handleUpdate"
+            :disabled="single"
+            @click="handleUpdate()"
           >
             修改
           </el-button>
@@ -49,8 +49,8 @@
             plain
             type="danger"
             :icon="Delete"
-            :disabled="userIds.length === 0"
-            @click="handleDelete"
+            :disabled="multiple"
+            @click="handleDelete()"
           >
             删除
           </el-button>
@@ -142,9 +142,9 @@
     </x-flex>
 
     <!-- 添加或修改用户配置对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px" :close-on-click-modal="false" destroy-on-close
-      top="5vh" append-to-body :show-close="!submitLoading" :close-on-press-escape="!submitLoading">
-      <el-form :disabled="submitLoading" :model="userForm" :rules="userRules" ref="userFormRef" label-width="auto">
+    <el-dialog v-model="dialog.visible" :title="dialog.title" width="800px" :close-on-click-modal="false" destroy-on-close
+      top="5vh" append-to-body :show-close="!buttonLoading" :close-on-press-escape="!buttonLoading">
+      <el-form :disabled="buttonLoading" :model="userForm" :rules="userRules" ref="userFormRef" label-width="auto">
         <x-flex vertical :size="16">
           <x-flex :size="16">
             <el-form-item label="用户名" prop="username" style="flex: 1;">
@@ -206,12 +206,12 @@
 
       <template #footer>
         <x-flex justify="end" :size="12">
-          <el-button :disabled="submitLoading" @click="dialogVisible = false">取消</el-button>
+          <el-button :disabled="buttonLoading" @click="closeDialog">取消</el-button>
           <el-button
             v-permission="userForm.id === null ? ['user:user:add'] : ['user:user:edit']"
             type="primary"
             @click="handleSubmit"
-            :loading="submitLoading"
+            :loading="buttonLoading"
           >
             确定
           </el-button>
@@ -228,7 +228,7 @@
       destroy-on-close
       append-to-body
     >
-      <el-form v-loading="roleLoading" label-width="80px" :disabled="roleSaving || !roleLoaded">
+      <el-form v-loading="roleLoading" label-width="80px" :disabled="buttonLoading || !roleLoaded">
         <el-form-item label="用户角色">
           <el-select v-model="selectedRoleIds" multiple filterable clearable placeholder="请选择角色" style="width: 100%">
             <el-option
@@ -243,12 +243,12 @@
         <el-text type="info">角色权限将在用户下一次请求时生效。清空角色后，该用户将失去对应权限。</el-text>
       </el-form>
       <template #footer>
-        <el-button :disabled="roleSaving" @click="roleDialogVisible = false">取消</el-button>
+        <el-button :disabled="buttonLoading" @click="roleDialogVisible = false">取消</el-button>
         <el-button
           v-if="userStore.isSuperAdmin"
           v-permission="['user:user:role']"
           type="primary"
-          :loading="roleSaving"
+          :loading="buttonLoading"
           :disabled="!roleLoaded"
           @click="handleSaveRoles"
         >
@@ -261,12 +261,17 @@
 
 <script lang="ts" setup>
 //import
+import modal from '@/plugins/modal';
+import { useDialogState } from '@/hooks/dialog/useDialogState';
+import { useSearchReset } from '@/hooks/form/useSearchReset';
+import { useTableSelection } from '@/hooks/table/useTableSelection';
+import { useLoading } from '@/hooks/async/useLoading';
 import AsyncSwitch from '@/components/common/AsyncSwitch.vue';
 import { ref, reactive, onMounted, nextTick, defineAsyncComponent } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, Setting } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 import { getUserRoleOptions, getUserRoleIds, updateUserRoles } from '@/api/system/rbac';
 import type { RoleVO } from '@/types/system/rbac';
 import type { User, UserDTO } from '@/types/user';
@@ -286,20 +291,19 @@ const Avatar = defineAsyncComponent(() => import('@/components/common/Avatar.vue
 
 //data
 const userStore = useUserStore();
-const { beforeChange: resetPassword } = useAsyncChange();
+const { pending: buttonLoading, beforeChange: runAction } = useAsyncChange();
 const roleDialogVisible = ref(false);
 const roleLoading = ref(false);
 const roleLoaded = ref(false);
-const roleSaving = ref(false);
 const roleUser = ref<User | null>(null);
 const roleOptions = ref<RoleVO[]>([]);
 const selectedRoleIds = ref<number[]>([]);
 const queryFormRef = ref<FormInstance>();
 const userFormRef = ref<FormInstance>();
 const userList = ref<User[]>([] as User[]);
-const userIds = ref<number[]>([]);
+const { ids: userIds, single, multiple, handleSelectionChange } = useTableSelection((row: User) => row.id);
 const total = ref<number>(0);
-const loading = ref<boolean>(false);
+const { loading, withLoading } = useLoading();
 //查询参数
 const queryParams = ref({
   username: null,
@@ -310,9 +314,7 @@ const queryParams = ref({
 });
 
 //弹窗相关
-const dialogVisible = ref(false);
-const dialogTitle = ref('');
-const submitLoading = ref(false);
+const { dialog, openDialog, closeDialog } = useDialogState();
 //用户表单
 const userForm = reactive<UserDTO>({
   id: null,
@@ -356,7 +358,7 @@ const userRules = {
 
 //生命周期
 onMounted(() => {
-  handleQuery();
+  getList();
 });
 
 //methods
@@ -388,63 +390,48 @@ const handleAssignRoles = async (row: User) => {
 };
 
 //保存用户角色
-const handleSaveRoles = async () => {
-  if (!roleLoaded.value || !roleUser.value || roleSaving.value) {
+const handleSaveRoles = () => runAction(async () => {
+  if (!roleLoaded.value || !roleUser.value) {
     return;
   }
-  roleSaving.value = true;
-  try {
-    await updateUserRoles(roleUser.value.id, [...selectedRoleIds.value]);
-    ElMessage.success('分配角色成功');
-    roleDialogVisible.value = false;
-  } catch (e) {
-    console.error(e);
-  } finally {
-    roleSaving.value = false;
-  }
-};
+  await updateUserRoles(roleUser.value.id, [...selectedRoleIds.value]);
+  ElMessage.success('分配角色成功');
+  roleDialogVisible.value = false;
+});
 //查询用户列表
-const handleQuery = () => {
-  loading.value = true;
-  getUserTableList(queryParams.value).then(res => {
-    userList.value = res.data.data.records;
-    total.value = res.data.data.total;
-  }).finally(() => {
-    loading.value = false;
-  });
-};
+const getList = () => withLoading(async () => {
+  try {
+    const { data } = await getUserTableList(queryParams.value);
+    userList.value = data.data.records;
+    total.value = data.data.total;
+  } catch {
+    // 请求层已提示查询失败，保留当前列表
+    return;
+  }
+});
 //重置查询
-const resetQuery = () => {
-  queryParams.value = {
-    username: null,
-    email: null,
-    status: null,
-    pageNo: 1,
-    pageSize: 15,
-  };
-  handleQuery();
+const handleQuery = () => {
+  queryParams.value.pageNo = 1;
+  return getList();
 };
+
+const { resetQuery } = useSearchReset(queryFormRef, queryParams, 15, getList);
 //改变页大小
 const handleSizeChange = (val: number) => {
   queryParams.value.pageSize = val;
-  handleQuery();
+  getList();
 };
 //改变当前页
 const handleCurrentChange = (val: number) => {
   queryParams.value.pageNo = val;
-  handleQuery();
-};
-//选择用户
-const handleSelectionChange = (selection: User[]) => {
-  userIds.value = selection.map(item => item.id);
+  getList();
 };
 //修改用户状态
 const handleStatusChange = async (row: User) => {
   const nextStatus = row.status === '正常' ? '停用' : '正常';
-  await ElMessageBox.confirm(
+  await modal.confirm(
     `确定要将用户 "${row.username}" 的状态改为 "${nextStatus}" 吗？`,
     '状态修改确认',
-    { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
   );
   const response = await changeUserStatus(row.id, nextStatus);
   ElMessage.success(response.data.msg);
@@ -452,13 +439,12 @@ const handleStatusChange = async (row: User) => {
 //新增用户
 const handleAdd = () => {
   reset();
-  dialogTitle.value = '新增用户';
-  dialogVisible.value = true;
+  openDialog('新增用户');
   userForm.password = '12345';
 };
 //编辑用户
-const handleUpdate = (row: User) => {
-  const id = row.id || userIds.value[0];
+const handleUpdate = (row?: User) => {
+  const id = row?.id ?? userIds.value[0];
   if (!id) {
     ElMessage.warning('请选择要编辑的用户');
     return;
@@ -466,15 +452,14 @@ const handleUpdate = (row: User) => {
   reset();
   getUserById(id).then(res => {
     copyProperties(userForm, res.data.data);
-    dialogTitle.value = '编辑用户';
-    dialogVisible.value = true;
+    openDialog('编辑用户');
   }).catch(e => {
     console.log(e);
   });
 };
 //重置密码
 const handleResetPwd = async (row: User) => {
-  await resetPassword(async () => {
+  await runAction(async () => {
     const { value } = await ElMessageBox.prompt(
       `请输入 "${row.username}" 的新密码`,
       "提示",
@@ -497,29 +482,14 @@ const handleResetPwd = async (row: User) => {
   });
 }
 //删除用户
-const handleDelete = (row: User) => {
-  const ids = row.id || userIds.value;
-  if (!ids) {
-    ElMessage.warning('请选择要删除的用户');
-    return;
-  }
-  ElMessageBox.confirm(
-    `是否确认删除用户编号为 "${ids}" 的数据项吗？`,
-    '删除确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(() => {
-    deleteUserByIds(ids).then(res => {
-      ElMessage.success(res.data.msg);
-      handleQuery();
-    }).catch(e => {
-      console.log(e);
-    });
-  }).catch(() => { });
-};
+const handleDelete = (row?: User) => runAction(async () => {
+  const ids = row ? [row.id] : userIds.value;
+  if (!ids.length) return false;
+  await modal.confirm(`是否确认删除用户编号为 "${ids.join(', ')}" 的数据项？`, '删除确认');
+  const response = await deleteUserByIds(ids);
+  ElMessage.success(response.data.msg);
+  await getList();
+});
 //重置表单
 const reset = () => {
   Object.assign(userForm, {
@@ -542,25 +512,17 @@ const reset = () => {
   });
 };
 //提交表单
-const handleSubmit = async () => {
-  if (submitLoading.value || !userFormRef.value) return;
-  submitLoading.value = true;
-  try {
-    let valid = false;
-    await userFormRef.value.validate(passed => { valid = passed; });
-    if (!valid) return;
-    const data = { ...userForm };
-    const response = data.id === null ? await addUser(data) : await updateUser(data);
-    ElMessage.success(response.data.msg);
-    dialogVisible.value = false;
-    handleQuery();
-  } catch {
-    //request 已提示失败，保留弹窗及用户输入以便重试
-    return;
-  } finally {
-    submitLoading.value = false;
-  }
-};
+const handleSubmit = () => runAction(async () => {
+  if (!userFormRef.value) return;
+  let valid = false;
+  await userFormRef.value.validate(passed => { valid = passed; });
+  if (!valid) return;
+  const data = { ...userForm };
+  const response = data.id === null ? await addUser(data) : await updateUser(data);
+  ElMessage.success(response.data.msg);
+  closeDialog();
+  getList();
+});
 </script>
 
 <style scoped lang="css">

@@ -1,6 +1,8 @@
 package com.ymcloud.pojo.dto.admin;
 
-import com.ymcloud.pojo.enums.StorageDriverType;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -13,63 +15,67 @@ import lombok.Setter;
 @Setter
 public class StorageConfigDTO {
 
-    /**
-     * 存储配置唯一标识，编辑时不可修改
-     */
-    private String key;
+    /** 修改配置或切换默认时使用的主键 */
+    private Long id;
 
     /**
-     * 管理端展示名称
+     * 存储配置唯一标识
      */
-    private String name;
+    @NotBlank(message = "请输入配置标识")
+    @Size(max = 64)
+    private String configKey;
 
     /**
-     * 服务商描述，不参与驱动选择
+     * 对象存储访问端点
      */
-    private String provider;
-
-    /**
-     * 显式指定的访问协议
-     */
-    private StorageDriverType driverType;
-
-    /**
-     * 对象存储访问端点，本地驱动不使用
-     */
+    @NotBlank(message = "请输入存储端点")
+    @Size(max = 512)
     private String endpoint;
+
+    /** 是否使用 HTTPS，Y 为启用 */
+    @NotBlank(message = "请选择存储协议")
+    @Pattern(regexp = "[YN]", message = "存储协议标记错误")
+    private String isHttps;
 
     /**
      * 签名所用地域标识
      */
+    @Size(max = 64)
     private String region;
 
-    /**
-     * 公开业务文件所在桶，桶自身保持私有
-     */
-    private String publicBucket;
+    /** 对象存储目录前缀 */
+    @Size(max = 255)
+    private String prefix;
 
-    /**
-     * 私有业务文件所在桶
-     */
-    private String privateBucket;
+    /** 自定义访问域名 */
+    @Size(max = 255)
+    private String domain;
 
-    /**
-     * S3 是否使用路径式桶寻址
-     */
-    private Boolean pathStyle;
+    /** 桶策略，0 private、1 public、2 custom */
+    @NotBlank(message = "请输入桶策略")
+    @Pattern(regexp = "[012]", message = "桶策略编码错误")
+    private String accessPolicy = "0";
+
+    /** 对象存储桶 */
+    @NotBlank(message = "请输入存储桶")
+    @Size(max = 128)
+    private String bucketName;
 
     /**
      * 新访问标识，编辑时空白表示保留原值
      */
+    @Size(max = 255)
     private String accessKey;
 
     /**
      * 新访问密钥，编辑时空白表示保留原值
      */
+    @Size(max = 255)
     private String secretKey;
 
     /**
      * 管理备注，可为空
      */
+    @Size(max = 500)
     private String remark;
 }

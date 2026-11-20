@@ -13,7 +13,7 @@
                 drag
                 :aspect-ratio="[1, 1]"
                 :output-width="300"
-                :max-size-mb="2"
+                :max-size-mb="1"
                 :disabled="loadingAvatar"
                 @cropped="handleUploadAvatar"
             >
@@ -74,7 +74,7 @@
 import { onMounted, ref, defineAsyncComponent } from 'vue';
 import { useUserStore } from '@/stores/user';
 import { updateUserProfile, uploadAvatar } from '@/api/user';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 import { ElMessage } from 'element-plus';
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 
@@ -113,8 +113,8 @@ onMounted(()=>{
 })
 
 /**
- * 确认裁剪后上传头像，成功后刷新用户资料
- * @param file 正方形裁剪后的 PNG 图片
+ * 上传所选头像，成功后刷新用户资料
+ * @param file 头像原图或裁剪结果
  */
 const handleUploadAvatar = async (file: Blob) => {
     await saveAvatar(async () => {

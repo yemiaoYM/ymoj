@@ -1,8 +1,6 @@
 package com.ymcloud.pojo.entity;
 
-import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 
@@ -27,7 +25,6 @@ public class Contest {
     private String creatorUsername;
 
     /** 比赛Logo图片路径 */
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String image;
 
     /** 比赛标题 */
@@ -56,7 +53,6 @@ public class Contest {
     /**
      * 比赛密码（密码模式时使用）
      */
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String password;
 
     /** 比赛开始时间 */

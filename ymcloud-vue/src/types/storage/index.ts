@@ -1,25 +1,27 @@
+import type { FileBizTypeCode } from '@/constants/file';
+
 /**
  * 后台文件信息
  */
 export type StorageFileVO = {
   /**
-   * 对外 UUIDv4 文件标识
+   * 文件主键，超出安全整数范围时由后端序列化为字符串
    */
-  id: string;
+  id: string | number;
   fileName: string;
+  originalName: string;
+  fileSuffix: string;
   fileType: string | null;
   fileSize: number | null;
-  bizType: number | null;
-  bizId: number | null;
-  isPublic: number | null;
-  storageKey: string;
-  uploaderUsername: string | null;
+  bizType: FileBizTypeCode;
+  bizId: string | number | null;
+  service: string;
+  createdBy: string | number | null;
   /**
    * 格式：yyyy-MM-dd HH:mm:ss
    */
   createdTime: string | null;
   url: string | null;
-  sha256: string | null;
   canDownload: boolean;
   canDelete: boolean;
 };
@@ -34,8 +36,7 @@ export type FilePageQuery = {
   pageNum: number;
   pageSize: number;
   fileName?: string | null;
-  isPublic?: number | null;
-  bizType?: number | null;
+  bizType?: FileBizTypeCode | null;
   storageKey?: string | null;
 };
 
@@ -43,21 +44,18 @@ export type FilePageQuery = {
  * 保存存储配置参数
  */
 export type StorageConfigDTO = {
+  id?: string;
   /**
    * 存储配置唯一标识
    */
-  key: string;
-  name: string;
-  provider: string | null;
-  /**
-   * 显式存储访问协议，不由服务商推导
-   */
-  driverType: StorageDriverType;
+  configKey: string;
   endpoint: string;
+  isHttps: 'Y' | 'N';
   region: string;
-  publicBucket: string;
-  privateBucket: string;
-  pathStyle: boolean;
+  bucketName: string;
+  prefix: string | null;
+  domain: string | null;
+  accessPolicy: '0' | '1' | '2';
   accessKey?: string | null;
   secretKey?: string | null;
   remark?: string | null;
@@ -67,30 +65,21 @@ export type StorageConfigDTO = {
  * 存储配置，不包含访问凭据
  */
 export type StorageConfigVO = {
+  id: string;
   /**
    * 存储配置唯一标识
    */
-  key: string;
-  name: string;
-  provider: string | null;
-  /**
-   * 显式存储访问协议，不由服务商推导
-   */
-  driverType: StorageDriverType;
+  configKey: string;
   endpoint: string;
+  isHttps: 'Y' | 'N';
   region: string;
-  publicBucket: string;
-  privateBucket: string;
-  pathStyle: boolean;
+  bucketName: string;
+  prefix: string | null;
+  domain: string | null;
+  accessPolicy: '0' | '1' | '2';
   remark: string | null;
-  active: boolean;
-  source: 'config' | 'database';
+  status: 'Y' | 'N';
   referenced: boolean;
   credentialConfigured: boolean;
   canDelete: boolean;
 };
-
-/**
- * 已实现的存储访问协议
- */
-export type StorageDriverType = 'LOCAL' | 'S3' | 'ALIYUN_OSS';

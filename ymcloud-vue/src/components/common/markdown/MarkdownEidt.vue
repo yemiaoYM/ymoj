@@ -68,7 +68,7 @@
                   :disabled="disabled || uploading"
                   :aspect-ratio="null"
                   :output-width="1920"
-                  @cropped="onPreviewImage"
+                  @cropped="onCroppedImage"
                 >
                   <span role="menuitem">上传图片</span>
                 </ImageCropUpload>
@@ -99,7 +99,7 @@ import {
 } from '@lucide/vue';
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 import MarkdownToolbarMenu from '@/components/common/markdown/MarkdownToolbarMenu.vue';
-import { createMarkdownSanitizer } from '@/utils/markdown';
+import { useFileImages } from '@/hooks/useFileImages';
 import { uploadMarkdownImage } from '@/api/storage';
 import { ElMessage } from 'element-plus';
 import 'md-editor-v3/lib/style.css';
@@ -115,6 +115,8 @@ export default defineComponent({
     MarkdownToolbarMenu
   },
   props: {
+    imagePurpose: { type: String, default: 'signature' },
+    bizId: Number,
     content: {
       type: String,
       default: "写点什么呢？"
@@ -124,7 +126,7 @@ export default defineComponent({
       default: false
     }
   },
-  emits: ["update:content"],
+  emits: ["update:content", "image-uploaded"],
   setup(props, { emit }) {
     const theme = useThemeStore();
     //配置
@@ -201,7 +203,11 @@ export default defineComponent({
     const imageMenuVisible = ref(false);
     const uploading = ref(false);
     const localImages = new Map();
-    const sanitizeMarkdown = createMarkdownSanitizer(url => localImages.has(url));
+    const { sanitizeMarkdown } = useFileImages({
+      publicImages: () => props.imagePurpose === 'signature',
+      sources: () => props.content.match(/\/api\/files\/[1-9]\d*/g) || [],
+      localImage: url => localImages.has(url),
+    });
 
     const onMark = () => {
       editorRef.value.insert((selected) => ({
@@ -226,7 +232,7 @@ export default defineComponent({
 
     const onUploadImg = (files) => {
       if (files.length !== 1) {
-        ElMessage.warning('请一次选择一张图片进行裁剪');
+        ElMessage.warning('请一次选择一张图片');
         return;
       }
       cropUploadRef.value.open(files[0]);
@@ -240,17 +246,41 @@ export default defineComponent({
       }
     };
 
-    const onPreviewImage = (blob) => {
+    const onCroppedImage = async (blob) => {
+      if (props.imagePurpose !== 'signature') {
+        uploading.value = true;
+        try {
+          const { data } = await uploadMarkdownImage(blob, props.imagePurpose, props.bizId);
+          if (!editorRef.value) return;
+          const id = data.data;
+          editorRef.value.insert(() => ({ targetValue: '![](/api/files/' + id + ')\n', select: false }));
+          if (!props.bizId) emit('image-uploaded', id);
+        } finally {
+          uploading.value = false;
+        }
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       localImages.set(url, { blob, uploadedUrl: '' });
       editorRef.value.insert(() => ({ targetValue: `![](${url})\n`, select: false }));
     };
 
-    // 保存方先完成表单校验；失败向保存边界传播，已上传图片在重试或撤销后复用
-    const uploadImages = async () => {
-      if (uploading.value || !editorRef.value) {
+    const canSaveContent = () => {
+      if (uploading.value) {
+        ElMessage.info('请等待正文图片上传完成');
         return false;
       }
+      if (/blob:(?:https?:\/\/|null\/)/.test(modelValue.value)) {
+        ElMessage.warning('本地图片已失效，请删除后重新选择图片');
+        return false;
+      }
+      return !!editorRef.value;
+    };
+
+    // 签名图片保留本地预览，保存个人资料时统一上传
+    const uploadImages = async () => {
+      if (uploading.value || !editorRef.value) return false;
       const urls = modelValue.value.match(/blob:(?:https?:\/\/|null\/)[^\s)"'<>]+/g) || [];
       if (urls.some(url => !localImages.has(url))) {
         ElMessage.warning('本地图片已失效，请删除后重新选择图片');
@@ -261,8 +291,8 @@ export default defineComponent({
         for (const url of new Set(urls)) {
           const image = localImages.get(url);
           if (!image.uploadedUrl) {
-            const response = await uploadMarkdownImage(image.blob);
-            image.uploadedUrl = response.data.data;
+            const response = await uploadMarkdownImage(image.blob, 'signature');
+            image.uploadedUrl = `/api/files/${response.data.data}`;
           }
           if (!editorRef.value) {
             return false;
@@ -323,7 +353,8 @@ export default defineComponent({
       onView,
       onUploadImg,
       onDropImage,
-      onPreviewImage,
+      onCroppedImage,
+      canSaveContent,
       uploadImages
     }
   }

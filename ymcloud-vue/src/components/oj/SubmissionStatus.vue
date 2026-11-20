@@ -66,7 +66,7 @@ import { computed, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Edit, Refresh } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 import { rejudgeSubmission, updateSubmissionStatus } from '@/api/submission';
 import type { SubmissionTableVO } from '@/types/submission';
 import { getStatusType } from '@/utils/utils';

@@ -16,12 +16,23 @@ public class StorageConfigEntityServiceImpl extends ServiceImpl<StorageConfigMap
         implements StorageConfigEntityService {
 
     /**
-     * 在业务事务内锁定存储配置，协调文件上传、清理与配置变更
-     * @param key 存储配置名
+     * 读取并锁定当前默认配置，保证上传登记期间存储位置稳定
      * @return 已锁定的配置记录，不存在时为 null
      */
     @Override
-    public StorageConfig getByIdForShare(String key) {
-        return baseMapper.getByIdForShare(key);
+    public StorageConfig getDefaultForShare() {
+        return baseMapper.getDefaultForShare();
+    }
+
+    /**
+     * 根据配置标识查找已有文件的存储位置
+     * @param key 文件所属的存储配置标识
+     * @return 配置记录，已删除时为空
+     */
+    @Override
+    public StorageConfig getByConfigKey(String key) {
+        return lambdaQuery()
+                .eq(StorageConfig::getConfigKey, key)
+                .one();
     }
 }

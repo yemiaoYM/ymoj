@@ -1,7 +1,7 @@
 package com.ymcloud.judge.gojudge;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -127,8 +127,8 @@ public class GoJudgeTaskSession implements AutoCloseable {
         } catch (GoJudgeFileMissingException absent) {
             fileIds.remove(fileId);
         } catch (IOException e) {
-            log.warn("清理判题缓存文件失败 execution={} version={} cause={}",
-                    task.getExecutionId(), task.getTestDataVersionId(), e.getClass().getSimpleName());
+            log.warn("清理判题缓存文件失败 execution={} cause={}",
+                    task.getExecutionId(), e.getClass().getSimpleName());
         } finally {
             if (interrupted) {
                 Thread.currentThread().interrupt();
@@ -149,8 +149,8 @@ public class GoJudgeTaskSession implements AutoCloseable {
             long deadline = System.currentTimeMillis() + CLEANUP_TIMEOUT_MILLIS;
             for (String fileId : Set.copyOf(fileIds)) {
                 if (System.currentTimeMillis() >= deadline) {
-                    log.warn("判题缓存清理达到截止边界 execution={} version={} remaining={}",
-                            task.getExecutionId(), task.getTestDataVersionId(), fileIds.size());
+                    log.warn("判题缓存清理达到截止边界 execution={} remaining={}",
+                            task.getExecutionId(), fileIds.size());
                     break;
                 }
                 release(fileId, deadline);

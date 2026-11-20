@@ -1,5 +1,7 @@
 package com.ymcloud.web.remote;
 
+import lombok.ToString;
+import lombok.Value;
 import org.commonmark.node.AbstractVisitor;
 import org.commonmark.node.HtmlBlock;
 import org.commonmark.node.HtmlInline;
@@ -81,7 +83,7 @@ public final class ProblemImageReferences {
                 htmlImages(markdown, node, images);
             }
         });
-        images.sort(Comparator.comparingInt(Reference::start));
+        images.sort(Comparator.comparingInt(Reference::getStart));
         return images;
     }
 
@@ -119,33 +121,64 @@ public final class ProblemImageReferences {
         for (int index = images.size() - 1; index >= 0; index--) {
             Reference image = images.get(index);
             if (image.formula() != null) {
-                result.replace(image.start(), image.end(), "$" + image.formula() + "$");
+                result.replace(image.getStart(), image.getEnd(), "$" + image.formula() + "$");
                 continue;
             }
-            String url = urls.get(image.url());
-            Element tag = new Element("img").attr("src", url).attr("alt", image.alt());
-            if (image.title() != null && !image.title().isEmpty()) {
-                tag.attr("title", image.title());
+            String url = urls.get(image.getUrl());
+            Element tag = new Element("img").attr("src", url).attr("alt", image.getAlt());
+            if (image.getTitle() != null && !image.getTitle().isEmpty()) {
+                tag.attr("title", image.getTitle());
             }
             String replacement = tag.outerHtml();
-            if (!image.html()) {
-                String alt = image.alt().replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+            if (!image.isHtml()) {
+                String alt = image.getAlt().replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
                         .replace("\n", " ");
-                String title = image.title() == null || image.title().isEmpty() ? "" : " \"" + image.title()
+                String title = image.getTitle() == null || image.getTitle().isEmpty() ? "" : " \"" + image.getTitle()
                         .replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ") + "\"";
                 replacement = "![" + alt + "](" + url + title + ")";
             }
-            result.replace(image.start(), image.end(), replacement);
+            result.replace(image.getStart(), image.getEnd(), replacement);
         }
         return result.toString();
     }
 
     /**
-     * @Author: Yemiao
-     * @CreateTime: 2026-10-29
-     * @Description: 单张图片在原始题面中的位置及展示属性
+     * 题面单张图片的源码区间和展示属性
      */
-    public record Reference(int start, int end, String url, String alt, String title, boolean html) {
+    @Value
+    public static class Reference {
+
+        /**
+         * 源码起始偏移，包含该位置
+         */
+        int start;
+
+        /**
+         * 源码结束偏移，不包含该位置
+         */
+        int end;
+
+        /**
+         * 原图片地址
+         */
+        @ToString.Exclude
+        String url;
+
+        /**
+         * 图片替代文字
+         */
+        String alt;
+
+        /**
+         * 图片标题
+         */
+        String title;
+
+        /**
+         * 原节点是否为 HTML 图片
+         */
+        boolean html;
+
         /**
          * 识别已知平台公式图片，普通插图交由下载存储。
          * @return LaTeX 原文；普通插图返回 null

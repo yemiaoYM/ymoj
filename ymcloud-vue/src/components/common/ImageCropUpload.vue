@@ -56,6 +56,7 @@
         </el-text>
         <x-flex :wrap="false" :size="12" class="crop-actions">
           <el-button :disabled="exporting" @click="onClose">取消</el-button>
+          <el-button :disabled="!original || disabled || exporting" @click="useOriginal">使用原图</el-button>
           <el-button
             type="primary"
             :icon="Check"
@@ -77,7 +78,7 @@ import type { UploadFile, UploadInstance } from 'element-plus';
 import Cropper from 'cropperjs';
 import 'cropperjs/dist/cropper.css';
 
-// 只处理本地选图和裁剪，emit PNG Blob；调用方负责上传、重试和业务保存。
+// 调用方上传所选原图或用户确认的裁剪结果
 const props = withDefaults(defineProps<{
   disabled?: boolean;
   drag?: boolean;
@@ -89,9 +90,9 @@ const props = withDefaults(defineProps<{
   drag: false,
   aspectRatio: () => [16, 9],
   outputWidth: 1600,
-  maxSizeMb: 5,
+  maxSizeMb: 3,
 });
-const emit = defineEmits<{ cropped: [file: Blob] }>();
+const emit = defineEmits<{ cropped: [file: File] }>();
 const uploadRef = ref<UploadInstance>();
 const imageRef = ref<HTMLImageElement>();
 const previewRef = ref<HTMLDivElement>();
@@ -100,6 +101,7 @@ const reading = ref(false);
 const ready = ref(false);
 const exporting = ref(false);
 const imageUrl = ref('');
+const original = ref<File>();
 const ratio = computed(() => props.aspectRatio ? props.aspectRatio[0] / props.aspectRatio[1] : undefined);
 let cropper: Cropper | null = null;
 let generation = 0;
@@ -136,20 +138,12 @@ async function open(raw: File) {
   reading.value = true;
   try {
     const bitmap = await createImageBitmap(raw);
-    const pixels = bitmap.width * bitmap.height;
     bitmap.close();
     if (current !== generation) {
       return;
     }
-    if (pixels > 32_000_000) {
-      ElNotification({
-        title: '图片分辨率过大',
-        message: `${raw.name} 超出分辨率限制，请选择不超过 3200 万像素的图片。`,
-        type: 'warning',
-      });
-      return;
-    }
     handleRelease();
+    original.value = raw;
     imageUrl.value = URL.createObjectURL(raw);
     visible.value = true;
   } catch {
@@ -228,14 +222,26 @@ function handleRelease() {
   cropper?.destroy();
   cropper = null;
   ready.value = false;
+  original.value = undefined;
   if (imageUrl.value) {
     URL.revokeObjectURL(imageUrl.value);
     imageUrl.value = '';
   }
 }
 
+/**
+ * 使用用户选择的原始文件上传
+ */
+function useOriginal() {
+  if (original.value) {
+    emit('cropped', original.value);
+    visible.value = false;
+  }
+}
+
 function onConfirm() {
-  if (!cropper || !ready.value || exporting.value || props.disabled) {
+  const source = original.value;
+  if (!source || !cropper || !ready.value || exporting.value || props.disabled) {
     return;
   }
   exporting.value = true;
@@ -255,7 +261,15 @@ function onConfirm() {
       }
       exporting.value = false;
       cropper?.enable();
-      if (!blob || blob.size > props.maxSizeMb * 1024 * 1024) {
+      if (!blob || blob.type !== source.type) {
+        ElNotification({
+          title: '裁剪导出失败',
+          message: '无法按原格式导出，请使用原图或更换图片。',
+          type: 'error',
+        });
+        return;
+      }
+      if (blob.size > props.maxSizeMb * 1024 * 1024) {
         ElNotification({
           title: '裁剪结果无法使用',
           message: `请缩小裁剪范围或更换图片，导出文件不能超过 ${props.maxSizeMb} MB。`,
@@ -263,9 +277,9 @@ function onConfirm() {
         });
         return;
       }
-      emit('cropped', blob);
+      emit('cropped', new File([blob], source.name, { type: blob.type }));
       visible.value = false;
-    }, 'image/png');
+    }, source.type);
   } catch {
     exporting.value = false;
     cropper.enable();

@@ -1,22 +1,25 @@
 package com.ymcloud.web.controller.admin.announcement;
 
 import com.ymcloud.common.result.Result;
+import com.ymcloud.core.security.utils.SecurityUtils;
+import com.ymcloud.pojo.bo.ImageUploadBO;
 import com.ymcloud.pojo.dto.admin.AnnouncementDTO;
 import com.ymcloud.pojo.entity.Announcement;
+import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.query.admin.AdminAnnouncementPageQuery;
 import com.ymcloud.pojo.vo.common.PageVO;
 import com.ymcloud.web.service.admin.AdminAnnouncementService;
+import com.ymcloud.web.service.file.ImageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.web.controller.admin.announcement
- * @ClassName: AdminAnnouncementController
  * @Author: Yemiao
  * @CreateTime: 2025-09-27  17:05
  * @Description: 公告管理
@@ -28,6 +31,28 @@ public class AdminAnnouncementController {
 
     @Autowired
     private AdminAnnouncementService adminAnnouncementService;
+
+    @Autowired
+    private ImageService imageService;
+
+    /**
+     * 上传公告正文草稿图片
+     * @param file 待校验的原始图片
+     * @param announcementId 已有业务主键，新建时为空
+     * @return 十进制文件主键
+     */
+    @PreAuthorize("@ss.hasAnyPermi('announcement:announcement:add', 'announcement:announcement:edit')")
+    @PostMapping("/image")
+    public Result<Long> uploadAnnouncementImage(@RequestParam("file") MultipartFile file,
+                                                  @RequestParam(value = "announcementId", required = false) Long announcementId) {
+        ImageUploadBO bo = ImageUploadBO.builder()
+                .bizType(FileBizType.ANNOUNCEMENT)
+                .bizId(announcementId)
+                .uploaderId(SecurityUtils.getUserId())
+                .build();
+        Long fileId = imageService.upload(file, bo);
+        return Result.ok(fileId);
+    }
 
     /**
      * 查询公告列表

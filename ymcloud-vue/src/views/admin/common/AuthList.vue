@@ -26,7 +26,7 @@
           >
             新增
           </el-button>
-          <el-button :icon="Refresh" @click="loadAuths">刷新</el-button>
+          <el-button :icon="Refresh" @click="getList">刷新</el-button>
         </x-flex>
         <el-alert
           v-if="!isSuperAdmin"
@@ -102,7 +102,7 @@
       destroy-on-close
       append-to-body
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" :disabled="saving">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" :disabled="buttonLoading">
         <el-form-item label="权限类型" prop="type">
           <el-radio-group v-model="form.type" :disabled="!!editingAuth" @change="handleTypeChange">
             <el-radio value="M">目录</el-radio>
@@ -179,8 +179,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button :disabled="saving" @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSubmit">确定</el-button>
+        <el-button :disabled="buttonLoading" @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="buttonLoading" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
   </div>
@@ -188,8 +188,11 @@
 
 <script setup lang="ts">
 //import
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
+import { useLoading } from '@/hooks/async/useLoading';
+import modal from '@/plugins/modal';
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
+import { ElMessage, type FormInstance } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue';
 import { useUserStore } from '@/stores/user';
 import { getAuthList, addAuth, updateAuth, deleteAuth } from '@/api/system/rbac';
@@ -200,12 +203,12 @@ import { buildAuthTree } from '@/utils/rbac';
 const userStore = useUserStore();
 const isSuperAdmin = computed(() => userStore.isSuperAdmin);
 const authList = ref<AuthVO[]>([]);
-const loading = ref(false);
+const { loading, withLoading } = useLoading();
 const keyword = ref('');
 const searchKeyword = ref('');
 const typeNames = { M: '目录', C: '页面', F: '操作' };
 const dialogVisible = ref(false);
-const saving = ref(false);
+const { pending: buttonLoading, beforeChange: runAction } = useAsyncChange();
 const formRef = ref<FormInstance>();
 const editingAuth = ref<AuthVO | null>(null);
 const emptyForm = (): AuthDTO => ({
@@ -260,23 +263,21 @@ const handleTypeChange = () => {
 };
 
 //查询菜单权限
-const loadAuths = async () => {
-  loading.value = true;
+const getList = () => withLoading(async () => {
   try {
     const res = await getAuthList();
     authList.value = res.data.data;
-  } catch (e) {
-    console.error(e);
-  } finally {
-    loading.value = false;
+  } catch {
+    // 请求层已提示查询失败，保留当前列表
+    return;
   }
-};
+});
 
 //重置查询条件
 const resetQuery = () => {
   keyword.value = '';
   searchKeyword.value = '';
-  loadAuths();
+  getList();
 };
 
 //新增菜单权限
@@ -308,46 +309,30 @@ const handleUpdate = (row: AuthVO) => {
 };
 
 //提交菜单权限表单
-const handleSubmit = async () => {
-  if (saving.value) {
+const handleSubmit = () => runAction(async () => {
+  if (!(await formRef.value?.validate())) {
     return;
   }
-  try {
-    if (!(await formRef.value?.validate())) {
-      return;
-    }
-    saving.value = true;
-    if (editingAuth.value) {
-      await updateAuth(editingAuth.value.id, form.value);
-    } else {
-      await addAuth(form.value);
-    }
-    ElMessage.success('保存成功');
-    dialogVisible.value = false;
-    await loadAuths();
-  } catch (e) {
-    console.error(e);
-  } finally {
-    saving.value = false;
+  if (editingAuth.value) {
+    await updateAuth(editingAuth.value.id, form.value);
+  } else {
+    await addAuth(form.value);
   }
-};
+  ElMessage.success('保存成功');
+  dialogVisible.value = false;
+  await getList();
+});
 
 //删除菜单权限
-const handleDelete = async (row: AuthVO) => {
-  try {
-    await ElMessageBox.confirm(`是否确认删除菜单权限“${row.name}”？`, '删除确认', { type: 'warning' });
-    await deleteAuth(row.id);
-    ElMessage.success('删除成功');
-    await loadAuths();
-  } catch (e) {
-    if (e !== 'cancel' && e !== 'close') {
-      console.error(e);
-    }
-  }
-};
+const handleDelete = (row: AuthVO) => runAction(async () => {
+  await modal.confirm(`是否确认删除菜单权限“${row.name}”？`, '删除确认');
+  await deleteAuth(row.id);
+  ElMessage.success('删除成功');
+  await getList();
+});
 //生命周期
 onMounted(() => {
-  loadAuths();
+  getList();
 });
 </script>
 

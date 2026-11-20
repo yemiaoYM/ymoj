@@ -3,8 +3,6 @@ import type { ApiResult } from '@/types';
 import type {
   SystemSettingVO,
   SystemSettingDTO,
-  CarouselSetting,
-  CarouselImage,
   DashboardStatsVO,
   SubmissionChartVO,
   Server,
@@ -51,39 +49,31 @@ export function updateSystemSetting(data: SystemSettingDTO) {
  * @returns 包含公开轮播配置的完整响应
  */
 export function getPublicCarousel() {
-  return request<ApiResult<CarouselSetting>>({ url: '/public/carousel' });
-}
-
-/**
- * 获取后台轮播配置
- * @returns 包含后台轮播配置的完整响应
- */
-export function getAdminCarousel() {
-  return request<ApiResult<CarouselSetting>>({ url: '/admin/system-setting/carousel' });
+  return request<ApiResult<string[]>>({ url: '/public/carousel' });
 }
 
 /**
  * 保存轮播图片顺序
- * @param fileIds 轮播图片 ID 列表
+ * @param imgApiUrl 有序的轮播图片访问地址
  * @returns 操作结果，不包含业务数据
  */
-export function saveCarousel(fileIds: string[]) {
+export function saveCarousel(imgApiUrl: string[]) {
   return request<ApiResult<void>>({
     url: '/admin/system-setting/carousel',
     method: 'PUT',
-    data: { fileIds },
+    data: { imgApiUrl },
   });
 }
 
 /**
  * 上传轮播图片
  * @param file 上传文件
- * @returns 包含轮播图片 ID 和公开地址的完整响应
+ * @returns 包含已保存地址及本次新图片地址的列表，新地址位于末尾
  */
-export function uploadCarousel(file: Blob) {
+export function uploadCarousel(file: File) {
   const data = new FormData();
-  data.append('file', file, 'carousel.png');
-  return request<ApiResult<CarouselImage>>({
+  data.append('file', file);
+  return request<ApiResult<string[]>>({
     url: '/admin/system-setting/carousel/image',
     method: 'POST',
     data,

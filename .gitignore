@@ -33,6 +33,10 @@ coverage/
 *.tsbuildinfo
 
 # 测试相关
+# Agent 的一次性验证在独立目录运行，用后清理。
+/.agent-tests/
+# Java 模块的本地测试类、脚本和夹具排除在版本管理之外。
+/ymcloud-*/src/test/
 /cypress/videos/
 /cypress/screenshots/
 # 前端测试仅保留本地，避免测试数据进入提交。

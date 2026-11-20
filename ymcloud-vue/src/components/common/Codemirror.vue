@@ -140,7 +140,7 @@
                       </x-flex>
                       <x-flex align="center">
                           <el-icon size="25"><component :is="HardwareChipSharp" /></el-icon>
-                          <span>运行内存 {{ formatSubmissionMemory(judgeResult.memory) }}</span>
+                          <span>运行内存 {{ formatBinaryBytes(judgeResult.memory, 'KiB') }}</span>
                       </x-flex>
                   </x-flex>
               </el-alert>
@@ -281,7 +281,7 @@ import { TimeOutline,HardwareChipSharp,Bug } from '@vicons/ionicons5';
 import type { ProblemCaseVO, LanguageVO, EditorCache } from '@/types/problem';
 import type { JudgeResult } from '@/types/submission';
 import { submitJudge, testJudge, getJudgeStatus } from '@/api/submission';
-import { getStatusType,formatSubmissionTime,formatSubmissionMemory } from '@/utils/utils';
+import { formatBinaryBytes, getStatusType, formatSubmissionTime } from '@/utils/utils';
 import { useUserStore } from '@/stores/user';
 import { useThemeStore } from '@/stores/theme';
 import Storage from '@/utils/storage';
@@ -649,7 +649,7 @@ export default {
           isSubmitDisabled,
           getStatusType,
           formatSubmissionTime,
-          formatSubmissionMemory,
+          formatBinaryBytes,
           TimeOutline,
           HardwareChipSharp,
           Bug

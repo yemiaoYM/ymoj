@@ -23,10 +23,8 @@ import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.LanguageEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
-import com.ymcloud.core.web.dao.TestDataVersionEntityService;
-import com.ymcloud.pojo.contract.judge.JudgeLanguage;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
+import com.ymcloud.pojo.bo.judge.SpjProgram;
 import com.ymcloud.pojo.dto.JudgeDTO;
 import com.ymcloud.pojo.dto.SubmissionStatusDTO;
 import com.ymcloud.pojo.dto.TestJudgeDTO;
@@ -37,7 +35,6 @@ import com.ymcloud.pojo.entity.JudgeCase;
 import com.ymcloud.pojo.entity.JudgeDispatch;
 import com.ymcloud.pojo.entity.Language;
 import com.ymcloud.pojo.entity.Problem;
-import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.pojo.vo.oj.JudgeResultVO;
@@ -48,7 +45,6 @@ import com.ymcloud.web.judge.JudgeMessageCodec;
 import com.ymcloud.web.judge.JudgeResultService;
 import com.ymcloud.web.judge.JudgeStatusCache;
 import com.ymcloud.web.service.oj.JudgeService;
-import com.ymcloud.web.service.oj.TestDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -57,7 +53,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -94,12 +89,6 @@ public class JudgeServiceImpl implements JudgeService {
 
     @Autowired
     private ContestProblemEntityService contestProblems;
-
-    @Autowired
-    private TestDataService testData;
-
-    @Autowired
-    private TestDataVersionEntityService versions;
 
     @Autowired
     private JudgeDispatchProperties properties;
@@ -205,9 +194,7 @@ public class JudgeServiceImpl implements JudgeService {
             executionId = task.getExecutionId();
             status = JudgeStatus.STATUS_PENDING;
         } else {
-            status = Arrays.stream(JudgeStatus.values())
-                    .filter(value -> value.getCode() == request.getStatus())
-                    .findFirst().orElseThrow();
+            status = JudgeStatus.fromCode(request.getStatus());
             if (status == JudgeStatus.STATUS_PARTIAL_ACCEPTED) {
                 score = request.getScore();
             } else if (resolveScoringMode(contest).equals(JudgeConstants.OI)) {
@@ -227,7 +214,6 @@ public class JudgeServiceImpl implements JudgeService {
         boolean updated = judges.lambdaUpdate()
                 .eq(Judge::getId, submissionId)
                 .set(Judge::getExecutionId, executionId)
-                .set(Judge::getTestDataVersionId, task == null ? judge.getTestDataVersionId() : task.getTestDataVersionId())
                 .set(Judge::getStatus, status)
                 .set(Judge::getScore, score)
                 .set(Judge::getTime, null)
@@ -326,13 +312,12 @@ public class JudgeServiceImpl implements JudgeService {
         Judge judge = Judge.builder()
                 .id(task.getSubmissionId())
                 .problemId(problem.getId())
-                .testDataVersionId(task.getTestDataVersionId())
                 .executionId(task.getExecutionId())
                 .problemTitle(contestProblem == null ? problem.getTitle() : contestProblem.getDisplayTitle())
                 .displayId(contestProblem == null ? problem.getProblemId() : contestProblem.getDisplayId())
                 .userId(user.getId())
                 .username(user.getUsername())
-                .language(task.getLanguageConfig().getName())
+                .language(task.getLanguage())
                 .status(JudgeStatus.STATUS_PENDING)
                 .code(request.getCode())
                 .codeLength(request.getCode().length())
@@ -362,24 +347,9 @@ public class JudgeServiceImpl implements JudgeService {
         }
         Language language = requireLanguage(languageName);
         validateResources(problem.getTimeLimit(), problem.getMemoryLimit());
-        Long versionId = testData.getCurrentVersion(problem.getId());
-        if (versionId == null || versionId <= 0) {
-            throw new JudgeException("题目暂无可用的测试数据版本");
-        }
-        TestDataVersion version = versions.lambdaQuery()
-                .eq(TestDataVersion::getId, versionId)
-                .eq(TestDataVersion::getProblemId, problem.getId())
-                .one();
-        if (version == null || version.getManifestSha256() == null
-                || !version.getManifestSha256().matches("[0-9a-f]{64}")) {
-            throw new JudgeException("题目测试数据版本清单无效");
-        }
-        String executionId = UUID.randomUUID().toString();
-        JudgeTask task = newTask(executionId, language, code);
+        JudgeTask task = newTask(UUID.randomUUID().toString(), language, code);
         task.setStrategy(JudgeDispatchState.FORMAL);
         task.setProblemId(problem.getId());
-        task.setTestDataVersionId(versionId);
-        task.setManifestSha256(version.getManifestSha256());
         task.setTimeLimit(problem.getTimeLimit());
         task.setMemoryLimit(problem.getMemoryLimit());
         task.setMode(resolveScoringMode(contest));
@@ -475,9 +445,7 @@ public class JudgeServiceImpl implements JudgeService {
         task.setSubmittedAtEpochMs(now.toEpochMilli());
         task.setDeadlineEpochMs(now.plus(properties.getTotalTimeout()).toEpochMilli());
         task.setCode(code);
-        JudgeLanguage snapshot = new JudgeLanguage();
-        snapshot.setName(language.getName());
-        task.setLanguageConfig(snapshot);
+        task.setLanguage(language.getName());
         return task;
     }
 
@@ -493,7 +461,6 @@ public class JudgeServiceImpl implements JudgeService {
         dispatch.setUserId(userId);
         dispatch.setStrategy(task.getStrategy());
         dispatch.setProblemId(task.getProblemId());
-        dispatch.setTestDataVersionId(task.getTestDataVersionId());
         dispatch.setTaskPayload("");
         dispatch.setDispatchState(JudgeDispatchState.READY);
         dispatch.setStatus(JudgeStatus.STATUS_PENDING);
@@ -501,8 +468,7 @@ public class JudgeServiceImpl implements JudgeService {
         dispatch.setPublishAttempts(0);
         dispatch.setRecoveryAttempts(0);
         dispatch.setNextAttemptTime(now);
-        dispatch.setDeadlineTime(LocalDateTime.ofInstant(
-                Instant.ofEpochMilli(task.getDeadlineEpochMs()), ZoneOffset.UTC));
+        dispatch.setDeadlineTime(LocalDateTime.ofInstant(Instant.ofEpochMilli(task.getDeadlineEpochMs()), ZoneOffset.UTC));
         Long submissionId = task.getSubmissionId();
         if (submissionId == null) {
             submissionId = allocator.reserve(dispatch);

@@ -13,7 +13,7 @@
 import { useThemeStore } from '@/stores/theme';
 import { defineComponent } from 'vue';
 import { MdPreview } from 'md-editor-v3';
-import { sanitizeMarkdown } from '@/utils/markdown';
+import { useFileImages } from '@/hooks/useFileImages';
 import 'md-editor-v3/lib/preview.css';
 
 export default defineComponent({
@@ -22,12 +22,19 @@ export default defineComponent({
     MdPreview
   },
   props: {
+    contestId: Number,
+    publicImages: Boolean,
     content: {
       type: String,
       default: "写点什么呢？"
     }
   },
-  setup() {
+  setup(props) {
+    const { sanitizeMarkdown } = useFileImages({
+      sources: () => props.content.match(/\/api\/files\/[1-9]\d*/g) || [],
+      contestId: () => props.contestId,
+      publicImages: () => props.publicImages,
+    });
     return { sanitizeMarkdown, theme: useThemeStore() };
   }
 })

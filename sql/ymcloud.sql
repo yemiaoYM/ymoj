@@ -79,7 +79,7 @@ CREATE TABLE `role_auth` (
 CREATE TABLE `system_setting` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
   `setting_key` varchar(128) NOT NULL COMMENT '配置键',
-  `setting_value` varchar(255) NOT NULL COMMENT '配置值',
+  `setting_value` varchar(512) NOT NULL COMMENT '配置值',
   `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -149,7 +149,6 @@ CREATE TABLE `problem` (
   `author_username` varchar(255) DEFAULT NULL COMMENT '出题人用户名',
   `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `test_data_version_id` bigint DEFAULT NULL COMMENT '测试数据版本ID；NULL表示未绑定或历史版本未知',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `problem_id` (`problem_id`) USING BTREE,
   CONSTRAINT `chk_problem_difficulty` CHECK (`difficulty` BETWEEN 1 AND 5),
@@ -166,15 +165,16 @@ CREATE TABLE `problem_tag` (
   UNIQUE KEY `uk_problem_tag` (`problem_id`,`tag_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='题目-标签关联表';
 
-CREATE TABLE `test_data_version` (
-  `id` bigint NOT NULL COMMENT '不可变版本ID（雪花ID）',
-  `problem_id` bigint NOT NULL COMMENT '所属题目',
-  `manifest` longtext NOT NULL COMMENT '排序后的测试点文件引用、大小和SHA-256',
-  `manifest_sha256` char(64) NOT NULL COMMENT 'UTF-8清单SHA-256',
-  `created_time` datetime NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_test_data_version_problem` (`problem_id`,`created_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='不可变测试数据版本与清单';
+CREATE TABLE `problem_case` (
+  `problem_id` bigint unsigned NOT NULL COMMENT '所属题目主键，对应problem.id',
+  `manifest` longtext NOT NULL COMMENT '当前已发布的有序测试点清单，JSON格式',
+  `version` bigint NOT NULL DEFAULT 1 COMMENT '当前清单乐观锁版本，首次发布为1',
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`problem_id`),
+  CONSTRAINT `chk_problem_case_version` CHECK (`version` >= 1),
+  CONSTRAINT `chk_problem_case_manifest` CHECK (JSON_VALID(`manifest`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='题目当前判题测试数据清单';
 
 CREATE TABLE `contest` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '比赛ID',
@@ -222,54 +222,51 @@ CREATE TABLE `contest_user` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='比赛报名表';
 
 CREATE TABLE `storage_config` (
-  `id` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '配置标识',
-  `name` varchar(100) NOT NULL COMMENT '配置名称',
-  `provider` varchar(100) DEFAULT NULL COMMENT '服务商描述，不参与驱动选择',
-  `driver_type` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '访问驱动：LOCAL/S3/ALIYUN_OSS',
-  `endpoint` varchar(512) DEFAULT NULL COMMENT '后端可达的存储服务地址',
-  `region` varchar(64) DEFAULT NULL COMMENT 'S3地域标识',
-  `public_bucket` varchar(128) NOT NULL COMMENT '公开业务文件桶；桶自身保持私有',
-  `private_bucket` varchar(128) NOT NULL COMMENT '私有业务文件桶',
-  `path_style` tinyint NOT NULL DEFAULT '1' COMMENT '1=路径式访问，0=虚拟主机式访问',
-  `encrypted_access_key` text DEFAULT NULL COMMENT 'AES-GCM加密的访问标识',
-  `encrypted_secret_key` text DEFAULT NULL COMMENT 'AES-GCM加密的访问密钥',
+  `id` bigint NOT NULL COMMENT '应用分配的存储配置主键',
+  `config_key` varchar(64) COLLATE utf8mb4_bin NOT NULL COMMENT '配置标识',
+  `access_key` varchar(255) DEFAULT NULL COMMENT '访问标识',
+  `secret_key` varchar(255) DEFAULT NULL COMMENT '访问密钥',
+  `bucket_name` varchar(128) NOT NULL COMMENT '对象存储桶',
+  `prefix` varchar(255) DEFAULT NULL COMMENT '对象键前缀',
+  `endpoint` varchar(512) DEFAULT NULL COMMENT '服务端点主机及端口',
+  `domain` varchar(255) DEFAULT NULL COMMENT '自定义访问域名',
+  `is_https` char(1) NOT NULL DEFAULT 'Y' COMMENT '是否使用 HTTPS',
+  `region` varchar(64) DEFAULT NULL COMMENT '服务区域',
+  `access_policy` char(1) NOT NULL DEFAULT '0' COMMENT '桶策略：0 private，1 public，2 custom',
+  `status` char(1) NOT NULL DEFAULT 'N' COMMENT '是否为默认配置',
   `remark` varchar(500) DEFAULT NULL COMMENT '备注',
-  `revision` bigint NOT NULL DEFAULT '1' COMMENT '配置修订号，用于并发控制',
-  `tested_revision` bigint DEFAULT NULL COMMENT '最近测试通过的修订号',
-  `tested_at` datetime DEFAULT NULL COMMENT '最近测试通过时间',
-  `created_time` datetime NOT NULL COMMENT '创建时间',
-  `updated_time` datetime NOT NULL COMMENT '更新时间',
-  `is_default` tinyint NOT NULL DEFAULT '0' COMMENT '是否为新上传的默认配置',
-  `default_slot` tinyint GENERATED ALWAYS AS (CASE WHEN `is_default` = 1 THEN 1 ELSE NULL END) STORED,
+  `created_by` bigint unsigned DEFAULT NULL COMMENT '创建者用户 ID',
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_by` bigint unsigned DEFAULT NULL COMMENT '最后修改者用户 ID',
+  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_storage_default` (`default_slot`),
-  CONSTRAINT `chk_storage_driver_type` CHECK (`driver_type` IN ('LOCAL', 'S3', 'ALIYUN_OSS'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='命名存储配置，凭据独立加密';
+  UNIQUE KEY `uk_storage_key` (`config_key`),
+  UNIQUE KEY `uk_storage_default` ((CASE WHEN `status` = 'Y' THEN 1 ELSE NULL END)),
+  CHECK (`status` IN ('Y','N')),
+  CHECK (`is_https` IN ('Y','N')),
+  CHECK (`access_policy` IN ('0','1','2'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='对象存储配置';
 
 CREATE TABLE `file` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '文件ID',
-  `public_id` char(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '对外UUIDv4标识',
-  `file_name` varchar(255) NOT NULL COMMENT '原始文件名，例如 data.zip',
-  `file_type` varchar(50) DEFAULT NULL COMMENT '文件类型/MIME类型，例如 application/zip、image/png',
-  `file_size` bigint unsigned DEFAULT '0' COMMENT '文件大小（字节）',
-  `file_ext` varchar(50) DEFAULT NULL COMMENT '文件扩展名，例如 zip、png、pdf',
-  `uploader_id` bigint unsigned DEFAULT NULL COMMENT '上传者用户ID',
-  `uploader_username` varchar(100) DEFAULT NULL COMMENT '上传者用户名',
-  `biz_type` tinyint NOT NULL DEFAULT '0' COMMENT '业务类型：0=通用，1=题目附件，2=比赛附件，3=公告附件，4=图片，5=测试数据',
-  `biz_id` bigint unsigned DEFAULT NULL COMMENT '业务ID，例如题目ID、比赛ID',
-  `is_public` tinyint NOT NULL DEFAULT '1' COMMENT '是否公开访问：0=私有，1=公开',
-  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
-  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `storage_key` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '存储配置标识',
-  `bucket` varchar(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT '对象存储桶；本地使用public/private目录',
-  `object_key` varchar(1024) NOT NULL COMMENT '不可变对象键或本地相对路径',
-  `sha256` char(64) DEFAULT NULL COMMENT '文件内容SHA-256；历史文件可为空',
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE KEY `uk_file_public_id` (`public_id`),
-  KEY `idx_file_storage` (`storage_key`,`bucket`),
+  `id` bigint NOT NULL COMMENT '应用分配的文件主键',
+  `file_name` varchar(1024) NOT NULL COMMENT '桶内对象键',
+  `original_name` varchar(255) NOT NULL COMMENT '原始文件名',
+  `file_suffix` varchar(16) NOT NULL DEFAULT '' COMMENT '含点的文件后缀',
+  `url` varchar(500) NOT NULL COMMENT '文件访问地址',
+  `service` varchar(64) COLLATE utf8mb4_bin NOT NULL COMMENT '存储配置标识',
+  `biz_type` tinyint NOT NULL DEFAULT 0 COMMENT '文件业务类型',
+  `biz_id` bigint unsigned DEFAULT NULL COMMENT '业务记录编号',
+  `file_type` varchar(128) DEFAULT NULL COMMENT '媒体类型',
+  `file_size` bigint unsigned NOT NULL COMMENT '对象字节数',
+  `created_by` bigint unsigned DEFAULT NULL COMMENT '创建者用户 ID',
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_by` bigint unsigned DEFAULT NULL COMMENT '最后修改者用户 ID',
+  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
   KEY `idx_file_business` (`biz_type`,`biz_id`),
-  CONSTRAINT `fk_file_storage` FOREIGN KEY (`storage_key`) REFERENCES `storage_config` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='文件信息表';
+  KEY `idx_file_service` (`service`),
+  CONSTRAINT `fk_file_storage` FOREIGN KEY (`service`) REFERENCES `storage_config` (`config_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='文件信息';
 
 CREATE TABLE `judge` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '评测ID',
@@ -296,7 +293,6 @@ CREATE TABLE `judge` (
   `execution_id` varchar(36) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '当前评测执行标识；历史记录为空',
   `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `test_data_version_id` bigint DEFAULT NULL COMMENT '测试数据版本ID；NULL表示未绑定或历史版本未知',
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_user_created` (`user_id`,`created_time`) USING BTREE,
   KEY `idx_contest_created` (`contest_id`,`created_time`) USING BTREE,
@@ -304,10 +300,7 @@ CREATE TABLE `judge` (
   KEY `idx_user_problem_contest` (`user_id`,`problem_id`,`contest_id`) USING BTREE,
   KEY `idx_status` (`status`) USING BTREE,
   KEY `idx_problem_id` (`problem_id`) USING BTREE,
-  KEY `idx_contest_display_user_time` (`contest_id`,`created_time`,`display_id`,`user_id`,`status`),
-  KEY `idx_judge_test_data_version` (`test_data_version_id`),
-  CONSTRAINT `fk_judge_test_data_version` FOREIGN KEY (`test_data_version_id`)
-    REFERENCES `test_data_version` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+  KEY `idx_contest_display_user_time` (`contest_id`,`created_time`,`display_id`,`user_id`,`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=DYNAMIC COMMENT='判题记录表';
 
 CREATE TABLE `judge_dispatch` (
@@ -317,7 +310,6 @@ CREATE TABLE `judge_dispatch` (
   `user_id` bigint unsigned NOT NULL COMMENT '任务所属用户',
   `strategy` int NOT NULL COMMENT '0正式提交；1自测',
   `problem_id` bigint unsigned DEFAULT NULL,
-  `test_data_version_id` bigint DEFAULT NULL COMMENT '创建任务时固定的测试版本',
   `task_payload` longtext NOT NULL COMMENT '不可变消息快照，包含私有代码及自测输入',
   `result_payload` longtext DEFAULT NULL COMMENT '最近接收的有效结果',
   `dispatch_state` int NOT NULL DEFAULT 0 COMMENT '0待发布；1待结果；2已完成',
@@ -337,10 +329,7 @@ CREATE TABLE `judge_dispatch` (
   UNIQUE KEY `uniq_dispatch_execution` (`execution_id`),
   KEY `idx_dispatch_pending` (`dispatch_state`,`next_attempt_time`),
   KEY `idx_dispatch_deadline` (`dispatch_state`,`deadline_time`),
-  KEY `idx_dispatch_version` (`test_data_version_id`),
-  KEY `idx_dispatch_problem` (`problem_id`),
-  CONSTRAINT `fk_dispatch_test_data_version` FOREIGN KEY (`test_data_version_id`)
-    REFERENCES `test_data_version` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+  KEY `idx_dispatch_problem` (`problem_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='可靠任务发布与结果幂等状态';
 
 CREATE TABLE `judge_case` (
@@ -470,7 +459,6 @@ INSERT INTO `auth` (`id`, `code`, `name`, `parent_id`, `path`, `route_name`, `co
     (541, 'file:storage:add', '新增存储配置（仅超级管理员）', 540, NULL, NULL, NULL, NULL, 'F', 1, 1),
     (542, 'file:storage:edit', '修改存储配置（仅超级管理员）', 540, NULL, NULL, NULL, NULL, 'F', 1, 1),
     (543, 'file:storage:remove', '删除存储配置（仅超级管理员）', 540, NULL, NULL, NULL, NULL, 'F', 1, 1),
-    (544, 'file:storage:test', '测试存储连接（仅超级管理员）', 540, NULL, NULL, NULL, NULL, 'F', 1, 1),
     (545, 'file:storage:activate', '启用默认存储（仅超级管理员）', 540, NULL, NULL, NULL, NULL, 'F', 1, 1),
     (546, 'file:migration:query', '查看文件迁移盘点', 532, NULL, NULL, NULL, NULL, 'F', 1, 1),
     (547, 'file:migration:execute', '执行历史文件迁移', 532, NULL, NULL, NULL, NULL, 'F', 1, 1);
@@ -600,9 +588,14 @@ int main() {
 print(a + b)', NULL, 1, 1, 'myy');
 
 INSERT INTO `system_setting` (`setting_key`, `setting_value`) VALUES
-    ('register_enabled', 'true');
+    ('register_enabled', 'true'),
+    ('home_carousel', '[]');
 
-INSERT INTO `storage_config` (`id`, `name`, `driver_type`, `public_bucket`, `private_bucket`, `is_default`, `created_time`, `updated_time`)
-VALUES ('local', '本地文件', 'LOCAL', 'public', 'private', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO `storage_config` (`id`, `config_key`, `access_key`, `secret_key`, `bucket_name`, `prefix`, `endpoint`, `is_https`, `region`, `status`, `created_by`, `updated_by`)
+VALUES (1, 'silo', 'ymcloud-web', 'ymcloud-silo-initial', 'ymcloud', NULL, 'silo:9000', 'N', 'us-east-1', 'Y', 1, 1),
+       (2, 'qiniu', NULL, NULL, 'ymcloud', NULL, 's3-cn-north-1.qiniucs.com', 'Y', 'cn-north-1', 'N', 1, 1),
+       (3, 'aliyun', NULL, NULL, 'ymcloud', NULL, 'oss-cn-beijing.aliyuncs.com', 'Y', 'cn-beijing', 'N', 1, 1),
+       (4, 'qcloud', NULL, NULL, 'ymcloud-1240000000', NULL, 'cos.ap-beijing.myqcloud.com', 'Y', 'ap-beijing', 'N', 1, 1),
+       (5, 'image', NULL, NULL, 'ymcloud', 'image', 'silo:9000', 'N', 'us-east-1', 'N', 1, 1);
 
 COMMIT;

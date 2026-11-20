@@ -2,7 +2,7 @@
 
 本目录为没有对象存储服务的用户提供可选 Docker 安装工具。OJ 默认使用本地 `files/public`、`files/private`；已有 SeaweedFS、Silo 或 OSS 的用户直接在 OJ 后台添加连接，无需运行安装脚本。Silo 使用现有 S3 驱动，官方项目为 [pgsty/silo](https://github.com/pgsty/silo)。历史 MinIO 配置仍可读取和维护，已有文件的存储标识保持不变；服务端迁移按 Silo 官方迁移说明另行执行。
 
-目录只保留这份说明、`compose.yml`、Linux 入口 `manage.sh` 和 Windows 入口 `install.ps1`。`.env`、`secrets/` 是首次运行生成的私有文件，不提交 Git。开发测试工具位于 `ymcloud-web/src/test/scripts/storage/`。
+目录只保留这份说明、`compose.yml`、Linux 入口 `manage.sh` 和 Windows 入口 `install.ps1`。`.env`、`secrets/` 是首次运行生成的私有文件，不提交 Git。
 
 ## 安装
 
@@ -31,21 +31,17 @@ Docker Compose 分别管理 master、volume、filer、S3；对象和元数据保
 | 字段 | 默认安装的填写值 |
 | --- | --- |
 | 配置标识 | `seaweedfs`；已有文件的配置必须使用原标识 |
-| 连接地址 | `http://127.0.0.1:18333` |
+| 连接地址 | `127.0.0.1:18333` |
+| 使用 HTTPS | 本地默认安装关闭 |
 | 地域 | `us-east-1` |
-| 公开文件桶 | `ymcloud-public` |
-| 私有文件桶 | `ymcloud-private` |
-| 路径式访问 | 开启 |
+| 存储桶 | `ymcloud-private` |
+| 桶策略 | 私有 |
 | Access Key | `.env` 中的 `YMCLOUD_S3_ACCESS_KEY` |
 | Secret Key | `.env` 中的 `YMCLOUD_S3_SECRET_KEY` |
 
-填写应用账户，不要填写带 `ADMIN` 的建桶账户。保存后先“测试连接”，成功再“设为默认”；配置立即生效，无需重启后端。已有服务填写自己的地址、桶和账户即可。安装脚本不修改 OJ 配置、数据库、判题队列或加密主密钥。
+填写应用账户并保存，点击“设为默认”后，新上传的文件使用该配置。已有文件继续按登记时的配置读取。每条配置对应一个桶，文件的展示权限由 OJ 的业务类型决定。
 
-地址以 **OJ 后端所在机器或容器** 为准：后端直接运行在同一服务器时可用上面的回环地址；后端运行在 Docker 中时，`127.0.0.1` 指向后端容器自身，需要自行接入受控网络并填写可达地址。远程连接使用 HTTPS；OJ 仅允许回环地址使用 HTTP，不要直接把私有存储端口开放到公网。
-
-两个桶均要求签名鉴权。公开头像、封面由当前网站提供访问；私有文件仍由 OJ 的业务权限检查，公开桶名称不代表允许匿名下载。
-
-测试确认 SeaweedFS 4.48 对只签名 `x-amz-content-sha256` 的 PUT 请求存在正文校验缺口。OJ 上传同时使用签名的 `Content-MD5`，保存前回读核对 SHA-256；远程连接仍须使用 HTTPS。这项上游限制保留在安全测试报告中。
+连接地址以 OJ 后端所在机器或容器为准。后端运行在 Docker 内时，填写从后端容器可以访问的主机名与端口。
 
 ## 可选管理界面
 
@@ -92,13 +88,9 @@ pwsh -NoProfile -File seaweedfs/install.ps1 -Action reset -DeleteData
 pwsh -NoProfile -File seaweedfs/install.ps1 -Action start
 ```
 
-重置只作用于当前 Compose 项目；模板保留，便于再次安装。镜像可复用，不必删除。重装生成新凭据，需要在 OJ 后台重新填写。不要直接删除整个 `seaweedfs/`：旧版本可能曾把 OJ 加密主密钥放在这里。
+重置只作用于当前 Compose 项目；模板保留，便于再次安装。镜像可复用，不必删除。重装生成新凭据，需要在 OJ 后台重新填写。备份对象数据、OJ 数据库及存储账户凭据后再重置。
 
-OJ 加密主密钥属于 OJ，自动保存在文件根目录 `.secrets/storage-config.key`，必须与数据库一起备份；旧的 `seaweedfs/secrets/storage-config.key` 会校验后自动迁入 OJ 目录，原文件保留。重置脚本保留该旧密钥，不修改数据库文件记录或测试数据版本。
-
-如果旧主密钥已丢失：优先恢复备份；只有全部旧动态配置都没有文件引用时，才能在后台切回本地、删除这些配置，再新增配置自动生成新主密钥。已有文件引用的配置继续受保护；新密钥无法解密旧凭据，重新安装也无法找回已删除对象。
-
-## 排查与开发验证
+## 故障排查
 
 启动失败先查看服务状态及 S3 日志：
 
@@ -108,15 +100,3 @@ docker compose -f seaweedfs/compose.yml logs --tail 80 s3
 ```
 
 Linux 报 `s3.json: permission denied` 时，用更新后的脚本重新执行 `start`，保留原凭据及数据。rootless Docker 或 UID 映射环境需要按实际映射调整文件所属组；读取检查失败时脚本会停止。
-
-正常安装不运行测试。开发者可运行后端测试目录中的初始化、安全、性能、持久性工具；它们只应对隔离项目或明确授权的开发服务执行。测试报告位于忽略的 `target/test-output/`，私有测试凭据不保留在 Maven 构建目录。Java 存储权限及密钥恢复回归由 `StorageConfigSecurityTest`、`StorageMasterKeyStoreTest`、`StorageConfigDatabaseIT` 等验证；真实数据库测试使用独立临时表，不清理业务库。
-
-Windows 开发环境的完整隔离部署、S3 安全及性能、50 MiB AWS SDK 和卸载重装验证：
-
-```powershell
-pwsh -NoProfile -File ymcloud-web/src/test/scripts/storage/verify_docker.ps1 -RunSdk
-```
-
-该回归另外需要 Python 3 和 Maven；Linux 的对应入口为测试目录中的 `verify_linux.sh --docker`，需要 Python 3 和已构建的 OJ Python 测试镜像。安装脚本本身不依赖这些测试工具。
-
-官方资料：[S3 API](https://github.com/seaweedfs/seaweedfs/wiki/Amazon-S3-API)、[Docker 镜像](https://hub.docker.com/r/chrislusf/seaweedfs)。

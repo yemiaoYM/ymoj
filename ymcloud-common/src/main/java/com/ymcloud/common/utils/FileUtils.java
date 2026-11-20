@@ -1,10 +1,20 @@
 package com.ymcloud.common.utils;
 
 import cn.hutool.core.io.FileUtil;
+import com.ymcloud.common.constant.HttpStatus;
 import com.ymcloud.common.exception.file.FileException;
 
+import javax.imageio.IIOException;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.MemoryCacheImageInputStream;
+import java.io.EOFException;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * @PackageName: com.ymcloud.common.utils
@@ -14,6 +24,39 @@ import java.util.List;
  * @Description: 通用文件工具操作类
  */
 public class FileUtils {
+
+    /**
+     * 读取图片头并返回实际格式，供上传和远程题面导入校验原图
+     * @param input 图片输入流，由调用方关闭
+     * @param formats 当前业务允许的图片格式
+     * @return 标准小写格式名，如 jpeg、png 或 webp
+     * @throws FileException 图片格式不受支持、内容损坏或读取失败
+     */
+    public static String getImageFormat(InputStream input, Set<String> formats) {
+        try (var stream = new MemoryCacheImageInputStream(input)) {
+            var readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext()) {
+                throw new FileException("文件内容不是受支持的图片", HttpStatus.UNSUPPORTED_TYPE);
+            }
+            ImageReader reader = readers.next();
+            try {
+                String format = reader.getFormatName().toLowerCase(Locale.ROOT);
+                if (!formats.contains(format)) {
+                    throw new FileException("不支持的图片格式", HttpStatus.UNSUPPORTED_TYPE);
+                }
+                reader.setInput(stream);
+                reader.getWidth(0);
+                reader.getHeight(0);
+                return format;
+            } finally {
+                reader.dispose();
+            }
+        } catch (IIOException | EOFException e) {
+            throw new FileException("图片内容不完整或已损坏", HttpStatus.UNSUPPORTED_TYPE, e);
+        } catch (IOException e) {
+            throw new FileException("图片读取失败", HttpStatus.ERROR, e);
+        }
+    }
 
     /**
      * 自动根据环境获取文件路径

@@ -1,10 +1,11 @@
 package com.ymcloud.web.service.admin;
 
-import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.query.admin.AdminFilePageQuery;
 import com.ymcloud.pojo.vo.admin.AdminFileVO;
 import com.ymcloud.pojo.vo.common.PageVO;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 /**
  * @Author: Yemiao
@@ -21,23 +22,15 @@ public interface AdminFileService {
     PageVO<AdminFileVO> queryList(AdminFilePageQuery query);
 
     /**
-     * 校验下载权限并返回固定文件元数据
-     * @param id 对外 UUIDv4 文件标识
-     * @return 已授权下载的文件
+     * 将通用文件上传到默认存储并登记当前用户
+     * @param file 管理员选择的文件
+     * @return 已登记的文件信息
      */
-    File requireDownload(String id);
+    AdminFileVO upload(MultipartFile file);
 
     /**
-     * 按当前用户权限上传通用文件
-     * @param file 用户上传内容
-     * @param isPublic 0 为私有，1 为公开
-     * @return 上传后可展示的文件信息
+     * 删除当前用户可管理的普通文件
+     * @param ids 一个或多个文件主键
      */
-    AdminFileVO upload(MultipartFile file, Integer isPublic);
-
-    /**
-     * 检查文件归属与引用后删除普通文件
-     * @param id 对外 UUIDv4 文件标识
-     */
-    void delete(String id);
+    void delete(List<Long> ids);
 }

@@ -18,8 +18,11 @@ public class CacheConstants {
      */
     public static final String TAG_LIST_KEY = "tag_list";
 
-    /** 公开轮播列表；完整 Redis 键为 cache:home_carousel，变更提交后失效。 */
+    /**
+     * 公开轮播列表；完整 Redis 键为 cache:home_carousel，变更提交后失效。
+     */
     public static final String HOME_CAROUSEL_KEY = "home_carousel";
+
     /**
      * 用户ac排名列表 redis key
      */
@@ -37,6 +40,11 @@ public class CacheConstants {
      * 评测状态 redis key
      */
     public static final String JUDGE_KEY = "judge:";
+
+    /**
+     * 评测状态 redis key
+     */
+    public static final String FILE_KEY = "file";
 
     /**
      * 邮箱验证码防重提交 redis key

@@ -41,7 +41,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useUserStore } from '@/stores/user';
 import { useAppStore } from '@/stores/app';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 
 defineProps<{ mobile: boolean; menuOpen: boolean }>();
 const emit = defineEmits<{ 'toggle-menu': [] }>();

@@ -12,8 +12,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * @PackageName: com.ymcloud.web.controller.admin.common
- * @ClassName: CommonController
  * @Author: Yemiao
  * @CreateTime: 2025-09-27  20:10
  * @Description: 管理员公共接口控制器

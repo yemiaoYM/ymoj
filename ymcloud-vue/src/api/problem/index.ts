@@ -9,7 +9,7 @@ import type {
   SpjCompileDTO,
   SpjCompileResult,
   ProblemDTO,
-  ProblemCaseInfoVO,
+  ProblemCaseListVO,
   RemoteProblemRequest,
   RemoteProblemDraft,
   LanguageTableVO,
@@ -153,9 +153,10 @@ export function updateProblem(problemId: number, problem: ProblemDTO) {
  * @returns 包含题目测试用例列表的完整响应
  */
 export function getProblemTestCases(problemId: number) {
-  return request<ApiResult<ProblemCaseInfoVO[]>>({
+  return request<ApiResult<ProblemCaseListVO>>({
     url: `/admin/problem/${problemId}/testcases`,
-    method: 'GET'
+    method: 'GET',
+    skipErrorMessage: true
   });
 }
 
@@ -164,13 +165,13 @@ export function getProblemTestCases(problemId: number) {
  * @param problemId 题目ID
  * @param files 文件列表
  * @param onUploadProgress 上传进度回调
- * @returns 操作结果，不包含业务数据
+ * @returns 发布后的清单版本
  */
 export function uploadTestCaseFiles(problemId: number, files: FormData, onUploadProgress?: (event: {
   loaded: number;
   total?: number;
 }) => void) {
-  return request<ApiResult<void>>({
+  return request<ApiResult<number>>({
     url: `/admin/problem/${problemId}/testcases/upload`,
     method: 'POST',
     data: files,
@@ -183,17 +184,17 @@ export function uploadTestCaseFiles(problemId: number, files: FormData, onUpload
 /**
  * 下载测试用例文件
  * @param problemId 题目ID
- * @param fileName 文件名
+ * @param fileId 文件主键
  * @param skipErrorMessage 是否由调用方展示错误
  * @returns 包含文件内容的完整响应
  */
 export function downloadTestCaseFile(
   problemId: number,
-  fileName: string,
+  fileId: string,
   skipErrorMessage = false,
 ) {
   const params = {
-    fileName
+    fileId
   };
   return request<Blob>({
     url: `/admin/problem/${problemId}/testcases/download`,
@@ -208,14 +209,17 @@ export function downloadTestCaseFile(
 /**
  * 删除测试用例文件（支持单个或批量）
  * @param problemId 题目ID
- * @param fileNames 文件名数组
- * @returns 操作结果，不包含业务数据
+ * @param version 编辑时的清单版本
+ * @param names 测试点名称
+ * @returns 发布后的清单版本
  */
-export function deleteTestCaseFiles(problemId: number, fileNames: string[]) {
-  return request<ApiResult<void>>({
+export function deleteTestCaseFiles(problemId: number, version: number, names: string[]) {
+  return request<ApiResult<number>>({
     url: `/admin/problem/${problemId}/testcases`,
     method: 'DELETE',
-    data: fileNames
+    params: { version },
+    skipErrorMessage: true,
+    data: names
   });
 }
 

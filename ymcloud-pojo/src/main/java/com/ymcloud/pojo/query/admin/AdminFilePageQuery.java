@@ -26,10 +26,6 @@ public class AdminFilePageQuery {
     @Size(max = 255, message = "文件名不能超过255个字符")
     private String fileName;
 
-    @Min(value = 0, message = "公开状态必须为0或1")
-    @Max(value = 1, message = "公开状态必须为0或1")
-    private Integer isPublic;
-
     @Min(value = 0, message = "文件业务类型不合法")
     @Max(value = 5, message = "文件业务类型不合法")
     private Integer bizType;

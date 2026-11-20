@@ -24,7 +24,7 @@ cd ymoj-deploy
 
 ## 3. 配置 .env
 
-直接编辑当前目录的 `.env`，不需要复制或改名。
+在 `.env` 中设置 Silo 控制台的 `MINIO_ROOT_USER` 和 `MINIO_ROOT_PASSWORD`。默认管理员名为 `silo-admin`，密码在首次启动前填写。
 
 | 配置项 | 默认值与用途 |
 | --- | --- |
@@ -52,20 +52,23 @@ docker compose up -d
 docker compose ps -a
 ```
 
-`preflight` 是启动预检任务，显示 `Exited (0)` 属于正常完成。其余 7 个服务应处于运行状态并通过健康检查。
+`preflight` 是启动预检任务，显示 `Exited (0)` 属于正常完成。其余 8 个服务应处于运行状态并通过健康检查。
 
 浏览器访问 `http://服务器IP`。如果修改了端口，例如 `HTTP_PORT=8080`，则访问 `http://服务器IP:8080`。
 
 后台地址为 `/admin/login`。首次登录账号为 **`admin`**，密码为 **`Ymcloud@123`**，登录后及时修改。
 
+只启动对象存储时，在部署目录运行 `docker compose up -d silo`。在浏览器打开 `http://服务器IP:9001`，使用 Silo 管理员账号登录，创建私有桶并为应用创建有该桶读写权限的 Access Key 和 Secret Key。随后在 YMOJ 后台「常用设置 → 存储配置」中编辑默认的 `silo` 配置，保存实际桶名和密钥。Compose 内的 Web 使用端点 `silo:9000`，同一宿主机直接启动的 Web 使用 `127.0.0.1:9000`。
+
 ## 5. 服务端口与初始账号
 
-只有前端端口发布到宿主机。下表其余端口仅在 Compose 内部网络使用。
+前端和 Silo 的端口发布到宿主机。Silo 的 9000 端口提供 S3 API，9001 端口提供管理控制台。
 
 | 服务 | 容器端口 | 宿主机端口 | 初始账号 / 密码或认证 |
 | --- | --- | --- | --- |
 | 前端 `frontend` | `8080` | `.env` 的 `HTTP_PORT`，默认 `80` | 网站管理员 `admin` / `Ymcloud@123` |
 | 后端 `web` | `9091` | 不发布 | 通过网站登录获取令牌 |
+| Silo `silo` | `9000`、`9001` | `9000`、`9001` | 控制台使用 `.env` 中的 `MINIO_ROOT_USER` 和 `MINIO_ROOT_PASSWORD` |
 | MySQL `mysql` | `3306` | 不发布 | 应用账号 `ymcloud` / `ymcloudMysql123456`；管理账号 `root` / `ymcloudRoot123456` |
 | Redis `redis` | `6379` | 不发布 | 默认用户 `default` / `ymcloudRedis123456` |
 | RabbitMQ `rabbitmq` | `5672` | 不发布 | `ymcloud` / `ymcloudRabbit123456`，虚拟主机 `/ymcloud` |

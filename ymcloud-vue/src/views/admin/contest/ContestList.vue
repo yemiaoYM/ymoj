@@ -3,7 +3,7 @@
     <x-flex vertical :size="16">
       <el-card>
         <!-- 搜索区域 -->
-        <el-form :model="queryParams" label-width="auto">
+        <el-form ref="queryFormRef" :model="queryParams" label-width="auto">
           <x-flex :size="10">
             <el-form-item label="关键词" prop="keyword">
               <el-input v-model="queryParams.keyword" placeholder="请输入比赛标题或创建者" clearable />
@@ -31,8 +31,8 @@
             plain
             type="danger"
             :icon="Delete"
-            :disabled="contestIds.length === 0"
-            @click="handleDelete"
+            :disabled="multiple"
+            @click="handleDelete()"
           >
             删除
           </el-button>
@@ -146,19 +146,25 @@
       v-model="cloneVisible"
       :source-id="cloneSource.id"
       :title="cloneSource.title"
-      @created="handleQuery"
+      @created="getList"
     />
   </div>
 </template>
 
 <script lang="ts" setup>
+import modal from '@/plugins/modal';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
+import { useSearchReset } from '@/hooks/form/useSearchReset';
+import { type AdminContest } from '@/types/contest';
+import { useTableSelection } from '@/hooks/table/useTableSelection';
+import { useLoading } from '@/hooks/async/useLoading';
 import { CONTEST_VISIBILITY, CONTEST_MODE } from '@/constants/contest';
 //import
 import AsyncSelect from '@/components/common/AsyncSelect.vue';
 import CloneContestDialog from '@/components/admin/CloneContestDialog.vue';
 import { useUserStore } from '@/stores/user';
 import { ref, onMounted } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { Search, Refresh, Plus, Edit, Delete, CopyDocument, List } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import { getAdminContestList, deleteContestByIds, updateContestVisibility } from '@/api/contest';
@@ -166,14 +172,16 @@ import { getAdminContestList, deleteContestByIds, updateContestVisibility } from
 //data
 const userStore = useUserStore();
 const router = useRouter();
-const contestList = ref<any[]>([]);
-const contestIds = ref<number[]>([]);
+const contestList = ref<AdminContest[]>([]);
+const { ids: contestIds, multiple, handleSelectionChange } = useTableSelection((row: AdminContest) => row.id);
 const total = ref<number>(0);
-const loading = ref<boolean>(false);
+const { beforeChange: remove } = useAsyncChange();
+const { loading, withLoading } = useLoading();
 const cloneVisible = ref(false);
 const cloneSource = ref({ id: 0, title: '' });
 
 //查询参数
+const queryFormRef = ref<FormInstance>();
 const queryParams = ref({
   keyword: null,
   pageNo: 1,
@@ -182,44 +190,37 @@ const queryParams = ref({
 
 //生命周期
 onMounted(() => {
-  handleQuery();
+  getList();
 });
 
 //methods
 //查询比赛列表
-const handleQuery = () => {
-  loading.value = true;
-  getAdminContestList(queryParams.value).then(res => {
-    contestList.value = res.data.data.records;
-    total.value = res.data.data.total;
-  }).catch(e => {
-    console.log(e);
-  }).finally(() => {
-    loading.value = false;
-  });
-};
+const getList = () => withLoading(async () => {
+  try {
+    const { data } = await getAdminContestList(queryParams.value);
+    contestList.value = data.data.records;
+    total.value = data.data.total;
+  } catch {
+    // 请求层已提示查询失败，保留当前列表
+    return;
+  }
+});
 //重置查询
-const resetQuery = () => {
-  queryParams.value = {
-    keyword: null,
-    pageNo: 1,
-    pageSize: 15,
-  };
-  handleQuery();
+const handleQuery = () => {
+  queryParams.value.pageNo = 1;
+  return getList();
 };
+
+const { resetQuery } = useSearchReset(queryFormRef, queryParams, 15, getList);
 //改变页大小
 const handleSizeChange = (val: number) => {
   queryParams.value.pageSize = val;
-  handleQuery();
+  getList();
 };
 //改变当前页
 const handleCurrentChange = (val: number) => {
   queryParams.value.pageNo = val;
-  handleQuery();
-};
-//选择比赛
-const handleSelectionChange = (selection: any[]) => {
-  contestIds.value = selection.map(item => item.id);
+  getList();
 };
 
 //获取赛制模式文本
@@ -278,8 +279,8 @@ const handleAdd = () => {
   router.push('/admin/contest/add');
 };
 //编辑比赛
-const handleUpdate = (row: any) => {
-  const id = row.id || contestIds.value[0];
+const handleUpdate = (row?: AdminContest) => {
+  const id = row?.id ?? contestIds.value[0];
   if (!id) {
     ElMessage.warning('请选择要编辑的比赛');
     return;
@@ -301,29 +302,14 @@ const handleClone = (row: { id: number; title: string }) => {
   cloneVisible.value = true;
 };
 //删除比赛
-const handleDelete = (row: any) => {
-  const ids = row.id || contestIds.value;
-  if (!ids) {
-    ElMessage.warning('请选择要删除的比赛');
-    return;
-  }
-  ElMessageBox.confirm(
-    `是否确认删除比赛编号为 "${ids}" 的数据项吗？`,
-    '删除确认',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(() => {
-    deleteContestByIds(ids).then(res => {
-      ElMessage.success(res.data.msg);
-      handleQuery();
-    }).catch(e => {
-      console.log(e);
-    });
-  }).catch(() => { });
-};
+const handleDelete = (row?: AdminContest) => remove(async () => {
+  const ids = row ? [row.id] : contestIds.value;
+  if (!ids.length) return false;
+  await modal.confirm(`是否确认删除比赛编号为 "${ids.join(', ')}" 的数据项？`, '删除确认');
+  const response = await deleteContestByIds(ids);
+  ElMessage.success(response.data.msg);
+  await getList();
+});
 //请求成功后由异步选择器更新权限
 const handleVisibilityChange = async (row: { id: number; title: string; visibility: number }, newVisibility: number) => {
   let password: string | null = null;
@@ -345,10 +331,9 @@ const handleVisibilityChange = async (row: { id: number; title: string; visibili
     );
     password = result.value;
   } else {
-    await ElMessageBox.confirm(
+    await modal.confirm(
       `确认将比赛 "${row.title}" 的访问权限从 "${getVisibilityText(row.visibility)}" 修改为 "${getVisibilityText(newVisibility)}" 吗？`,
       '权限修改确认',
-      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
     );
   }
   const response = await updateContestVisibility(row.id, newVisibility, password);

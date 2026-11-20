@@ -47,7 +47,7 @@
                   </ImageCropUpload>
                   <el-button :disabled="saving || uploading || !contest.image" @click="onResetImage">恢复默认</el-button>
                 </x-flex>
-                <el-text type="info" size="small">支持 JPEG、PNG、WebP，最大 5MB，上传前可裁剪。</el-text>
+                <el-text type="info" size="small">支持 JPEG、PNG、WebP，最大 3MB，上传前可裁剪。</el-text>
                 <x-flex v-if="pendingUpload" align="center">
                   <el-text type="danger">封面上传失败</el-text>
                   <el-button text :disabled="saving || uploading" @click="onUploadImage(pendingUpload)">重试上传</el-button>
@@ -128,6 +128,9 @@
             style="width: 100%"
           >
             <MarkdownEidt
+              @image-uploaded="onImageUploaded"
+              image-purpose="contest"
+              :biz-id="contestId || undefined"
               ref="descriptionEditorRef"
               :key="`description-${mode}-${contestId}`"
               v-model:content="contest.description"
@@ -158,13 +161,14 @@
 </template>
 
 <script setup lang="ts">
+import { referencedImageIds } from '@/hooks/useFileImages';
 import { CONTEST_VISIBILITY, CONTEST_MODE } from '@/constants/contest';
 //import
 import { computed, ref, defineAsyncComponent, watch, nextTick, onBeforeUnmount } from "vue";
 import { ElMessage } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { isDraftRecord, useLocalDraft } from "@/hooks/useLocalDraft";
-import { useAsyncChange } from "@/hooks/useAsyncChange";
+import { useAsyncChange } from "@/hooks/async/useAsyncChange";
 import { useRoute, useRouter } from "vue-router";
 import ImageCropUpload from '@/components/common/ImageCropUpload.vue';
 import defaultContest from '@/assets/image/defaultContest.jpg';
@@ -259,6 +263,7 @@ const rules: FormRules<ContestForm> = {
 };
 
 type ContestForm = {
+  fileIds?: string[];
   id: number | null;
   title: string;
   image: string | null;
@@ -290,6 +295,10 @@ function createForm(): ContestForm {
 }
 
 const contest = ref<ContestForm>(createForm());
+function onImageUploaded(id: string) {
+  (contest.value.fileIds ??= []).push(id);
+}
+
 const draftActive = ref(false);
 let revision = 0;
 const localDraft = useLocalDraft<ContestDraft>(
@@ -345,11 +354,12 @@ const handleSubmitContest = async () => {
   await saveContest(async () => {
     await form.validate();
     if (current !== revision) return false;
-    if (await editor.uploadImages() === false || current !== revision) return false;
+    if (!editor.canSaveContent() || current !== revision) return false;
     const { id, ...fields } = contest.value;
     // 表单已校验起止时间，在请求边界收窄日期组件的可空状态
     const submitData: ContestDTO = {
       ...fields,
+      fileIds: id ? undefined : referencedImageIds(fields.fileIds, fields.description),
       startTime: fields.startTime as string,
       endTime: fields.endTime as string,
       password: fields.visibility === CONTEST_VISIBILITY.PASSWORD ? fields.password : null,

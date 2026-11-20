@@ -4,10 +4,12 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * @Author: Yemiao
@@ -18,13 +20,21 @@ import java.time.LocalDateTime;
 public class ContestDTO {
 
     /**
+     * 新增业务时绑定的正文图片 ID
+     * 未传或空列表表示无需绑定图片
+     */
+    private List<Long> fileIds;
+
+    /**
      * 比赛标题
      */
     @NotBlank(message = "比赛标题不能为空")
     @Size(min = 1, max = 100, message = "比赛标题长度必须在1-100个字符之间")
     private String title;
 
-    /** 公开封面图片地址；null 使用原有默认图。 */
+    /**
+     * 公开封面图片地址，为空时使用默认封面
+     */
     @Size(max = 512, message = "比赛封面地址不能超过512个字符")
     private String image;
     

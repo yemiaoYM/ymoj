@@ -152,6 +152,26 @@ services:
       retries: 8
     logging: *logging
 
+  silo:
+    image: docker.io/pgsty/silo:RELEASE.2026-11-12T00-00-00Z
+    restart: unless-stopped
+    command: [server, /data, --console-address, ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - silo-data:/data
+    networks: [front, data]
+    healthcheck:
+      test: [CMD, silo, healthcheck, ready]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *logging
+
   web:
     image: ${IMAGE_REPOSITORY:-ccr.ccs.tencentyun.com/ymoj/ymcloud}:web-4.1.0
     pull_policy: missing
@@ -179,7 +199,6 @@ services:
       SPRING_DATASOURCE_DRUID_MAX_ACTIVE: 10
       SPRING_DATASOURCE_DRUID_MAX_WAIT: 2000
       YMCLOUD_TOKEN_SECRET: ${TOKEN_SECRET:-ymcloud_test_login_secret_0123456789_abcdefghijklmnopqrstuvwxyz_0123456789}
-      YMCLOUD_FILE_BASE_DIR: /data/files
       MAIL_FROM: ${MAIL_FROM:-}
       MAIL_PASS: ${MAIL_PASS:-}
     depends_on:
@@ -187,7 +206,6 @@ services:
       redis: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
     volumes:
-      - web-data:/data/files
       - web-logs:/data/logs
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m,uid=10001,gid=10001
@@ -310,10 +328,10 @@ networks:
   judge: {driver: bridge, internal: true}
 
 volumes:
+  silo-data:
   mysql-data:
   redis-data:
   rabbitmq-data:
-  web-data:
   web-logs:
   worker-data:
   judge-files:

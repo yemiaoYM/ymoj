@@ -66,17 +66,15 @@ const loading = ref(false);
 const loaded = ref(false);
 const failed = ref(false);
 let requestedPage = 1;
-let generation = 0;
 let disposed = false;
 
 async function handleLoadAnnouncements(targetPage: number, scroll = false) {
-  const current = ++generation;
   requestedPage = targetPage;
   loading.value = true;
   failed.value = false;
   try {
     const response = await getAnnouncementTableList({ pageNo: targetPage });
-    if (disposed || current !== generation) {
+    if (disposed) {
       return;
     }
     const page = response.data.data;
@@ -94,13 +92,11 @@ async function handleLoadAnnouncements(targetPage: number, scroll = false) {
       sectionRef.value?.scrollIntoView({ block: 'start' });
     }
   } catch {
-    if (!disposed && current === generation) {
+    if (!disposed) {
       failed.value = true;
     }
   } finally {
-    if (!disposed && current === generation) {
-      loading.value = false;
-    }
+    loading.value = false;
   }
 }
 
@@ -117,7 +113,6 @@ function onRetry() {
 onMounted(() => handleLoadAnnouncements(1));
 onBeforeUnmount(() => {
   disposed = true;
-  generation++;
 });
 </script>
 

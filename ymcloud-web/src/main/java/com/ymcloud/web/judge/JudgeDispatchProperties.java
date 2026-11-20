@@ -1,6 +1,6 @@
 package com.ymcloud.web.judge;
 
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
+import com.ymcloud.common.constant.JudgeConstants;
 import jakarta.annotation.PostConstruct;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -44,7 +44,7 @@ public class JudgeDispatchProperties {
         }
         if (leaseDuration.compareTo(confirmTimeout.multipliedBy(2)) <= 0
                 || totalTimeout.compareTo(resultWait) < 0
-                || totalTimeout.compareTo(Duration.ofMillis(JudgeProtocol.MAX_TASK_DURATION_MILLIS)) > 0) {
+                || totalTimeout.compareTo(Duration.ofMillis(JudgeConstants.MAX_TASK_DURATION_MILLIS)) > 0) {
             throw new IllegalArgumentException("判题租约或总超时无效，总超时不得超过一小时");
         }
         if (confirmTimeout.compareTo(Duration.ofSeconds(60)) > 0

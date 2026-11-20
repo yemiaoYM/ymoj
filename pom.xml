@@ -45,7 +45,6 @@
         <mybatis-plus.version>3.5.10.1</mybatis-plus.version>
         <javax.mail.version>1.6.2</javax.mail.version>
         <aws.sdk.version>2.55.12</aws.sdk.version>
-        <aliyun.oss.version>3.18.4</aliyun.oss.version>
     </properties>
 
     <!--父工程只控制版本统一，子工程还需要自己引入-->
@@ -171,20 +170,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.8.1</version>
-                <executions>
-                    <execution>
-                        <id>test-agent-path</id>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>properties</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
         <pluginManagement>
             <plugins>
@@ -192,10 +177,6 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.3</version>
-                    <configuration>
-                        <!-- JDK 21+ 显式启动 Mockito agent，避免运行时动态 attach。 -->
-                        <argLine>-javaagent:"${org.mockito:mockito-core:jar}" -Dfile.encoding=UTF-8</argLine>
-                    </configuration>
                 </plugin>
                 <!-- 编译插件 -->
                 <plugin>
@@ -205,6 +186,9 @@
                     <configuration>
                         <release>${java.version}</release>
                         <encoding>${project.build.sourceEncoding}</encoding>
+                        <compilerArgs>
+                            <arg>-parameters</arg>
+                        </compilerArgs>
                     </configuration>
                 </plugin>
 

@@ -1,8 +1,8 @@
 package com.ymcloud.web.judge;
 
+import com.ymcloud.common.constant.RabbitMQConstants;
 import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
 import com.ymcloud.pojo.entity.JudgeDispatch;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.MessageDeliveryMode;
@@ -46,10 +46,10 @@ public class JudgeDispatchPublisher {
     @Autowired
     private JudgeDispatchProperties properties;
 
-    @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}")
+    @Value("${ymcloud.judge.exchange:" + RabbitMQConstants.JUDGE_EXCHANGE + "}")
     private String exchange;
 
-    @Value("${ymcloud.judge.task-routing-key:" + JudgeProtocol.TASK_ROUTE + "}")
+    @Value("${ymcloud.judge.task-routing-key:" + RabbitMQConstants.JUDGE_ROUTING_KEY + "}")
     private String routingKey;
 
     private boolean unavailable;
@@ -119,8 +119,8 @@ public class JudgeDispatchPublisher {
             Thread.currentThread().interrupt();
             retry(dispatch, lease, "发布线程被中断");
         } catch (IllegalArgumentException e) {
-            log.warn("持久判题任务格式无效，提交编号：{}，执行编号：{}，数据版本：{}",
-                    dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId());
+            log.warn("持久判题任务格式无效，提交编号：{}，执行编号：{}",
+                    dispatch.getSubmissionId(), dispatch.getExecutionId());
             results.failPublishing(dispatch.getSubmissionId(), dispatch.getExecutionId(), "持久评测任务格式无效");
         } catch (Exception e) {
             retry(dispatch, lease, e.getClass().getSimpleName());
@@ -161,7 +161,6 @@ public class JudgeDispatchPublisher {
                 || !Objects.equals(task.getSubmissionId(), dispatch.getSubmissionId())
                 || !Objects.equals(task.getStrategy(), dispatch.getStrategy())
                 || !Objects.equals(task.getProblemId(), dispatch.getProblemId())
-                || !Objects.equals(task.getTestDataVersionId(), dispatch.getTestDataVersionId())
                 || task.getDeadlineEpochMs() == null) {
             throw new IllegalArgumentException("持久任务与发布标识不一致");
         }
@@ -207,8 +206,8 @@ public class JudgeDispatchPublisher {
                 .set(JudgeDispatch::getLeaseToken, null)
                 .set(JudgeDispatch::getLeaseUntil, null)
                 .update();
-        log.info("判题任务发布已确认，提交编号：{}，执行编号：{}，数据版本：{}，发布次数：{}，恢复次数：{}",
-                dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId(),
+        log.info("判题任务发布已确认，提交编号：{}，执行编号：{}，发布次数：{}，恢复次数：{}",
+                dispatch.getSubmissionId(), dispatch.getExecutionId(),
                 dispatch.getPublishAttempts() + 1, dispatch.getRecoveryAttempts());
         if (!waiting) {
             log.debug("判题任务等待状态未更新，使用数据库当前状态继续恢复，提交编号：{}，执行编号：{}",
@@ -237,8 +236,8 @@ public class JudgeDispatchPublisher {
             results.failPublishing(dispatch.getSubmissionId(), dispatch.getExecutionId(), "任务发布失败，重试次数已用尽");
         }
         if (reset) {
-            log.warn("判题任务发布失败，提交编号：{}，执行编号：{}，数据版本：{}，发布次数：{}，原因：{}，下次尝试：{}",
-                    dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId(),
+            log.warn("判题任务发布失败，提交编号：{}，执行编号：{}，发布次数：{}，原因：{}，下次尝试：{}",
+                    dispatch.getSubmissionId(), dispatch.getExecutionId(),
                     dispatch.getPublishAttempts() + 1, reason, nextAttempt);
         }
     }
@@ -301,8 +300,8 @@ public class JudgeDispatchPublisher {
                     .set(JudgeDispatch::getLeaseUntil, null)
                     .update();
             if (recovered) {
-                log.warn("判题结果等待超时，准备恢复任务，提交编号：{}，执行编号：{}，数据版本：{}，恢复次数：{}",
-                        dispatch.getSubmissionId(), dispatch.getExecutionId(), dispatch.getTestDataVersionId(),
+                log.warn("判题结果等待超时，准备恢复任务，提交编号：{}，执行编号：{}，恢复次数：{}",
+                        dispatch.getSubmissionId(), dispatch.getExecutionId(),
                         dispatch.getRecoveryAttempts() + 1);
             }
         }

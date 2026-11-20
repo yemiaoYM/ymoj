@@ -202,13 +202,13 @@ export function resetUserPassword(id: number, password: string) {
 }
 
 /**
- * 上传当前用户确认裁剪后的头像
- * @param file 裁剪后的 PNG 图片
+ * 上传当前用户的头像
+ * @param file 不超过 1 MiB 的头像原图或裁剪结果
  * @returns 操作结果，不包含业务数据
  */
 export function uploadAvatar(file: Blob) {
   const data = new FormData();
-  data.append('file', file, 'avatar.png');
+  data.append('file', file, file instanceof File ? file.name : 'avatar.png');
   return request<ApiResult<void>>({
     url: '/user/upload-avatar',
     method: 'POST',

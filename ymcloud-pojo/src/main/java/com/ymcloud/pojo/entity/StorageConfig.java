@@ -2,7 +2,6 @@ package com.ymcloud.pojo.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
-import com.ymcloud.pojo.enums.StorageDriverType;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,7 +10,7 @@ import java.time.LocalDateTime;
 /**
  * @Author: Yemiao
  * @CreateTime: 2026-10-11
- * @Description: 持久化存储配置，仅保存凭据密文且不生成 toString
+ * @Description: 持久化存储配置，凭据仅用于创建存储客户端
  */
 @Getter
 @Setter
@@ -20,31 +19,19 @@ public class StorageConfig {
     /**
      * 存储配置唯一标识
      */
-    @TableId(type = IdType.INPUT)
-    private String id;
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
 
-    /**
-     * 管理端展示名称
-     */
-    private String name;
+    /** 客户端配置标识 */
+    private String configKey;
 
     /**
      * 是否为新上传使用的默认配置，数据库限制最多一条默认记录
      */
-    private Boolean isDefault;
+    private String status;
 
     /**
-     * 服务商描述，不参与驱动选择
-     */
-    private String provider;
-
-    /**
-     * 显式指定的访问协议
-     */
-    private StorageDriverType driverType;
-
-    /**
-     * 对象存储访问端点，本地驱动不使用
+     * 对象存储访问端点
      */
     private String endpoint;
 
@@ -53,50 +40,41 @@ public class StorageConfig {
      */
     private String region;
 
-    /**
-     * 公开业务文件所在桶，桶自身保持私有
-     */
-    private String publicBucket;
+    /** 对象存储桶 */
+    private String bucketName;
+
+    /** 对象键前缀 */
+    private String prefix;
+
+    /** 自定义访问域名 */
+    private String domain;
+
+    /** 是否使用 HTTPS，Y 或 N */
+    private String isHttps;
+
+    /** 桶访问策略，0 private、1 public、2 custom */
+    private String accessPolicy;
 
     /**
-     * 私有业务文件所在桶
+     * 存储服务的访问标识，不得对外返回
      */
-    private String privateBucket;
+    private String accessKey;
 
     /**
-     * S3 是否使用路径式桶寻址
+     * 存储服务的访问密钥，不得对外返回
      */
-    private Boolean pathStyle;
-
-    /**
-     * 认证加密后的访问标识，不得对外返回
-     */
-    private String encryptedAccessKey;
-
-    /**
-     * 认证加密后的访问密钥，不得对外返回
-     */
-    private String encryptedSecretKey;
+    private String secretKey;
 
     /**
      * 管理备注，可为空
      */
     private String remark;
 
-    /**
-     * 当前配置修订号
-     */
-    private Long revision;
+    /** 创建配置的用户 ID */
+    private Long createdBy;
 
-    /**
-     * 最近通过连接测试的修订号，未通过时为空
-     */
-    private Long testedRevision;
-
-    /**
-     * 最近通过连接测试的时间，未通过时为空
-     */
-    private LocalDateTime testedAt;
+    /** 最后修改配置的用户 ID */
+    private Long updatedBy;
 
     /**
      * 配置创建时间

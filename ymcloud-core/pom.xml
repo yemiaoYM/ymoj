@@ -30,12 +30,11 @@
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
-            <artifactId>url-connection-client</artifactId>
+            <artifactId>netty-nio-client</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.aliyun.oss</groupId>
-            <artifactId>aliyun-sdk-oss</artifactId>
-            <version>${aliyun.oss.version}</version>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3-transfer-manager</artifactId>
         </dependency>
         <!--ymcloud-common工具包-->
         <dependency>

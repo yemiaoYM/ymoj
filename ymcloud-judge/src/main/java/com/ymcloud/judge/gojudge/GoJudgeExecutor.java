@@ -3,10 +3,12 @@ package com.ymcloud.judge.gojudge;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ymcloud.judge.config.WorkerProperties;
 import com.ymcloud.judge.exception.CompileException;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
-import com.ymcloud.pojo.contract.judge.JudgeVerdict;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
+import com.ymcloud.pojo.bo.judge.SpjProgram;
+import com.ymcloud.pojo.enums.JudgeStatus;
 import jakarta.annotation.PostConstruct;
+import lombok.ToString;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
@@ -33,6 +35,31 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Component
 public class GoJudgeExecutor {
+
+    /**
+     * 校验器单次运行的墙钟上限，单位为毫秒
+     */
+    private static final long CHECKER_TIME_LIMIT_MILLIS = 2000;
+
+    /**
+     * 校验器单次运行的内存上限，单位为字节
+     */
+    private static final long CHECKER_MEMORY_LIMIT_BYTES = 256L * 1024 * 1024;
+
+    /**
+     * testlib 校验通过退出码
+     */
+    private static final int CHECKER_ACCEPTED = 0;
+
+    /**
+     * testlib 答案错误退出码
+     */
+    private static final int CHECKER_WRONG_ANSWER = 1;
+
+    /**
+     * testlib 格式错误退出码
+     */
+    private static final int CHECKER_PRESENTATION_ERROR = 2;
 
     private static final String OUTPUT_LIMITER = "/usr/local/bin/ymcloud-output-limit";
     private static final List<String> ENVIRONMENT = List.of(
@@ -100,7 +127,7 @@ public class GoJudgeExecutor {
      */
     public PreparedProgram compile(GoJudgeTaskSession session) throws IOException {
         JudgeTask task = session.task();
-        return compileSource(session, task.getLanguageConfig().getName(), task.getCode(), false);
+        return compileSource(session, task.getLanguage(), task.getCode(), false);
     }
 
     /**
@@ -214,7 +241,7 @@ public class GoJudgeExecutor {
         JudgeTask task = session.task();
         String inputId = session.upload(input, "stdin");
         try {
-            List<String> arguments = switch (program.language()) {
+            List<String> arguments = switch (program.getLanguage()) {
                 case "Java" -> List.of("/usr/bin/java", "-Xms16m", "-Xmx" + task.getMemoryLimit() + "k",
                         "-XX:+UseSerialGC", "-XX:ActiveProcessorCount=1", "-XX:+ExitOnOutOfMemoryError",
                         "-cp", "program.jar", "Main");
@@ -224,14 +251,14 @@ public class GoJudgeExecutor {
             Map<String, Object> command = command(arguments, task.getTimeLimit(),
                     Math.multiplyExact(task.getMemoryLimit(), 1024L));
             command.put("files", files(Map.of("fileId", inputId)));
-            command.put("copyIn", Map.of(program.artifact(), Map.of("fileId", program.fileId())));
+            command.put("copyIn", Map.of(program.getArtifact(), Map.of("fileId", program.getFileId())));
             JsonNode response = execute(session, command, "run");
             try {
                 ExecutionResult result = classify(response, task);
-                String preview = result.stdoutFileId() == null || task.getSpj() != null
-                        ? "" : readOutput(session, result.stdoutFileId(), 301);
-                return new ExecutionResult(result.status(), preview, result.errorMessage(), result.timeMillis(),
-                        result.memoryKiB(), result.stdoutFileId());
+                String preview = result.getStdoutFileId() == null || task.getSpj() != null
+                        ? "" : readOutput(session, result.getStdoutFileId(), 301);
+                return new ExecutionResult(result.getStatus(), preview, result.getErrorMessage(), result.getTimeMillis(),
+                        result.getMemoryKiB(), result.getStdoutFileId());
             } finally {
                 releaseOutput(session, response, "stderr");
             }
@@ -250,7 +277,7 @@ public class GoJudgeExecutor {
      * @return 校验器协议判定，运行故障为系统错误
      * @throws IOException 文件传输或沙箱协议失败
      */
-    public JudgeVerdict check(GoJudgeTaskSession session, PreparedProgram checker, InputStream input,
+    public JudgeStatus check(GoJudgeTaskSession session, PreparedProgram checker, InputStream input,
                               InputStream answer, String outputId) throws IOException {
         String inputId = null;
         String answerId = null;
@@ -259,9 +286,9 @@ public class GoJudgeExecutor {
             answerId = session.upload(answer, "answer.txt");
             Map<String, Object> command = command(
                     List.of("./checker", "input.txt", "output.txt", "answer.txt"),
-                    SpjProgram.TIME_LIMIT_MILLIS, SpjProgram.MEMORY_LIMIT_BYTES);
+                    CHECKER_TIME_LIMIT_MILLIS, CHECKER_MEMORY_LIMIT_BYTES);
             command.put("copyIn", Map.of(
-                    "checker", Map.of("fileId", checker.fileId()),
+                    "checker", Map.of("fileId", checker.getFileId()),
                     "input.txt", Map.of("fileId", inputId),
                     "output.txt", Map.of("fileId", outputId),
                     "answer.txt", Map.of("fileId", answerId)));
@@ -288,24 +315,24 @@ public class GoJudgeExecutor {
      * @return AC、WA、PE 或 SE
      * @throws IOException 沙箱响应结构无效
      */
-    JudgeVerdict checkerVerdict(JsonNode response) throws IOException {
+    JudgeStatus checkerVerdict(JsonNode response) throws IOException {
         String state = status(response);
         if ((!"Accepted".equals(state) && !"Nonzero Exit Status".equals(state))
-                || nonNegative(response, "runTime") > TimeUnit.MILLISECONDS.toNanos(SpjProgram.TIME_LIMIT_MILLIS)
-                || nonNegative(response, "memory") > SpjProgram.MEMORY_LIMIT_BYTES) {
-            return JudgeVerdict.STATUS_SYSTEM_ERROR;
+                || nonNegative(response, "runTime") > TimeUnit.MILLISECONDS.toNanos(CHECKER_TIME_LIMIT_MILLIS)
+                || nonNegative(response, "memory") > CHECKER_MEMORY_LIMIT_BYTES) {
+            return JudgeStatus.STATUS_SYSTEM_ERROR;
         }
         long exit = exitStatus(response);
-        if (exit == SpjProgram.ACCEPTED) {
-            return JudgeVerdict.STATUS_ACCEPTED;
+        if (exit == CHECKER_ACCEPTED) {
+            return JudgeStatus.STATUS_ACCEPTED;
         }
-        if (exit == SpjProgram.WRONG_ANSWER) {
-            return JudgeVerdict.STATUS_WRONG_ANSWER;
+        if (exit == CHECKER_WRONG_ANSWER) {
+            return JudgeStatus.STATUS_WRONG_ANSWER;
         }
-        if (exit == SpjProgram.PRESENTATION_ERROR) {
-            return JudgeVerdict.STATUS_PRESENTATION_ERROR;
+        if (exit == CHECKER_PRESENTATION_ERROR) {
+            return JudgeStatus.STATUS_PRESENTATION_ERROR;
         }
-        return JudgeVerdict.STATUS_SYSTEM_ERROR;
+        return JudgeStatus.STATUS_SYSTEM_ERROR;
     }
 
     /**
@@ -374,8 +401,8 @@ public class GoJudgeExecutor {
         long cpu = nonNegative(response, "time");
         long wall = nonNegative(response, "runTime");
         long memory = nonNegative(response, "memory");
-        log.debug("沙箱阶段完成 execution={} version={} stage={} status={} cpuMs={} wallMs={} memoryKiB={}",
-                session.task().getExecutionId(), session.task().getTestDataVersionId(), stage,
+        log.debug("沙箱阶段完成 execution={} stage={} status={} cpuMs={} wallMs={} memoryKiB={}",
+                session.task().getExecutionId(), stage,
                 status(response), millis(cpu), millis(wall), kibibytes(memory));
         return response;
     }
@@ -392,29 +419,29 @@ public class GoJudgeExecutor {
         String status = status(response);
         long wall = nonNegative(response, "runTime");
         long memory = nonNegative(response, "memory");
-        JudgeVerdict verdict = switch (status) {
-            case "Accepted" -> exitStatus(response) == 0 ? JudgeVerdict.STATUS_ACCEPTED : JudgeVerdict.STATUS_RUNTIME_ERROR;
-            case "Time Limit Exceeded" -> JudgeVerdict.STATUS_TIME_LIMIT_EXCEEDED;
-            case "Memory Limit Exceeded" -> JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED;
-            case "Output Limit Exceeded", "Nonzero Exit Status", "Signalled" -> JudgeVerdict.STATUS_RUNTIME_ERROR;
+        JudgeStatus verdict = switch (status) {
+            case "Accepted" -> exitStatus(response) == 0 ? JudgeStatus.STATUS_ACCEPTED : JudgeStatus.STATUS_RUNTIME_ERROR;
+            case "Time Limit Exceeded" -> JudgeStatus.STATUS_TIME_LIMIT_EXCEEDED;
+            case "Memory Limit Exceeded" -> JudgeStatus.STATUS_MEMORY_LIMIT_EXCEEDED;
+            case "Output Limit Exceeded", "Nonzero Exit Status", "Signalled" -> JudgeStatus.STATUS_RUNTIME_ERROR;
             case "File Error" -> {
                 if (fileSizeExceeded(response)) {
-                    yield JudgeVerdict.STATUS_RUNTIME_ERROR;
+                    yield JudgeStatus.STATUS_RUNTIME_ERROR;
                 }
                 throw new IOException("运行文件处理失败");
             }
             default -> throw new IOException("go-judge 返回未知或内部错误状态");
         };
-        if (verdict == JudgeVerdict.STATUS_ACCEPTED) {
+        if (verdict == JudgeStatus.STATUS_ACCEPTED) {
             if (wall > TimeUnit.MILLISECONDS.toNanos(task.getTimeLimit())) {
-                verdict = JudgeVerdict.STATUS_TIME_LIMIT_EXCEEDED;
+                verdict = JudgeStatus.STATUS_TIME_LIMIT_EXCEEDED;
             } else if (memory > Math.multiplyExact(task.getMemoryLimit(), 1024L)) {
-                verdict = JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED;
+                verdict = JudgeStatus.STATUS_MEMORY_LIMIT_EXCEEDED;
             }
         }
         String stdoutFileId = cachedOutput(response, "stdout");
         // stdout 和 stderr 的共享预算由可信启动器按原始字节计数
-        String error = verdict == JudgeVerdict.STATUS_RUNTIME_ERROR ? "程序运行异常（" + status + "）" : null;
+        String error = verdict == JudgeStatus.STATUS_RUNTIME_ERROR ? "程序运行异常（" + status + "）" : null;
         return new ExecutionResult(verdict, "", error, millis(wall), kibibytes(memory), stdoutFileId);
     }
 
@@ -587,8 +614,66 @@ public class GoJudgeExecutor {
         return bytes / 1024L + (bytes % 1024L == 0 ? 0 : 1);
     }
 
-    public record PreparedProgram(String language, String artifact, String fileId) {}
+    /**
+     * 供当前任务复用的工具链与编译产物
+     */
+    @Value
+    public static class PreparedProgram {
 
-    public record ExecutionResult(JudgeVerdict status, String stdout, String errorMessage,
-                                  long timeMillis, long memoryKiB, String stdoutFileId) {}
+        /**
+         * 本站工具链语言名
+         */
+        String language;
+
+        /**
+         * 沙箱内的编译产物名称
+         */
+        String artifact;
+
+        /**
+         * 编译产物的沙箱文件标识
+         */
+        @ToString.Exclude
+        String fileId;
+    }
+
+    /**
+     * 单次运行的判定、资源用量及输出引用
+     */
+    @Value
+    public static class ExecutionResult {
+
+        /**
+         * 程序运行状态
+         */
+        JudgeStatus status;
+
+        /**
+         * 供展示的标准输出预览
+         */
+        @ToString.Exclude
+        String stdout;
+
+        /**
+         * 运行异常的有界诊断
+         */
+        @ToString.Exclude
+        String errorMessage;
+
+        /**
+         * 程序运行耗时，单位为毫秒
+         */
+        long timeMillis;
+
+        /**
+         * 内存用量，单位为 KiB
+         */
+        long memoryKiB;
+
+        /**
+         * 用于完整比对的沙箱输出文件标识
+         */
+        @ToString.Exclude
+        String stdoutFileId;
+    }
 }

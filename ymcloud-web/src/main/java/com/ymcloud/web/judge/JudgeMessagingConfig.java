@@ -1,7 +1,7 @@
 package com.ymcloud.web.judge;
 
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
-import com.ymcloud.pojo.contract.judge.SpjProgram;
+import com.ymcloud.common.constant.JudgeConstants;
+import com.ymcloud.common.constant.RabbitMQConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Binding;
@@ -34,7 +34,8 @@ public class JudgeMessagingConfig {
      * @return 持久 Topic 交换机
      */
     @Bean("judgeWorkerExchange")
-    public TopicExchange exchange(@Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}") String name) {
+    public TopicExchange exchange(
+            @Value("${ymcloud.judge.exchange:" + RabbitMQConstants.JUDGE_EXCHANGE + "}") String name) {
         return new TopicExchange(name, true, false);
     }
 
@@ -45,11 +46,12 @@ public class JudgeMessagingConfig {
      * @return 持久任务队列
      */
     @Bean("judgeTaskQueue")
-    public Queue taskQueue(@Value("${ymcloud.judge.task-queue:" + JudgeProtocol.TASK_QUEUE + "}") String name,
-                           @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}") String exchange) {
+    public Queue taskQueue(
+            @Value("${ymcloud.judge.task-queue:" + RabbitMQConstants.JUDGE_QUEUE + "}") String name,
+            @Value("${ymcloud.judge.exchange:" + RabbitMQConstants.JUDGE_EXCHANGE + "}") String exchange) {
         return QueueBuilder.durable(name)
                 .deadLetterExchange(exchange)
-                .deadLetterRoutingKey(JudgeProtocol.DEAD_ROUTE)
+                .deadLetterRoutingKey(RabbitMQConstants.JUDGE_DEAD_ROUTING_KEY)
                 .build();
     }
 
@@ -59,7 +61,8 @@ public class JudgeMessagingConfig {
      * @return 持久结果队列
      */
     @Bean("judgeResultQueue")
-    public Queue resultQueue(@Value("${ymcloud.judge.result-queue:" + JudgeProtocol.RESULT_QUEUE + "}") String name) {
+    public Queue resultQueue(
+            @Value("${ymcloud.judge.result-queue:" + RabbitMQConstants.JUDGE_RESULT_QUEUE + "}") String name) {
         return QueueBuilder.durable(name).build();
     }
 
@@ -71,9 +74,10 @@ public class JudgeMessagingConfig {
      * @return 具有 TTL 的重试队列
      */
     @Bean("judgeTaskRetryQueue")
-    public Queue retryQueue(@Value("${ymcloud.judge.task-queue:" + JudgeProtocol.TASK_QUEUE + "}") String name,
-                            @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}") String exchange,
-                            @Value("${ymcloud.judge.task-routing-key:" + JudgeProtocol.TASK_ROUTE + "}") String route) {
+    public Queue retryQueue(
+            @Value("${ymcloud.judge.task-queue:" + RabbitMQConstants.JUDGE_QUEUE + "}") String name,
+            @Value("${ymcloud.judge.exchange:" + RabbitMQConstants.JUDGE_EXCHANGE + "}") String exchange,
+            @Value("${ymcloud.judge.task-routing-key:" + RabbitMQConstants.JUDGE_ROUTING_KEY + "}") String route) {
         return QueueBuilder.durable(name + ".retry")
                 .ttl(3000)
                 .deadLetterExchange(exchange)
@@ -87,7 +91,8 @@ public class JudgeMessagingConfig {
      * @return 持久死信队列
      */
     @Bean("judgeTaskDeadQueue")
-    public Queue deadQueue(@Value("${ymcloud.judge.task-queue:" + JudgeProtocol.TASK_QUEUE + "}") String name) {
+    public Queue deadQueue(
+            @Value("${ymcloud.judge.task-queue:" + RabbitMQConstants.JUDGE_QUEUE + "}") String name) {
         return QueueBuilder.durable(name + ".dead").build();
     }
 
@@ -99,10 +104,10 @@ public class JudgeMessagingConfig {
      * @return 任务绑定
      */
     @Bean("judgeTaskBinding")
-    public Binding taskBinding(@Qualifier("judgeTaskQueue") Queue queue,
-                                @Qualifier("judgeWorkerExchange") TopicExchange exchange,
-                                @Value("${ymcloud.judge.task-routing-key:" + JudgeProtocol.TASK_ROUTE + "}")
-                                String route) {
+    public Binding taskBinding(
+            @Qualifier("judgeTaskQueue") Queue queue,
+            @Qualifier("judgeWorkerExchange") TopicExchange exchange,
+            @Value("${ymcloud.judge.task-routing-key:" + RabbitMQConstants.JUDGE_ROUTING_KEY + "}") String route) {
         return BindingBuilder.bind(queue).to(exchange).with(route);
     }
 
@@ -114,10 +119,10 @@ public class JudgeMessagingConfig {
      * @return 结果绑定
      */
     @Bean("judgeResultBinding")
-    public Binding resultBinding(@Qualifier("judgeResultQueue") Queue queue,
-                                  @Qualifier("judgeWorkerExchange") TopicExchange exchange,
-                                  @Value("${ymcloud.judge.result-routing-key:" + JudgeProtocol.RESULT_ROUTE + "}")
-                                  String route) {
+    public Binding resultBinding(
+            @Qualifier("judgeResultQueue") Queue queue,
+            @Qualifier("judgeWorkerExchange") TopicExchange exchange,
+            @Value("${ymcloud.judge.result-routing-key:" + RabbitMQConstants.JUDGE_RESULT_ROUTING_KEY + "}") String route) {
         return BindingBuilder.bind(queue).to(exchange).with(route);
     }
 
@@ -130,7 +135,7 @@ public class JudgeMessagingConfig {
     @Bean("judgeTaskRetryBinding")
     public Binding retryBinding(@Qualifier("judgeTaskRetryQueue") Queue queue,
                                  @Qualifier("judgeWorkerExchange") TopicExchange exchange) {
-        return BindingBuilder.bind(queue).to(exchange).with(JudgeProtocol.RETRY_ROUTE);
+        return BindingBuilder.bind(queue).to(exchange).with(RabbitMQConstants.JUDGE_RETRY_ROUTING_KEY);
     }
 
     /**
@@ -142,7 +147,7 @@ public class JudgeMessagingConfig {
     @Bean("judgeTaskDeadBinding")
     public Binding deadBinding(@Qualifier("judgeTaskDeadQueue") Queue queue,
                                 @Qualifier("judgeWorkerExchange") TopicExchange exchange) {
-        return BindingBuilder.bind(queue).to(exchange).with(JudgeProtocol.DEAD_ROUTE);
+        return BindingBuilder.bind(queue).to(exchange).with(RabbitMQConstants.JUDGE_DEAD_ROUTING_KEY);
     }
 
     /**
@@ -156,7 +161,7 @@ public class JudgeMessagingConfig {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
         template.setMessageConverter(new SimpleMessageConverter());
         template.setMandatory(true);
-        template.setReplyTimeout(SpjProgram.COMPILE_TIMEOUT_MILLIS);
+        template.setReplyTimeout(JudgeConstants.SPJ_COMPILE_TIMEOUT_MILLIS);
         return template;
     }
 

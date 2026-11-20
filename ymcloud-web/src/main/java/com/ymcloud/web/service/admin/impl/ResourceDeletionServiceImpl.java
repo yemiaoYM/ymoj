@@ -12,7 +12,7 @@ import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.ProblemEntityService;
 import com.ymcloud.core.web.dao.ProblemTagEntityService;
-import com.ymcloud.core.web.dao.TestDataVersionEntityService;
+import com.ymcloud.core.web.dao.ProblemCaseEntityService;
 import com.ymcloud.pojo.entity.Contest;
 import com.ymcloud.pojo.entity.ContestProblem;
 import com.ymcloud.pojo.entity.ContestUser;
@@ -21,7 +21,6 @@ import com.ymcloud.pojo.entity.JudgeCase;
 import com.ymcloud.pojo.entity.JudgeDispatch;
 import com.ymcloud.pojo.entity.Problem;
 import com.ymcloud.pojo.entity.ProblemTag;
-import com.ymcloud.pojo.entity.TestDataVersion;
 import com.ymcloud.pojo.enums.JudgeStatus;
 import com.ymcloud.web.judge.JudgeDispatchState;
 import com.ymcloud.web.judge.JudgeStatusCache;
@@ -79,7 +78,7 @@ public class ResourceDeletionServiceImpl implements ResourceDeletionService {
     private JudgeCaseEntityService cases;
 
     @Autowired
-    private TestDataVersionEntityService versions;
+    private ProblemCaseEntityService problemCases;
 
     @Autowired
     private JudgeStatusCache cache;
@@ -120,9 +119,7 @@ public class ResourceDeletionServiceImpl implements ResourceDeletionService {
                 .last("FOR UPDATE")
                 .list();
         deleteSubmissions(tasks, submissions);
-        versions.lambdaUpdate()
-                .in(TestDataVersion::getProblemId, ids)
-                .remove();
+        problemCases.removeByIds(ids);
         problemTags.lambdaUpdate()
                 .in(ProblemTag::getProblemId, ids)
                 .remove();

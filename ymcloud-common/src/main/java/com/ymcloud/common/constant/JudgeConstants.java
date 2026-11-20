@@ -1,13 +1,31 @@
 package com.ymcloud.common.constant;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 /**
- * @PackageName: com.ymcloud.common.constant
- * @ClassName: JudgeConstants
  * @Author: Yemiao
  * @CreateTime: 2025-07-26  01:17
  * @Description: 评测常用变量
  */
-public class JudgeConstants {
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class JudgeConstants {
+
+    /**
+     * Worker 调用内部数据接口的身份请求头
+     */
+    public static final String SERVICE_TOKEN_HEADER = "X-Judge-Worker-Token";
+
+    /**
+     * 从提交到截止的最大任务时长，包含排队、编译和全部测试点，单位为毫秒
+     */
+    public static final long MAX_TASK_DURATION_MILLIS = 60 * 60 * 1000L;
+
+    /**
+     * SPJ 编译预检的消息有效期和调用方等待时限，单位为毫秒
+     */
+    public static final long SPJ_COMPILE_TIMEOUT_MILLIS = 45000;
+
     /**
      * 普通练习提交不属于任何比赛
      */

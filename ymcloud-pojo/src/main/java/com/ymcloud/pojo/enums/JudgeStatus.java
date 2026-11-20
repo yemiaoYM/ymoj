@@ -5,8 +5,6 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
 /**
- * @PackageName: com.ymcloud.pojo.enums
- * @ClassName: JudgeStatus
  * @Author: Yemiao
  * @CreateTime: 2025-07-25  17:29
  * @Description: 评测状态
@@ -83,14 +81,54 @@ public enum JudgeStatus {
      */
     STATUS_NULL(15, "No Status");
 
+    /**
+     * 数据库和判题消息使用的稳定状态编号
+     */
     @EnumValue
     private final int code;
+
+    /**
+     * 公开 HTTP 响应使用的英文状态
+     */
     @JsonValue
     private final String status;
 
+    /**
+     * 关联显式状态编号与英文名称
+     * @param code 持久化和消息使用的编号
+     * @param status 公开响应中的状态名称
+     */
     JudgeStatus(int code, String status) {
         this.code = code;
         this.status = status;
     }
 
+    /**
+     * 根据稳定编号读取判题状态
+     * @param code 判题状态编号
+     * @return 对应的判题状态
+     * @throws IllegalArgumentException 未定义的状态编号
+     */
+    public static JudgeStatus fromCode(int code) {
+        for (JudgeStatus value : values()) {
+            if (value.code == code) {
+                return value;
+            }
+        }
+        throw new IllegalArgumentException("未知的判题状态编号");
+    }
+
+    /**
+     * 判断本次执行是否可用该状态结束
+     * @return 当前状态能否作为终态或测试点结果
+     */
+    public boolean isTerminal() {
+        return switch (this) {
+            case STATUS_CANCELLED, STATUS_PRESENTATION_ERROR, STATUS_COMPILE_ERROR, STATUS_WRONG_ANSWER,
+                    STATUS_ACCEPTED, STATUS_TIME_LIMIT_EXCEEDED, STATUS_MEMORY_LIMIT_EXCEEDED,
+                    STATUS_RUNTIME_ERROR, STATUS_SYSTEM_ERROR, STATUS_PARTIAL_ACCEPTED -> true;
+            case STATUS_NOT_SUBMITTED, STATUS_PENDING, STATUS_COMPILING, STATUS_JUDGING,
+                    STATUS_SUBMITTING, STATUS_SUBMITTED_FAILED, STATUS_NULL -> false;
+        };
+    }
 }

@@ -15,7 +15,7 @@
             plain
             type="primary"
             :icon="Plus"
-            :disabled="structureLocked || loading || contestProblemList.length >= 15"
+            :disabled="structureLocked || loading || buttonLoading || contestProblemList.length >= 15"
             :loading="problemSearchLoading"
             @click="handleAddProblem"
           >
@@ -26,7 +26,7 @@
             plain
             type="primary"
             :icon="Sort"
-            :disabled="structureLocked || loading || contestProblemList.length < 2"
+            :disabled="structureLocked || loading || buttonLoading || contestProblemList.length < 2"
             @click="onOpenOrder"
           >调整顺序</el-button>
           <el-button
@@ -34,7 +34,7 @@
             plain
             type="danger"
             :icon="Delete"
-            :disabled="structureLocked || contestProblemIds.length === 0 || removeAction.pending.value"
+            :disabled="structureLocked || multiple || buttonLoading"
             @click="handleDeleteProblem()"
           >
             移除选中题目
@@ -92,7 +92,7 @@
                   size="small"
                   text
                   :icon="Delete"
-                  :disabled="structureLocked || removeAction.pending.value"
+                  :disabled="structureLocked || buttonLoading"
                   @click="handleDeleteProblem(scope.row)"
                 >
                   移除
@@ -111,8 +111,8 @@
       top="4vh"
       v-model="addProblemDialogVisible"
       :close-on-click-modal="false"
-      :close-on-press-escape="!addAction.pending.value"
-      :show-close="!addAction.pending.value"
+      :close-on-press-escape="!buttonLoading"
+      :show-close="!buttonLoading"
     >
       <x-flex vertical :size="16">
         <x-flex align="center" :size="12">
@@ -202,12 +202,12 @@
             @update:current-page="searchProblems"
           />
           <x-flex :size="10">
-            <el-button :disabled="addAction.pending.value" @click="addProblemDialogVisible = false">取消</el-button>
+            <el-button :disabled="buttonLoading" @click="addProblemDialogVisible = false">取消</el-button>
             <el-button
               v-permission="['contest:problem:add']"
               type="primary"
               :disabled="problemIds.length === 0 || selectedProblems.length > remainingSlots"
-              :loading="addAction.pending.value"
+              :loading="buttonLoading"
               @click="confirmAddProblems"
             >添加</el-button>
           </x-flex>
@@ -220,8 +220,8 @@
       width="min(560px, calc(100vw - 32px))"
       v-model="orderDialogVisible"
       :close-on-click-modal="false"
-      :close-on-press-escape="!orderAction.pending.value"
-      :show-close="!orderAction.pending.value"
+      :close-on-press-escape="!buttonLoading"
+      :show-close="!buttonLoading"
     >
       <el-text type="info">保存后按当前顺序分配 A、B、C…展示 ID</el-text>
       <el-scrollbar class="order-list" max-height="55vh">
@@ -237,20 +237,20 @@
           <el-button
             aria-label="上移"
             :icon="ArrowUp"
-            :disabled="index === 0 || orderAction.pending.value"
+            :disabled="index === 0 || buttonLoading"
             @click="onMoveProblem(index, -1)"
           />
           <el-button
             aria-label="下移"
             :icon="ArrowDown"
-            :disabled="index === orderedProblems.length - 1 || orderAction.pending.value"
+            :disabled="index === orderedProblems.length - 1 || buttonLoading"
             @click="onMoveProblem(index, 1)"
           />
         </x-flex>
       </el-scrollbar>
       <template #footer>
-        <el-button :disabled="orderAction.pending.value" @click="orderDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="orderAction.pending.value" @click="onSaveOrder">保存</el-button>
+        <el-button :disabled="buttonLoading" @click="orderDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="buttonLoading" @click="onSaveOrder">保存</el-button>
       </template>
     </el-dialog>
 
@@ -260,8 +260,8 @@
       width="min(520px, calc(100vw - 32px))"
       v-model="editProblemDialogVisible"
       :close-on-click-modal="false"
-      :close-on-press-escape="!editAction.pending.value"
-      :show-close="!editAction.pending.value"
+      :close-on-press-escape="!buttonLoading"
+      :show-close="!buttonLoading"
     >
       <el-form ref="editFormRef" label-width="80px" :model="editingProblem" :rules="editProblemRules">
         <el-form-item label="题目标题" prop="displayTitle">
@@ -277,11 +277,11 @@
 
       <template #footer>
         <span class="dialog-footer">
-          <el-button :disabled="editAction.pending.value" @click="editProblemDialogVisible = false">取消</el-button>
+          <el-button :disabled="buttonLoading" @click="editProblemDialogVisible = false">取消</el-button>
           <el-button
             v-permission="['contest:problem:edit']"
             type="primary"
-            :loading="editAction.pending.value"
+            :loading="buttonLoading"
             @click="confirmEditProblem"
           >保存</el-button>
         </span>
@@ -292,9 +292,12 @@
 
 <script setup lang="ts">
 //import
+import modal from '@/plugins/modal';
+import { useTableSelection } from '@/hooks/table/useTableSelection';
+import { useLoading } from '@/hooks/async/useLoading';
 import { PROBLEM_DIFFICULTIES } from '@/constants/problem';
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { computed, ref, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import type { FormInstance, FormRules } from 'element-plus';
 import type { AdminContestProblemVO, ContestProblemPageQuery } from '@/types/contest';
 import type { AdminProblemVO } from '@/types/problem';
@@ -309,15 +312,15 @@ import {
 } from '@/api/contest';
 import { Plus, Edit, Delete, Sort, ArrowUp, ArrowDown, Search } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
-import { useAsyncChange } from '@/hooks/useAsyncChange';
+import { useAsyncChange } from '@/hooks/async/useAsyncChange';
 import { Balloon } from '@vicons/ionicons5';
 
 //data
 const route = useRoute();
 const contestId = ref<number>(0);
 const contestProblemList = ref<AdminContestProblemVO[]>([]);
-const contestProblemIds = ref<number[]>([]);
-const loading = ref<boolean>(false);
+const { ids: contestProblemIds, multiple, handleSelectionChange } = useTableSelection((row: AdminContestProblemVO) => row.id);
+const { loading, withLoading } = useLoading();
 const structureLocked = ref(true);
 //添加题目相关
 const addProblemDialogVisible = ref<boolean>(false);
@@ -325,15 +328,9 @@ const availableProblems = ref<AdminProblemVO[]>([]);
 const selectedProblems = ref<AdminProblemVO[]>([]);
 const problemIds = computed(() => selectedProblems.value.map(problem => problem.id));
 const remainingSlots = computed(() => Math.max(0, 15 - contestProblemList.value.length));
-const addAction = useAsyncChange();
-const orderAction = useAsyncChange();
-const removeAction = useAsyncChange();
+const { pending: buttonLoading, beforeChange: runAction } = useAsyncChange();
 const orderDialogVisible = ref(false);
 const orderedProblems = ref<AdminContestProblemVO[]>([]);
-let searchGeneration = 0;
-onBeforeUnmount(() => {
-  searchGeneration++;
-});
 const problemSearchLoading = ref<boolean>(false);
 const problemSearchTotal = ref<number>(0);
 //编辑题目相关
@@ -344,7 +341,6 @@ const editingProblem = ref<Pick<AdminContestProblemVO, 'id' | 'displayTitle'> & 
   color: '',
 });
 const editFormRef = ref<FormInstance>();
-const editAction = useAsyncChange();
 
 //题目搜索参数
 const problemSearchParams = ref<ContestProblemPageQuery>({
@@ -370,26 +366,24 @@ onMounted(() => {
   //获取比赛ID
   contestId.value = Number(route.params.id);
   if (contestId.value) {
-    handleQuery();
+    getList();
   }
 });
 //methods
 //查询比赛题目列表
-const handleQuery = () => {
-  loading.value = true;
-  Promise.all([getAdminContestProblems(contestId.value), getAdminContestById(contestId.value)]).then(([res, info]) => {
-    contestProblemList.value = res.data.data;
-    structureLocked.value = info.data.data.structureLocked;
-  }).catch(e => {
-    console.log(e);
-  }).finally(() => {
-    loading.value = false;
-  });
-};
-//选择比赛题目记录
-const handleSelectionChange = (selection: AdminContestProblemVO[]) => {
-  contestProblemIds.value = selection.map(item => item.id);
-};
+const getList = () => withLoading(async () => {
+  try {
+    const [problems, contest] = await Promise.all([
+      getAdminContestProblems(contestId.value),
+      getAdminContestById(contestId.value),
+    ]);
+    contestProblemList.value = problems.data.data;
+    structureLocked.value = contest.data.data.structureLocked;
+  } catch {
+    // 请求层已提示查询失败，保留当前列表
+    return;
+  }
+});
 //添加题目
 const handleAddProblem = async () => {
   const loaded = await searchProblems(1);
@@ -400,13 +394,9 @@ const handleAddProblem = async () => {
 };
 //搜索可用题目
 const searchProblems = async (pageNo = problemSearchParams.value.pageNo) => {
-  const generation = ++searchGeneration;
   problemSearchLoading.value = true;
   try {
     const res = await getAvailableProblemsForContest(contestId.value, { ...problemSearchParams.value, pageNo });
-    if (generation !== searchGeneration) {
-      return false;
-    }
     availableProblems.value = res.data.data.records;
     problemSearchTotal.value = res.data.data.total;
     problemSearchParams.value.pageNo = pageNo;
@@ -414,9 +404,7 @@ const searchProblems = async (pageNo = problemSearchParams.value.pageNo) => {
   } catch {
     return false;
   } finally {
-    if (generation === searchGeneration) {
-      problemSearchLoading.value = false;
-    }
+    problemSearchLoading.value = false;
   }
 };
 const onSelectProblem = (problem: AdminProblemVO, selected: boolean | string | number) => {
@@ -427,13 +415,13 @@ const onSelectProblem = (problem: AdminProblemVO, selected: boolean | string | n
   }
 };
 const confirmAddProblems = async () => {
-  const saved = await addAction.beforeChange(async () => {
+  const saved = await runAction(async () => {
     await addProblemsToContest(contestId.value, problemIds.value);
   });
   if (saved) {
     addProblemDialogVisible.value = false;
     selectedProblems.value = [];
-    handleQuery();
+    getList();
   }
 };
 const onOpenOrder = () => {
@@ -445,7 +433,7 @@ const onMoveProblem = (index: number, offset: number) => {
   orderedProblems.value.splice(index + offset, 0, ...movedProblems);
 };
 const onSaveOrder = async () => {
-  const saved = await orderAction.beforeChange(async () => {
+  const saved = await runAction(async () => {
     await reorderContestProblems(
       contestId.value,
       orderedProblems.value.map(item => item.id)
@@ -453,7 +441,7 @@ const onSaveOrder = async () => {
   });
   if (saved) {
     orderDialogVisible.value = false;
-    handleQuery();
+    getList();
   }
 };
 //编辑题目
@@ -471,7 +459,7 @@ const confirmEditProblem = async () => {
   if (!form) {
     return;
   }
-  const saved = await editAction.beforeChange(async () => {
+  const saved = await runAction(async () => {
     await form.validate();
     const response = await updateContestProblem(
       contestId.value,
@@ -483,27 +471,22 @@ const confirmEditProblem = async () => {
   });
   if (saved) {
     editProblemDialogVisible.value = false;
-    handleQuery();
+    getList();
   }
 };
 //删除题目
 const handleDeleteProblem = async (row?: AdminContestProblemVO) => {
   const ids = row ? [row.id] : contestProblemIds.value;
-  const saved = await removeAction.beforeChange(async () => {
-    await ElMessageBox.confirm(
+  const saved = await runAction(async () => {
+    await modal.confirm(
       `确认将题目 "${ids}" 从比赛中移除吗？`,
       '移除确认',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
     );
     const res = await removeContestProblems(contestId.value, ids);
     ElMessage.success(res.data.msg);
   });
   if (saved) {
-    handleQuery();
+    getList();
   }
 };
 </script>

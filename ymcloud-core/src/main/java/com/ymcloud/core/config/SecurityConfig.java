@@ -22,8 +22,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * @PackageName: com.ymcloud.core.config
- * @ClassName: SecurityConfig
  * @Author: Yemiao
  * @CreateTime: 2025-07-18  21:48
  * @Description: SpringSecurity配置类
@@ -85,7 +83,7 @@ public class SecurityConfig {
         http.authorizeHttpRequests(request->{
            request.requestMatchers("/login","/register","/captchaImage","/forget-code","/forget-password").permitAll()
                    .requestMatchers("/public/**").permitAll()
-                   .requestMatchers("/files/public/**").permitAll()
+                   .requestMatchers("/files/**").permitAll()
                    .requestMatchers("/admin/**").access((authentication, context) ->
                            new AuthorizationDecision(permissionService.hasPermi(authentication.get(), "admin:access")))
                    // 除上面外的所有请求全部需要鉴权认证

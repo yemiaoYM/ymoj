@@ -6,10 +6,9 @@ import com.ymcloud.core.web.dao.JudgeDispatchEntityService;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
-import com.ymcloud.pojo.contract.judge.JudgeResult;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
-import com.ymcloud.pojo.contract.judge.JudgeVerdict;
-import com.ymcloud.pojo.contract.judge.TestCaseResult;
+import com.ymcloud.pojo.bo.judge.JudgeCaseResult;
+import com.ymcloud.pojo.bo.judge.JudgeResult;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.JudgeCase;
 import com.ymcloud.pojo.entity.JudgeDispatch;
@@ -39,12 +38,6 @@ import java.util.Set;
 @Service
 public class JudgeResultService {
 
-    private static final Set<JudgeVerdict> TERMINAL = Set.of(
-            JudgeVerdict.STATUS_CANCELLED, JudgeVerdict.STATUS_PRESENTATION_ERROR,
-            JudgeVerdict.STATUS_COMPILE_ERROR, JudgeVerdict.STATUS_WRONG_ANSWER,
-            JudgeVerdict.STATUS_ACCEPTED, JudgeVerdict.STATUS_TIME_LIMIT_EXCEEDED,
-            JudgeVerdict.STATUS_MEMORY_LIMIT_EXCEEDED, JudgeVerdict.STATUS_RUNTIME_ERROR,
-            JudgeVerdict.STATUS_SYSTEM_ERROR, JudgeVerdict.STATUS_PARTIAL_ACCEPTED);
     private static final int MAX_CASES = 10_000;
 
     @Autowired
@@ -80,8 +73,8 @@ public class JudgeResultService {
         validate(result);
         JudgeDispatch dispatch = lock(result.getSubmissionId());
         if (!matches(dispatch, result)) {
-            log.debug("忽略重复、过期或不匹配的判题结果，提交编号：{}，执行编号：{}，数据版本：{}，状态：{}，消息序号：{}",
-                    result.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId(),
+            log.debug("忽略重复、过期或不匹配的判题结果，提交编号：{}，执行编号：{}，状态：{}，消息序号：{}",
+                    result.getSubmissionId(), result.getExecutionId(),
                     result.getStatus(), result.getSequence());
             return;
         }
@@ -114,12 +107,12 @@ public class JudgeResultService {
             if (!waiting) {
                 throw new JudgeException("评测恢复状态保存失败");
             }
-            log.warn("判题发布次数已用尽，保留已发布任务等待结果，提交编号：{}，执行编号：{}，数据版本：{}",
-                    submissionId, executionId, dispatch.getTestDataVersionId());
+            log.warn("判题发布次数已用尽，保留已发布任务等待结果，提交编号：{}，执行编号：{}",
+                    submissionId, executionId);
             return;
         }
-        log.warn("判题任务无法发布，准备保存系统错误，提交编号：{}，执行编号：{}，数据版本：{}",
-                submissionId, executionId, dispatch.getTestDataVersionId());
+        log.warn("判题任务无法发布，准备保存系统错误，提交编号：{}，执行编号：{}",
+                submissionId, executionId);
         apply(dispatch, systemError(dispatch, reason));
     }
 
@@ -136,8 +129,8 @@ public class JudgeResultService {
                 || dispatch.getDeadlineTime().isAfter(LocalDateTime.now(ZoneOffset.UTC))) {
             return;
         }
-        log.warn("判题任务超过总截止时间，准备保存系统错误，提交编号：{}，执行编号：{}，数据版本：{}",
-                submissionId, executionId, dispatch.getTestDataVersionId());
+        log.warn("判题任务超过总截止时间，准备保存系统错误，提交编号：{}，执行编号：{}",
+                submissionId, executionId);
         apply(dispatch, systemError(dispatch, "评测超时，有限恢复后仍未收到结果，请稍后重新提交"));
     }
 
@@ -167,7 +160,7 @@ public class JudgeResultService {
     }
 
     /**
-     * 逐项核对提交、执行、题目、数据版本及策略。
+     * 逐项核对提交、执行、题目及策略。
      * @param dispatch 当前任务记录
      * @param result 待核对结果
      * @return 是否属于同一固定任务快照
@@ -176,7 +169,6 @@ public class JudgeResultService {
         return Objects.equals(dispatch.getSubmissionId(), result.getSubmissionId())
                 && Objects.equals(dispatch.getExecutionId(), result.getExecutionId())
                 && Objects.equals(dispatch.getProblemId(), result.getProblemId())
-                && Objects.equals(dispatch.getTestDataVersionId(), result.getTestDataVersionId())
                 && Objects.equals(dispatch.getStrategy(), result.getStrategy());
     }
 
@@ -193,15 +185,14 @@ public class JudgeResultService {
                     .last("FOR UPDATE")
                     .one();
             if (judge == null || !Objects.equals(judge.getExecutionId(), result.getExecutionId())
-                    || !Objects.equals(judge.getTestDataVersionId(), result.getTestDataVersionId())
                     || !Objects.equals(judge.getProblemId(), result.getProblemId())) {
-                log.warn("评测结果与当前提交执行标识不匹配，提交编号：{}，执行编号：{}，数据版本：{}",
-                        dispatch.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId());
+                log.warn("评测结果与当前提交执行标识不匹配，提交编号：{}，执行编号：{}",
+                        dispatch.getSubmissionId(), result.getExecutionId());
                 return;
             }
         }
         limitPreviews(result);
-        JudgeStatus status = status(result.getStatus());
+        JudgeStatus status = result.getStatus();
         int state = result.isTerminal() ? JudgeDispatchState.COMPLETED : JudgeDispatchState.WAITING;
         String payload = codec.write(result);
         if (!saveDispatch(dispatch, result, status, state, payload)) {
@@ -284,16 +275,16 @@ public class JudgeResultService {
      * @param submissionId 正式提交 ID
      * @param results 测试点列表，可空或空列表
      */
-    private void saveCases(Long submissionId, List<TestCaseResult> results) {
+    private void saveCases(Long submissionId, List<JudgeCaseResult> results) {
         if (results == null || results.isEmpty()) {
             return;
         }
         List<JudgeCase> records = new ArrayList<>(results.size());
-        for (TestCaseResult result : results) {
+        for (JudgeCaseResult result : results) {
             JudgeCase record = new JudgeCase();
             record.setJudgeId(submissionId);
             record.setCaseIndex(result.getCaseIndex());
-            record.setStatus(status(result.getStatus()));
+            record.setStatus(result.getStatus());
             record.setTime(result.getTime());
             record.setMemory(result.getMemory());
             record.setScore(result.getScore());
@@ -446,9 +437,8 @@ public class JudgeResultService {
         result.setSubmissionId(dispatch.getSubmissionId());
         result.setExecutionId(dispatch.getExecutionId());
         result.setProblemId(dispatch.getProblemId());
-        result.setTestDataVersionId(dispatch.getTestDataVersionId());
         result.setStrategy(dispatch.getStrategy());
-        result.setStatus(JudgeVerdict.STATUS_SYSTEM_ERROR);
+        result.setStatus(JudgeStatus.STATUS_SYSTEM_ERROR);
         result.setTerminal(true);
         result.setSequence(3);
         result.setEmittedAtEpochMs(System.currentTimeMillis());
@@ -491,10 +481,10 @@ public class JudgeResultService {
      */
     private void validateState(JudgeResult result) {
         boolean progress = !result.isTerminal()
-                && ((result.getSequence() == 1 && result.getStatus() == JudgeVerdict.STATUS_COMPILING)
-                || (result.getSequence() == 2 && result.getStatus() == JudgeVerdict.STATUS_JUDGING));
+                && ((result.getSequence() == 1 && result.getStatus() == JudgeStatus.STATUS_COMPILING)
+                || (result.getSequence() == 2 && result.getStatus() == JudgeStatus.STATUS_JUDGING));
         if (!progress && !(result.isTerminal() && result.getSequence() == 3
-                && result.getStatus() != null && TERMINAL.contains(result.getStatus()))) {
+                && result.getStatus() != null && result.getStatus().isTerminal())) {
             throw new IllegalArgumentException("评测结果状态与消息序号不匹配");
         }
     }
@@ -503,7 +493,7 @@ public class JudgeResultService {
      * 验证测试点数量、唯一正数编号、终态和资源范围。
      * @param testCases 可空测试点列表；系统错误可不含测试点
      */
-    private void validateCases(List<TestCaseResult> testCases) {
+    private void validateCases(List<JudgeCaseResult> testCases) {
         if (testCases == null) {
             return;
         }
@@ -511,10 +501,10 @@ public class JudgeResultService {
             throw new IllegalArgumentException("评测测试点数量超出限制");
         }
         Set<Integer> indices = new HashSet<>();
-        for (TestCaseResult testCase : testCases) {
+        for (JudgeCaseResult testCase : testCases) {
             if (testCase == null || testCase.getCaseIndex() == null || testCase.getCaseIndex() <= 0
                     || !indices.add(testCase.getCaseIndex()) || testCase.getStatus() == null
-                    || !TERMINAL.contains(testCase.getStatus())) {
+                    || !testCase.getStatus().isTerminal()) {
                 throw new IllegalArgumentException("评测测试点标识或状态无效");
             }
             nonNegative(testCase.getTime());
@@ -540,7 +530,7 @@ public class JudgeResultService {
     private void limitPreviews(JudgeResult result) {
         result.setErrorMessage(truncate(result.getErrorMessage(), 16_384));
         if (result.getTestCaseResults() != null) {
-            for (TestCaseResult testCase : result.getTestCaseResults()) {
+            for (JudgeCaseResult testCase : result.getTestCaseResults()) {
                 testCase.setOutput(truncate(testCase.getOutput(),
                         Objects.equals(result.getStrategy(), JudgeDispatchState.SELF_TEST) ? 65_536 : 4_096));
                 testCase.setErrorMessage(truncate(testCase.getErrorMessage(), 4_096));
@@ -556,20 +546,6 @@ public class JudgeResultService {
         if (value != null && value < 0) {
             throw new IllegalArgumentException("评测资源统计不得为负数");
         }
-    }
-
-    /**
-     * 按显式状态码映射接口判题枚举，不依赖枚举排列顺序。
-     * @param verdict 消息协议判定
-     * @return 对应 提交判题状态
-     */
-    private JudgeStatus status(JudgeVerdict verdict) {
-        for (JudgeStatus status : JudgeStatus.values()) {
-            if (status.getCode() == verdict.getCode()) {
-                return status;
-            }
-        }
-        throw new IllegalArgumentException("未知的评测状态");
     }
 
     /**

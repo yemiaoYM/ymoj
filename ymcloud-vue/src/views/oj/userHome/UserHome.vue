@@ -84,7 +84,7 @@
         <el-card style="margin-top: 20px;" shadow="never">
           <el-tabs class="profile-tabs" type="card" v-model="activeTab">
             <el-tab-pane name="1" label="个人简介">
-              <MarkdownPreview v-if="userForm.signature" :content="userForm.signature" />
+              <MarkdownPreview v-if="userForm.signature" :content="userForm.signature" public-images />
             </el-tab-pane>
             <el-tab-pane name="2" label="做题情况">
               <template v-if="userForm.problemId && userForm.problemId.length > 0">

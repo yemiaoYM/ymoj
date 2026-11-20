@@ -37,15 +37,15 @@ public class WorkerMetrics {
     @PostConstruct
     public void initialize() {
         FunctionCounter.builder("ymcloud.judge.cache.hits", cache,
-                value -> value.statistics().hits()).register(registry);
+                value -> value.statistics().getHits()).register(registry);
         FunctionCounter.builder("ymcloud.judge.cache.misses", cache,
-                value -> value.statistics().misses()).register(registry);
+                value -> value.statistics().getMisses()).register(registry);
         FunctionCounter.builder("ymcloud.judge.cache.download.failures", cache,
-                value -> value.statistics().downloadFailures()).register(registry);
+                value -> value.statistics().getDownloadFailures()).register(registry);
         FunctionCounter.builder("ymcloud.judge.cache.verification.failures", cache,
-                value -> value.statistics().verificationFailures()).register(registry);
-        Gauge.builder("ymcloud.judge.cache.bytes", cache, value -> value.statistics().readyBytes()).register(registry);
-        Gauge.builder("ymcloud.judge.cache.versions", cache, value -> value.statistics().versions()).register(registry);
+                value -> value.statistics().getVerificationFailures()).register(registry);
+        Gauge.builder("ymcloud.judge.cache.bytes", cache, value -> value.statistics().getReadyBytes()).register(registry);
+        Gauge.builder("ymcloud.judge.cache.versions", cache, value -> value.statistics().getVersions()).register(registry);
     }
 
     /**

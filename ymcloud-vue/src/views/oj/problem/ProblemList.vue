@@ -202,7 +202,6 @@ const selectedTags = computed(() => query.value.tagIds.map(id =>
 const totalPage = ref<number>(0);
 const problemListLoading = ref<boolean>(false);
 const tagListLoading = ref<boolean>(false);
-let problemRequestId = 0;
 
 //methods
 const init = () => {
@@ -271,19 +270,14 @@ const toggleTag = (id: number) => {
 };
 //查询题目列表
 const getProblemTableListData = () => {
-  const requestId = ++problemRequestId;
   problemListLoading.value = true;
   getProblemTableList(query.value).then(res => {
-    //连续切换筛选时只展示最后一次请求的结果
-    if (requestId !== problemRequestId) return;
     tableData.value = res.data.data.records;
     totalPage.value = res.data.data.total;
   }).catch(error => {
     console.log(error);
   }).finally(() => {
-    if (requestId === problemRequestId) {
-      problemListLoading.value = false;
-    }
+    problemListLoading.value = false;
   })
 }
 //分页条件查询

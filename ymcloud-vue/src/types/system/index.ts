@@ -95,22 +95,6 @@ export type SubmissionChartVO = {
 };
 
 /**
- * 轮播图片 ID 使用后端提供的十进制字符串
- */
-export type CarouselImage = {
-  id: string;
-  url: string;
-};
-
-/**
- * 轮播配置
- */
-export type CarouselSetting = {
-  configured: boolean;
-  images: CarouselImage[];
-};
-
-/**
  * 保存系统配置使用相同字段
  */
 export type SystemSettingDTO = SystemSettingVO;

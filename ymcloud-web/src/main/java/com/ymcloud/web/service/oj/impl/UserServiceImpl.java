@@ -3,15 +3,11 @@ package com.ymcloud.web.service.oj.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.ymcloud.common.constant.*;
 import com.ymcloud.common.exception.ServiceException;
-import com.ymcloud.common.exception.file.FileEmptyException;
-import com.ymcloud.common.exception.file.FileException;
-import com.ymcloud.common.exception.file.FileTypeNotMatchException;
 import com.ymcloud.common.exception.user.*;
 import com.ymcloud.common.utils.IpUtils;
 import com.ymcloud.common.utils.MailUtils;
@@ -24,17 +20,16 @@ import com.ymcloud.core.security.utils.SecurityUtils;
 import com.ymcloud.core.web.dao.JudgeEntityService;
 import com.ymcloud.core.web.dao.UserAcproblemEntityService;
 import com.ymcloud.core.web.dao.UserEntityService;
+import com.ymcloud.pojo.bo.ImageUploadBO;
 import com.ymcloud.pojo.dto.*;
-import com.ymcloud.pojo.entity.File;
 import com.ymcloud.pojo.entity.Judge;
 import com.ymcloud.pojo.entity.User;
 import com.ymcloud.pojo.entity.UserAcproblem;
-import com.ymcloud.pojo.enums.FileBizType;
 import com.ymcloud.pojo.enums.UserStatus;
 import com.ymcloud.pojo.vo.oj.UserCalendarHeatmapVO;
 import com.ymcloud.pojo.vo.oj.UserInfoVO;
 import com.ymcloud.web.service.common.SystemSettingService;
-import com.ymcloud.web.service.file.FileService;
+import com.ymcloud.web.service.file.ImageService;
 import com.ymcloud.web.service.oj.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -53,8 +48,6 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @PackageName: com.ymcloud.web.service.impl
- * @ClassName: UserServiceImpl
  * @Author: Yemiao
  * @CreateTime: 2025-07-18  20:20
  * @Description: UserServiceImpl
@@ -78,7 +71,7 @@ public class UserServiceImpl implements UserService {
     private UserEntityService userEntityService;
 
     @Autowired
-    private FileService fileService;
+    private ImageService imageService;
 
     @Autowired
     private JudgeEntityService judgeEntityService;
@@ -469,54 +462,20 @@ public class UserServiceImpl implements UserService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void uploadAvatar(MultipartFile file) {
-        //检查是否为空
-        if (file.isEmpty()) {
-            throw new FileEmptyException();
-        }
-        //检查文件大小
-        if (file.getSize() > 2 * 1024 * 1024) {
-            throw new FileException("用户头像大小不能超过2MB");
-        }
-        //检查文件类型
-        String originalFilename = file.getOriginalFilename();
-        String ext = FileUtil.extName(originalFilename);
-        if (!StrUtil.equalsAny(ext, "png", "jpg", "jpeg")) {
-            throw new FileTypeNotMatchException(ext);
-        }
         //获取当前用户
         LoginUser loginUser = SecurityUtils.getLoginUser();
         User user = loginUser.getUser();
-        String oldAvatar = user.getAvatar();
-        //构造File实体
-        File fileRecord = new File();
-        //文件名=随机UUID+扩展名
-        String filename = IdUtil.simpleUUID() + "." + ext;
-        fileRecord.setFileName(filename);
-        fileRecord.setFileType(file.getContentType());
-        fileRecord.setFileSize(file.getSize());
-        fileRecord.setFileExt(ext);
-        //头像存储位置由文件服务的默认配置决定
-        //文件存储相对路径和文件可访问URL在fileService中处理
-        fileRecord.setUploaderId(user.getId());
-        fileRecord.setUploaderUsername(user.getUsername());
-        fileRecord.setBizType(FileBizType.IMAGE);
-        fileRecord.setIsPublic(FileConstants.ACCESS_PUBLIC);
-        //保存文件并向文件表中插入数据
-        fileRecord = fileService.saveFile(file, fileRecord);
-        //更新当前用户头像
-        //头像字段仅保存稳定的公开 URL
-        String url = FileConstants.PUBLIC_URL_PREFIX + fileRecord.getPublicId();
+        ImageUploadBO bo = ImageUploadBO.builder()
+                .uploaderId(user.getId())
+                .maxBytes(1024 * 1024)
+                .build();
+        String url = FileConstants.PUBLIC_URL_PREFIX + imageService.upload(file, bo);
         User updateUser = new User();
         updateUser.setId(user.getId());
         updateUser.setAvatar(url);
         boolean updated = userEntityService.updateById(updateUser);
         if (!updated) {
             throw new UserException("用户头像更新失败，请稍后再试");
-        }
-        //先保存更新是为了防止删除文件后业务失败使得原头像不可用
-        //删除当前用户头像和数据库中记录
-        if (StrUtil.isNotBlank(oldAvatar)) {
-            fileService.deleteFileByUrl(oldAvatar);
         }
         //刷新当前用户缓存
         user.setAvatar(url);

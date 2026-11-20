@@ -16,6 +16,7 @@ import com.ymcloud.pojo.vo.oj.SubmissionTableVO;
 import com.ymcloud.pojo.vo.oj.UserAcRankVO;
 import com.ymcloud.pojo.vo.oj.UserCalendarHeatmapVO;
 import com.ymcloud.pojo.vo.oj.UserInfoVO;
+import com.ymcloud.web.service.common.CarouselSettingService;
 import com.ymcloud.web.service.common.PublicResourceService;
 import com.ymcloud.web.service.common.SystemSettingService;
 import com.ymcloud.web.service.oj.AnnouncementService;
@@ -35,8 +36,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * @PackageName: com.ymcloud.web.controller.common
- * @ClassName: PublicController
  * @Author: Yemiao
  * @CreateTime: 2025-07-22  18:52
  * @Description: 公共资源控制器
@@ -66,6 +65,20 @@ public class PublicController {
 
     @Autowired
     private SystemSettingService systemSettingService;
+
+    @Autowired
+    private CarouselSettingService carouselSettingService;
+
+    /**
+     * 查询已配置的首页轮播。
+     * @return 公开图片及排列顺序
+     */
+    @Cacheable(cacheNames = CacheConstants.CACHE_NAME, key = "'" + CacheConstants.HOME_CAROUSEL_KEY + "'")
+    @GetMapping("/carousel")
+    public Result<List<String>> getCarousel() {
+        log.debug("读取首页轮播图片");
+        return Result.ok(carouselSettingService.list());
+    }
 
     /**
      * 获取公开的系统配置

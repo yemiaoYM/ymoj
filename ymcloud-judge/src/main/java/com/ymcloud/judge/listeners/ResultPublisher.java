@@ -2,9 +2,9 @@ package com.ymcloud.judge.listeners;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ymcloud.judge.config.WorkerProperties;
-import com.ymcloud.pojo.contract.judge.JudgeProtocol;
-import com.ymcloud.pojo.contract.judge.JudgeResult;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
+import com.ymcloud.judge.constant.JudgeConstants;
+import com.ymcloud.pojo.bo.judge.JudgeResult;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
@@ -36,10 +36,10 @@ public class ResultPublisher {
     @Autowired
     private WorkerProperties properties;
 
-    @Value("${ymcloud.judge.exchange:" + JudgeProtocol.EXCHANGE + "}")
+    @Value("${ymcloud.judge.exchange:" + JudgeConstants.JUDGE_EXCHANGE + "}")
     private String exchange;
 
-    @Value("${ymcloud.judge.result-routing-key:judge.result}")
+    @Value("${ymcloud.judge.result-routing-key:" + JudgeConstants.JUDGE_RESULT_ROUTING_KEY + "}")
     private String resultRoute;
 
     /**
@@ -50,17 +50,17 @@ public class ResultPublisher {
         try {
             long elapsed = send(result, resultRoute);
             if (result.isTerminal()) {
-                log.info("Worker 终态消息确认成功 submission={} execution={} version={} status={} elapsedMs={}",
-                        result.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId(),
+                log.info("Worker 终态消息确认成功 submission={} execution={} status={} elapsedMs={}",
+                        result.getSubmissionId(), result.getExecutionId(),
                         result.getStatus(), elapsed);
             } else {
-                log.debug("Worker 进度消息确认成功 submission={} execution={} version={} sequence={} status={} elapsedMs={}",
-                        result.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId(),
+                log.debug("Worker 进度消息确认成功 submission={} execution={} sequence={} status={} elapsedMs={}",
+                        result.getSubmissionId(), result.getExecutionId(),
                         result.getSequence(), result.getStatus(), elapsed);
             }
         } catch (RuntimeException e) {
-            log.warn("Worker 结果消息确认失败 submission={} execution={} version={} sequence={} exception={}",
-                    result.getSubmissionId(), result.getExecutionId(), result.getTestDataVersionId(),
+            log.warn("Worker 结果消息确认失败 submission={} execution={} sequence={} exception={}",
+                    result.getSubmissionId(), result.getExecutionId(),
                     result.getSequence(), failureType(e));
             throw e;
         }
@@ -72,12 +72,12 @@ public class ResultPublisher {
      */
     public void retry(JudgeTask task) {
         try {
-            long elapsed = send(task, JudgeProtocol.RETRY_ROUTE);
-            log.warn("Worker 延时重试消息确认成功 submission={} execution={} version={} elapsedMs={}",
-                    task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(), elapsed);
+            long elapsed = send(task, JudgeConstants.JUDGE_RETRY_ROUTING_KEY);
+            log.warn("Worker 延时重试消息确认成功 submission={} execution={} elapsedMs={}",
+                    task.getSubmissionId(), task.getExecutionId(), elapsed);
         } catch (RuntimeException e) {
-            log.warn("Worker 延时重试消息确认失败 submission={} execution={} version={} exception={}",
-                    task.getSubmissionId(), task.getExecutionId(), task.getTestDataVersionId(), failureType(e));
+            log.warn("Worker 延时重试消息确认失败 submission={} execution={} exception={}",
+                    task.getSubmissionId(), task.getExecutionId(), failureType(e));
             throw e;
         }
     }

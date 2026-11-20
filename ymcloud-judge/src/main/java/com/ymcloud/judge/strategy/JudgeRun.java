@@ -6,10 +6,11 @@ import com.ymcloud.judge.exception.CompileException;
 import com.ymcloud.judge.gojudge.GoJudgeCapacityException;
 import com.ymcloud.judge.gojudge.GoJudgeExecutor;
 import com.ymcloud.judge.gojudge.GoJudgeTaskSession;
-import com.ymcloud.pojo.contract.judge.JudgeResult;
-import com.ymcloud.pojo.contract.judge.JudgeTask;
-import com.ymcloud.pojo.contract.judge.JudgeVerdict;
-import com.ymcloud.pojo.contract.judge.TestCaseResult;
+import com.ymcloud.pojo.bo.judge.JudgeCaseResult;
+import com.ymcloud.pojo.bo.judge.JudgeResult;
+import com.ymcloud.pojo.bo.judge.JudgeTask;
+import com.ymcloud.pojo.enums.JudgeStatus;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -42,7 +43,7 @@ public class JudgeRun {
     private WorkerProperties properties;
 
     /**
-     * 执行固定数据版本，发布进度并生成终态；释放会话和数据租约。
+     * 使用本次开跑时的清单完成判题，发布进度、保存终态并释放资源。
      * @param task 已通过入口校验的任务
      * @param progress 进度发布回调，失败应向上传播
      * @return 本次执行的终态结果
@@ -50,18 +51,17 @@ public class JudgeRun {
      */
     public JudgeResult execute(JudgeTask task, Consumer<JudgeResult> progress) throws IOException {
         long started = System.nanoTime();
-        log.info("开始执行判题 execution={} submission={} problem={} version={} strategy={} language={}",
+        log.info("开始执行判题 execution={} submission={} problem={} strategy={} language={}",
                 task.getExecutionId(),
                 task.getSubmissionId(),
                 task.getProblemId(),
-                task.getTestDataVersionId(),
                 task.getStrategy(),
-                task.getLanguageConfig().getName());
+                task.getLanguage());
         TestDataCache.Lease lease = null;
         GoJudgeTaskSession session = null;
         String stage = "prepare";
         Integer caseIndex = null;
-        JudgeResult result = result(task, JudgeVerdict.STATUS_PENDING, false);
+        JudgeResult result = result(task, JudgeStatus.STATUS_PENDING, false);
         try {
             checkDeadline(task);
             String capacityFailure = executor.capacityFailure(task);
@@ -76,20 +76,20 @@ public class JudgeRun {
                         () -> inline(task.getInput()),
                         () -> inline(task.getExpectedOutput())));
             } else {
-                lease = cache.acquire(task.getProblemId(), task.getTestDataVersionId(), task.getManifestSha256());
+                lease = cache.acquire(task.getProblemId());
                 for (TestDataCache.CachedCase testCase : lease.entries()) {
                     cases.add(new CaseSource(testCase.id(), testCase::openInput, testCase::openOutput));
                 }
             }
             if (cases.isEmpty()) {
-                throw new IOException("固定版本没有测试数据");
+                throw new IOException("当前题目没有可执行的测试点");
             }
             log.info("判题数据准备完成 execution={} cases={} elapsedMs={}",
                     task.getExecutionId(),
                     cases.size(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
             checkDeadline(task);
-            progress.accept(result(task, JudgeVerdict.STATUS_COMPILING, false));
+            progress.accept(result(task, JudgeStatus.STATUS_COMPILING, false));
             stage = "compile";
             long compileStarted = System.nanoTime();
             log.debug("开始编译代码 execution={}", task.getExecutionId());
@@ -105,17 +105,17 @@ public class JudgeRun {
             }
             log.info("代码编译完成 execution={} elapsedMs={}", task.getExecutionId(),
                     TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - compileStarted));
-            progress.accept(result(task, JudgeVerdict.STATUS_JUDGING, false));
-            List<TestCaseResult> results = new ArrayList<>();
+            progress.accept(result(task, JudgeStatus.STATUS_JUDGING, false));
+            List<JudgeCaseResult> results = new ArrayList<>();
             long maxTime = 0;
             long maxMemory = 0;
             int outputBudget = 512 * 1024;
             for (CaseSource source : cases) {
                 stage = "case";
-                caseIndex = source.id();
+                caseIndex = source.getId();
                 checkDeadline(task);
-                TestCaseResult current = executeCase(task, source, session, program, checker);
-                if (current.getStatus() == JudgeVerdict.STATUS_SYSTEM_ERROR) {
+                JudgeCaseResult current = executeCase(task, source, session, program, checker);
+                if (current.getStatus() == JudgeStatus.STATUS_SYSTEM_ERROR) {
                     return systemFailure(task, "SPJ 校验程序运行失败，请联系题目管理员");
                 }
                 String output = current.getOutput();
@@ -137,11 +137,11 @@ public class JudgeRun {
             caseIndex = null;
             score(result, task.getMode());
         } catch (GoJudgeCapacityException e) {
-            result.setStatus(JudgeVerdict.STATUS_SYSTEM_ERROR);
+            result.setStatus(JudgeStatus.STATUS_SYSTEM_ERROR);
             result.setErrorMessage(e.getMessage());
             result.setScore(0);
         } catch (CompileException e) {
-            result.setStatus(JudgeVerdict.STATUS_COMPILE_ERROR);
+            result.setStatus(JudgeStatus.STATUS_COMPILE_ERROR);
             result.setErrorMessage(e.getMessage());
             result.setScore(0);
         } catch (IOException | RuntimeException e) {
@@ -188,7 +188,7 @@ public class JudgeRun {
      * @return 得分为零的系统错误终态
      */
     public JudgeResult systemFailure(JudgeTask task, String message) {
-        JudgeResult result = result(task, JudgeVerdict.STATUS_SYSTEM_ERROR, true);
+        JudgeResult result = result(task, JudgeStatus.STATUS_SYSTEM_ERROR, true);
         result.setScore(0);
         result.setErrorMessage(message);
         return result;
@@ -201,19 +201,18 @@ public class JudgeRun {
      * @param terminal 是否为终态
      * @return 包含执行身份和 Worker 标识的结果
      */
-    public JudgeResult result(JudgeTask task, JudgeVerdict status, boolean terminal) {
+    public JudgeResult result(JudgeTask task, JudgeStatus status, boolean terminal) {
         JudgeResult result = new JudgeResult();
         result.setExecutionId(task.getExecutionId());
         result.setSubmissionId(task.getSubmissionId());
         result.setProblemId(task.getProblemId());
-        result.setTestDataVersionId(task.getTestDataVersionId());
         result.setStrategy(task.getStrategy());
         result.setWorkerId(properties.getId());
         result.setTerminal(terminal);
         if (terminal) {
             result.setSequence(3);
         } else {
-            result.setSequence(status == JudgeVerdict.STATUS_COMPILING ? 1 : 2);
+            result.setSequence(status == JudgeStatus.STATUS_COMPILING ? 1 : 2);
         }
         result.setStatus(status);
         result.setEmittedAtEpochMs(System.currentTimeMillis());
@@ -228,22 +227,22 @@ public class JudgeRun {
      * @param mode 评分协议，0=ACM，1=测试点计分
      */
     static void score(JudgeResult result, int mode) {
-        List<TestCaseResult> cases = result.getTestCaseResults();
-        long accepted = cases.stream().filter(testCase -> testCase.getStatus() == JudgeVerdict.STATUS_ACCEPTED).count();
+        List<JudgeCaseResult> cases = result.getTestCaseResults();
+        long accepted = cases.stream().filter(testCase -> testCase.getStatus() == JudgeStatus.STATUS_ACCEPTED).count();
         if (mode == 1) {
             result.setScore((int) Math.ceil((double) accepted / cases.size() * 100));
             if (accepted == cases.size()) {
-                result.setStatus(JudgeVerdict.STATUS_ACCEPTED);
+                result.setStatus(JudgeStatus.STATUS_ACCEPTED);
             } else if (accepted == 0) {
-                result.setStatus(JudgeVerdict.STATUS_WRONG_ANSWER);
+                result.setStatus(JudgeStatus.STATUS_WRONG_ANSWER);
             } else {
-                result.setStatus(JudgeVerdict.STATUS_PARTIAL_ACCEPTED);
+                result.setStatus(JudgeStatus.STATUS_PARTIAL_ACCEPTED);
             }
         } else {
-            result.setStatus(JudgeVerdict.STATUS_ACCEPTED);
+            result.setStatus(JudgeStatus.STATUS_ACCEPTED);
             result.setScore(100);
-            for (TestCaseResult testCase : cases) {
-                if (testCase.getStatus() != JudgeVerdict.STATUS_ACCEPTED) {
+            for (JudgeCaseResult testCase : cases) {
+                if (testCase.getStatus() != JudgeStatus.STATUS_ACCEPTED) {
                     result.setStatus(testCase.getStatus());
                     result.setScore(0);
                     break;
@@ -262,46 +261,45 @@ public class JudgeRun {
      * @return 测试点判定、分数及资源统计
      * @throws IOException 输入、执行或答案完整性校验失败
      */
-    private TestCaseResult executeCase(JudgeTask task, CaseSource source, GoJudgeTaskSession session,
+    private JudgeCaseResult executeCase(JudgeTask task, CaseSource source, GoJudgeTaskSession session,
                                        GoJudgeExecutor.PreparedProgram program,
                                        GoJudgeExecutor.PreparedProgram checker) throws IOException {
         long started = System.nanoTime();
-        TestCaseResult result = new TestCaseResult();
+        JudgeCaseResult result = new JudgeCaseResult();
         result.setJudgeId(task.getSubmissionId());
-        result.setCaseIndex(source.id());
-        try (InputStream input = source.input().open()) {
+        result.setCaseIndex(source.getId());
+        try (InputStream input = source.getInput().open()) {
             GoJudgeExecutor.ExecutionResult run = executor.run(session, program, input);
-            result.setTime(run.timeMillis());
-            result.setMemory(run.memoryKiB());
-            result.setStatus(run.status());
-            result.setErrorMessage(run.errorMessage());
+            result.setTime(run.getTimeMillis());
+            result.setMemory(run.getMemoryKiB());
+            result.setStatus(run.getStatus());
+            result.setErrorMessage(run.getErrorMessage());
             try {
-                if (run.status() == JudgeVerdict.STATUS_ACCEPTED) {
-                    try (InputStream expected = source.output().open()) {
+                if (run.getStatus() == JudgeStatus.STATUS_ACCEPTED) {
+                    try (InputStream expected = source.getOutput().open()) {
                         if (checker == null) {
-                            try (InputStream actual = session.openFile(run.stdoutFileId())) {
+                            try (InputStream actual = session.openFile(run.getStdoutFileId())) {
                                 result.setStatus(OutputComparator.matches(expected, actual)
-                                        ? JudgeVerdict.STATUS_ACCEPTED : JudgeVerdict.STATUS_WRONG_ANSWER);
+                                        ? JudgeStatus.STATUS_ACCEPTED : JudgeStatus.STATUS_WRONG_ANSWER);
                             }
                         } else {
-                            try (InputStream testInput = source.input().open()) {
-                                result.setStatus(executor.check(session, checker, testInput, expected, run.stdoutFileId()));
+                            try (InputStream testInput = source.getInput().open()) {
+                                result.setStatus(executor.check(session, checker, testInput, expected, run.getStdoutFileId()));
                             }
                         }
                     }
                 }
             } finally {
-                if (run.stdoutFileId() != null) {
-                    session.release(run.stdoutFileId());
+                if (run.getStdoutFileId() != null) {
+                    session.release(run.getStdoutFileId());
                 }
             }
-            result.setOutput(preview(run.stdout()));
+            result.setOutput(preview(run.getStdout()));
         }
-        result.setScore(result.getStatus() == JudgeVerdict.STATUS_ACCEPTED ? 100 : 0);
-        log.debug("测试点执行完成 execution={} version={} case={} status={} timeMs={} memoryKiB={} elapsedMs={}",
+        result.setScore(result.getStatus() == JudgeStatus.STATUS_ACCEPTED ? 100 : 0);
+        log.debug("测试点执行完成 execution={} case={} status={} timeMs={} memoryKiB={} elapsedMs={}",
                 task.getExecutionId(),
-                task.getTestDataVersionId(),
-                source.id(),
+                source.getId(),
                 result.getStatus(),
                 result.getTime(),
                 result.getMemory(),
@@ -338,7 +336,27 @@ public class JudgeRun {
         }
     }
 
-    private record CaseSource(int id, StreamSource input, StreamSource output) {}
+    /**
+     * 供当前执行使用的测试点及其输入输出流来源
+     */
+    @Value
+    private static class CaseSource {
+
+        /**
+         * 从 1 开始的测试点序号
+         */
+        int id;
+
+        /**
+         * 测试点输入流来源
+         */
+        StreamSource input;
+
+        /**
+         * 预期输出流来源
+         */
+        StreamSource output;
+    }
 
     @FunctionalInterface
     private interface StreamSource {

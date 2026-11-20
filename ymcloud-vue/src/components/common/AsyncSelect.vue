@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts" generic="T extends string | number | boolean | null">
-import { useAsyncChange, type ChangeResult } from '@/hooks/useAsyncChange';
+import { useAsyncChange, type ChangeResult } from '@/hooks/async/useAsyncChange';
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{
